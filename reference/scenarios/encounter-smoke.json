@@ -1,0 +1,341 @@
+{
+  "name": "NTSC-U first enemy encounter, one player",
+  "status": "Initial P2 Start probe did not join in one-player mode; not two-player coverage",
+  "segments": [
+    {
+      "frames": 360,
+      "capture": "intro"
+    },
+    {
+      "frames": 1,
+      "p1": [
+        "START"
+      ]
+    },
+    {
+      "frames": 120,
+      "capture": "title"
+    },
+    {
+      "frames": 1,
+      "p1": [
+        "START"
+      ]
+    },
+    {
+      "frames": 180,
+      "capture": "menu"
+    },
+    {
+      "frames": 1,
+      "p1": [
+        "START"
+      ]
+    },
+    {
+      "frames": 180,
+      "capture": "select"
+    },
+    {
+      "frames": 1,
+      "p1": [
+        "START"
+      ]
+    },
+    {
+      "frames": 540,
+      "capture": "stage"
+    },
+    {
+      "frames": 60,
+      "p1": [
+        "RIGHT"
+      ],
+      "capture": "walk"
+    },
+    {
+      "frames": 1,
+      "p1": [
+        "B"
+      ]
+    },
+    {
+      "frames": 30,
+      "capture": "attack"
+    },
+    {
+      "frames": 1,
+      "p1": [
+        "C"
+      ]
+    },
+    {
+      "frames": 20,
+      "capture": "jump"
+    },
+    {
+      "frames": 60
+    },
+    {
+      "frames": 1,
+      "p2": [
+        "START"
+      ]
+    },
+    {
+      "frames": 120,
+      "capture": "p2-join"
+    },
+    {
+      "frames": 1,
+      "p2": [
+        "START"
+      ]
+    },
+    {
+      "frames": 120,
+      "capture": "p2-select"
+    },
+    {
+      "frames": 60,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 30,
+      "p1": [
+        "B"
+      ],
+      "p2": [
+        "B"
+      ]
+    },
+    {
+      "frames": 60,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 30,
+      "p1": [
+        "B"
+      ],
+      "p2": [
+        "B"
+      ]
+    },
+    {
+      "frames": 60,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 30,
+      "p1": [
+        "B"
+      ],
+      "p2": [
+        "B"
+      ]
+    },
+    {
+      "frames": 60,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 30,
+      "p1": [
+        "B"
+      ],
+      "p2": [
+        "B"
+      ]
+    },
+    {
+      "frames": 60,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 30,
+      "p1": [
+        "B"
+      ],
+      "p2": [
+        "B"
+      ]
+    },
+    {
+      "frames": 60,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 30,
+      "p1": [
+        "B"
+      ],
+      "p2": [
+        "B"
+      ]
+    },
+    {
+      "frames": 60,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 30,
+      "p1": [
+        "B"
+      ],
+      "p2": [
+        "B"
+      ]
+    },
+    {
+      "frames": 60,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 30,
+      "p1": [
+        "B"
+      ],
+      "p2": [
+        "B"
+      ]
+    },
+    {
+      "frames": 60,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 30,
+      "p1": [
+        "B"
+      ],
+      "p2": [
+        "B"
+      ]
+    },
+    {
+      "frames": 60,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 30,
+      "p1": [
+        "B"
+      ],
+      "p2": [
+        "B"
+      ]
+    },
+    {
+      "frames": 60,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 30,
+      "p1": [
+        "B"
+      ],
+      "p2": [
+        "B"
+      ]
+    },
+    {
+      "frames": 60,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 30,
+      "p1": [
+        "B"
+      ],
+      "p2": [
+        "B"
+      ],
+      "capture": "encounter"
+    }
+  ]
+}

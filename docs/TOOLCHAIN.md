@@ -69,3 +69,12 @@ under AddressSanitizer/UBSan. `tools/arithmetic-probes.py` emits executable test
 from the actual upstream opcode snippets. The native build runs 65,536 ADD.b
 cases plus carry, sign, wide shifts, DIVS overflow and subregister cases at boot.
 The same probes passed host sanitizers. None substitutes for combat comparison.
+
+## Nonintrusive test runs
+
+`tools/run-flycast.sh` uses macOS Launch Services `open -g -j` and writes serial
+output to `build/logs/flycast.log`. These flags are best effort: Flycast can override
+them. The graphical renderer remains enabled for visual verification.
+`tools/run-reference.sh` sets SDL dummy video/audio drivers; it creates no window.
+The native headless backend also creates no window and needs no SDL dependency.
+See REFERENCE.md for reproducible per-frame comparisons.

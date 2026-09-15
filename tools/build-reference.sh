@@ -8,4 +8,10 @@ python3 "$root/tools/bootstrap.py"
 cmake -S "$root/research/StreetsOfRageProject/StreetsOfRageRecompilation" \
     -B "$root/build/reference" -DCMAKE_BUILD_TYPE=Release
 cmake --build "$root/build/reference" --parallel "${JOBS:-4}"
+python3 "$root/tools/prepare-reference.py"
+cmake -S "$root/research/StreetsOfRageProject/StreetsOfRageRecompilation" \
+    -B "$root/build/reference-patched" -DCMAKE_BUILD_TYPE=Release \
+    -DMEGADRIVE_ENVIRONMENT_DIR="$root/build/reference-runtime-v2"
+cmake --build "$root/build/reference-patched" --parallel "${JOBS:-4}"
 printf 'Reference executable: %s/build/reference/sor\n' "$root"
+printf 'Headless lockstep executable: %s/build/reference-patched/sor\n' "$root"

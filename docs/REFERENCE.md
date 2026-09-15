@@ -39,9 +39,14 @@ These are generation counts, **not runtime coverage or fidelity percentages**.
   supports two pads, per-frame normalized RAM, framebuffer capture and audio frame counts.
 - Initial input timings landed in menus/round-intro rather than gameplay; adjusted
   the scenario after checking mode values and captures. Names alone do not prove coverage.
-- PC one-frame lockstep replay timed out around boot frame 110; a whole-segment
-  attempt also timed out. This prevents declaring deterministic parity. Keep
-  failed logs distinct; do not fill missing frames with invented data or silently retry.
+- Unmodified PC lockstep timed out around boot frame 110. Thread sampling found
+  the CPU asleep on interrupt generation while the renderer was paused at the
+  lockstep boundary. `patches/reference-lockstep.patch` wakes the CPU at that
+  boundary and samples generation before the checkpoint to close the lost-wakeup
+  window. Applied only to an ignored staged runtime, preserving research pins.
+- Two patched PC runs completed all 1,556 frames. They differed in 270 actor
+  snapshots and 1,509 RAM hashes among 1,555 common frames. The wakeup fix does
+  not make this threaded runtime deterministic. Preserve that distinction.
 - PC silent mode drops chip writes. Its captures cannot validate sound.
 
 ## Commands
@@ -49,8 +54,7 @@ These are generation counts, **not runtime coverage or fidelity percentages**.
 ```
 python3 tools/bootstrap.py
 ./tools/build-reference.sh /absolute/path/to/user-ROM.md
-build/reference/sor --rom /absolute/path/to/user-ROM.md --lang en --hz 60 \
-  --silent --debugUtils --port 7777 --auxAddrFile "$PWD/build/reference-missing.txt"
+./tools/run-reference.sh /absolute/path/to/user-ROM.md
 python3 tools/pc_reference.py reference/scenarios/boot-movement.json build/pc-reference
 
 make -C research/Genesis-Plus-GX -f Makefile.libretro platform=osx ARCH=arm64 -j6
@@ -67,13 +71,41 @@ comparison tool only, never linked into the Dreamcast executable.
 
 | Area | Required scenarios | Current evidence |
 | --- | --- | --- |
-| Movement | Four directions, diagonal, plane bounds, jump arcs | Original-ROM smoke captures only |
+| Movement | Four directions, diagonal, plane bounds, jump arcs | Walking increments/end position match; jump phase differs |
 | Combat | Combo presses/holds, back attack, jump kick, all grabs/throws, police | Not compared |
 | Enemy logic | Every family, damage, invulnerability, knockdown, recovery | Not compared |
 | Campaign | Scroll triggers/waves, transitions, all bosses, all endings | Not compared |
-| Two-player | Join, friendly fire, grabs/assists, lives/continues, scoring | Not compared |
-| Randomness/cadence | Same reset/input stream, seeds and per-tick actor state | PC lockstep blocker |
+| Two-player | Join, friendly fire, grabs/assists, lives/continues, scoring | Both players active in encounter probe; combat differs |
+| Randomness/cadence | Same reset/input stream, seeds and per-tick actor state | Native repeatability verified; original parity incomplete |
 
 Record verified, inferred and inaccurate behavior separately. Never substitute
 host wall-clock sleep for a deterministic frame input script. Any test using cheats
 must label the altered setup and is not evidence of ordinary progression.
+
+## Shared native headless backend
+
+```
+./tools/build-headless.sh
+python3 tools/native-reference.py /absolute/path/to/user-ROM.md \
+  reference/scenarios/boot-movement.json build/native-a
+python3 tools/native-reference.py /absolute/path/to/user-ROM.md \
+  reference/scenarios/boot-movement.json build/native-b
+python3 tools/compare-traces.py build/native-a/trace.jsonl \
+  build/native-b/trace.jsonl --require-equal
+python3 tools/test-gameplay.py build/genesis-reference/trace.jsonl \
+  build/native-a/trace.jsonl build/native-b/trace.jsonl
+```
+
+The headless executable shares generated/manual gameplay, synchronous interrupts,
+MMIO, renderer and binary input replay with the console. Only display/input/time
+services differ. It creates no GUI. Host speed is never Dreamcast performance evidence.
+Each record contains all 64 KiB of WRAM; frame 0 is the first pre-VBlank checkpoint.
+The final PPM depicts the preceding presentation, explicitly separate from RAM phase.
+These large local artifacts are ignored. Snapshots now cover all 66 enemy slots;
+P2 lives is byte FFFF23, verified against the disassembly (earlier traces used FFFF40).
+
+`two-player-combat-smoke.json` selects two-player mode with Down in the menu,
+confirms both players, walks toward enemies and pulses attack. The earlier
+`encounter-smoke.json` Start-join probe stays in one-player mode; its name/status
+records that limitation. The two-player probe reaches 2,158 frames without native
+bus faults, but P2 X differs by 10 at the end. This is not a gameplay parity pass.

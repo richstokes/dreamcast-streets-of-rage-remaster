@@ -12,13 +12,15 @@ def main():
  a.output.mkdir(parents=True,exist_ok=True);scenario=json.loads(Path(a.scenario).read_text())
  with MegaDriveClient('127.0.0.1',a.port) as c, (a.output/'trace.jsonl').open('w') as trace:
   c.restart_game();c.set_lockstep(True)
-  initial=c.get_game_uptime_frames();expected=0
+  initial=c.get_game_uptime_frames()
   if initial>30:raise RuntimeError(f'Reset lockstep started too late: {initial}')
   for index,segment in enumerate(scenario['segments']):
    masks=[sum(int(getattr(Buttons,b)) for b in segment.get(k,[])) for k in ('p1','p2')]
    count=segment['frames']-(initial if index==0 else 0)
-   s=c.step_input(player1=masks[0],player2=masks[1],held_frames=count,total_frames=count,timeout_ms=30000)
-   trace.write(json.dumps(observation(s.work_ram,s.frame))+'\n')
+   for _ in range(count):
+    s=c.step_input(player1=masks[0],player2=masks[1],held_frames=1,total_frames=1,timeout_ms=10000)
+    trace.write(json.dumps(observation(s.work_ram,s.frame))+'\n')
+    trace.flush()
    if 'capture' in segment:
     c.read_framebuffer().save_ppm(str(a.output/(segment['capture']+'.ppm')))
   c.set_lockstep(False)

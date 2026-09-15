@@ -77,10 +77,10 @@ BUTTONS={'B':0,'A':1,'C':8,'START':3,'UP':4,'DOWN':5,'LEFT':6,'RIGHT':7}
 def observation(ram,frame):
     word=lambda a:int.from_bytes(ram[a:a+2],'big')
     actors=[]
-    for a in (0xb800,0xb880, *range(0xb900,0xc900,128)):
+    for a in (0xb800,0xb880, *range(0xb900,0xda00,128)):
         if ram[a]:actors.append(dict(slot=a,type=ram[a],x=word(a+16),y=word(a+20),z=word(a+24),state=word(a+48),health=word(a+50)))
     return dict(frame=frame,mode=word(0xff00),stage=word(0xff02),wave=word(0xff04),camera=word(0xe002),
-                p1_lives=ram[0xff20],p2_lives=ram[0xff40],actors=actors,ram_sha256=hashlib.sha256(ram).hexdigest())
+                p1_lives=ram[0xff20],p2_lives=ram[0xff23],actors=actors,ram_sha256=hashlib.sha256(ram).hexdigest())
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('core');p.add_argument('rom');p.add_argument('scenario');p.add_argument('output',type=Path);a=p.parse_args()

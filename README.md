@@ -10,6 +10,7 @@ original gameplay parity. **This is not yet the finished playable remaster.**
 - Recompiler seed defects isolated; PC reference builds, boots and reaches Round 1.
 - Native C++ game code cross-compiles to a debug ELF and self-booting CDI.
 - Flycast boots the CDI and reaches Round 1 with the original background, HUD and player.
+- Repeatable headless simulation traces and a passing original walking check.
 - Frame-counted two-pad diagnostic replay, Maple input boundary, KOS CD loading,
   memory/profiling diagnostics and versioned VMU settings storage implemented.
 - Player visibility is verified; gameplay fidelity is not established.
@@ -38,7 +39,8 @@ and mkdcdisc for disc packaging. See [toolchain setup](docs/TOOLCHAIN.md).
 
 Outputs: `dist/sor.elf`, `dist/sor.cdi`, `dist/SHA256SUMS`. Images include your ROM
 and are local, ignored artifacts. Direct ELF boot alone lacks the `/cd` game data.
-For manual play, package without `SOR_REPLAY`.
+For manual play, package without `SOR_REPLAY`. Flycast launches with macOS
+background/hidden flags as a best effort; the headless reference creates no window.
 
 Dreamcast controls: D-pad movement, **X attack**, **A jump**, **Y police special**,
 Start menus/pause; same mapping on port B. Input behavior still needs verification.

@@ -1,0 +1,1232 @@
+{
+  "name": "NTSC-U two-player menu selection and first encounter",
+  "status": "Coverage probe; parity unverified",
+  "segments": [
+    {
+      "frames": 360,
+      "capture": "intro"
+    },
+    {
+      "frames": 1,
+      "p1": [
+        "START"
+      ]
+    },
+    {
+      "frames": 120,
+      "capture": "title"
+    },
+    {
+      "frames": 1,
+      "p1": [
+        "START"
+      ]
+    },
+    {
+      "frames": 180,
+      "capture": "menu"
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "DOWN"
+      ]
+    },
+    {
+      "frames": 10
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "START"
+      ]
+    },
+    {
+      "frames": 180
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "START"
+      ],
+      "p2": [
+        "START"
+      ]
+    },
+    {
+      "frames": 540,
+      "capture": "two-player-stage"
+    },
+    {
+      "frames": 180,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ],
+      "capture": "two-player-approach"
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "RIGHT",
+        "B"
+      ],
+      "p2": [
+        "RIGHT",
+        "B"
+      ]
+    },
+    {
+      "frames": 8,
+      "p1": [
+        "RIGHT"
+      ],
+      "p2": [
+        "RIGHT"
+      ],
+      "capture": "two-player-encounter"
+    }
+  ]
+}

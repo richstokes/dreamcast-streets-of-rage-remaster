@@ -10,17 +10,20 @@ PlayerControlsState decode(uint16_t b){
  p.b=b&16;p.c=b&32;p.a=b&64;p.start=b&128;return p;
 }
 }
-void replay_load(){
- auto f=fopen("/cd/REPLAY.BIN","rb");if(!f)return;
- uint8_t h[8];if(fread(h,1,8,f)!=8||h[0]!='S'||h[1]!='R'||h[2]!='P'||h[3]!='1'){fclose(f);return;}
- unsigned n=le(h+4,4);if(!n||n>128){fclose(f);return;}
+bool replay_load(const char *path){
+ count=index=remaining=0;
+ auto f=fopen(path,"rb");if(!f)return false;
+ uint8_t h[8];if(fread(h,1,8,f)!=8||h[0]!='S'||h[1]!='R'||h[2]!='P'||h[3]!='1'){fclose(f);return false;}
+ unsigned n=le(h+4,4);if(!n||n>128){fclose(f);return false;}
  for(unsigned i=0;i<n;i++){
-  uint8_t b[8];if(fread(b,1,8,f)!=8){fclose(f);return;}
+  uint8_t b[8];if(fread(b,1,8,f)!=8){fclose(f);return false;}
   segments[i]={le(b,4),uint16_t(le(b+4,2)),uint16_t(le(b+6,2))};
-  if(!segments[i].frames||segments[i].frames>60000||segments[i].p1>255||segments[i].p2>255){fclose(f);return;}
+  if(!segments[i].frames||segments[i].frames>60000||segments[i].p1>255||segments[i].p2>255){fclose(f);return false;}
  }
  if(fgetc(f)==EOF){count=n;remaining=segments[0].frames;printf("REPLAY enabled: %u frame-counted segments\n",n);}fclose(f);
+ return count!=0;
 }
+uint32_t replay_total_frames(){uint32_t total=0;for(unsigned i=0;i<count;i++)total+=segments[i].frames;return total;}
 bool replay_poll(PlayersControlState &p){
  if(!count)return false;
  if(index==count){p={decode(0),decode(0)};return true;}
