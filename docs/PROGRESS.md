@@ -2,6 +2,28 @@
 
 ## 2026-09-15 — native checkpoint, not a completed game
 
+### Latest: quick launcher and PowerVR rendering
+
+- `./build-and-run.sh` creates and boots `dist/sor-test.elf` with the user's ROM
+  embedded. Debug symbols are retained separately; no disc build is needed to test.
+- Background/window planes are now cached PowerVR tile commands. CPU sprite
+  evaluation retains original masking/collision rules; GPU composes the layers.
+  Empty tiles are skipped, packets are submitted together, and static geometry
+  is cached independently from sprite changes. Dreamcast B toggles software mode.
+- 96 randomized ASan/UBSan graphics-state cases pass pixel and VDP status checks.
+  All 2,158 two-player replay frames match the reference software renderer in
+  RGB1555; all 2,159 WRAM snapshots are unchanged by the graphics path.
+- Actual PowerVR output visually checked in Flycast at title and two-player combat.
+- First 600 gameplay intervals: mean **17.784 ms (~56.2 fps)**, p50 <=20 ms,
+  p95 <=28 ms, p99 <=32 ms, worst 34.457 ms. Better than the previous 80–97 ms
+  software rendering, but **not stable 60 Hz**. See the committed benchmark JSON
+  in `reference/results/`. Retail performance remains unverified.
+- Latest static disc link: text 2,342,284 B, data 5,828 B, BSS 616,808 B.
+  Observed gameplay heap 2,350,728 B; free VRAM 3,136,104 B. These are not full
+  main-RAM/stack high-water measurements.
+- Further native work is needed for sprite preparation/upload and fallback cases
+  (shadow/highlight, interlace, two-cell vertical scroll, oversized command lists).
+
 ### Runs
 
 - Both requested repositories and all four submodules pinned; Genesis Plus GX
@@ -33,7 +55,7 @@
 - Host ASan/UBSan memory/endian/bus-bound tests and save corruption tests pass.
 - Generation now rejects a lost manual sprite entry; the regression test covers
   both an unreachable entry and a valid forwarding alias. ROM bounds tests pass.
-- Latest local CDI is packaged without replay for manual controller testing.
+- Manual testing uses the embedded test ELF or a CDI packaged without replay.
 - Executable translated arithmetic probes: 65,536 ADD.b combinations, wide carry,
   sign/shift boundaries, DIVS overflow and subregister preservation pass on host
   and SH-4 in Flycast.
@@ -44,7 +66,7 @@
 
 ### Measurements (emulator guest timings; not physical hardware)
 
-- Latest platform-separated link: text 2,332,504 B, data 5,820 B, BSS 283,720 B.
+- Earlier platform-separated link: text 2,332,504 B, data 5,820 B, BSS 283,720 B.
   This is static section size, not measured peak main RAM.
 - Early Round 1 heap in use about 1,269,472 B; free PVR memory 5,527,240 B.
   Heap usage is not a complete main-RAM peak or stack high-water measurement.

@@ -8,7 +8,9 @@
 extern "C" int sor_arithmetic_selftest();
 KOS_INIT_FLAGS(INIT_DEFAULT);
 int main(){
-    vid_set_mode(DM_640x480,PM_RGB565);pvr_init_defaults();
+    vid_set_mode(DM_640x480,PM_RGB565);
+    pvr_init_params_t params={{PVR_BINSIZE_16,PVR_BINSIZE_0,PVR_BINSIZE_0,PVR_BINSIZE_0,PVR_BINSIZE_16},1024*1024,0,0,0,0,0};
+    pvr_init(&params);
     printf("Translated arithmetic selftest: %d\n",sor_arithmetic_selftest());
     replay_load();
     sor_settings settings{0,0,0,80,80};

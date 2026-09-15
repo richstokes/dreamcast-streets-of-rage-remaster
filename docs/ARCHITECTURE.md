@@ -1,6 +1,6 @@
 # Decision 001 — static gameplay, native Dreamcast platform
 
-2026-09-15. Provisional until the ROM permits code generation and measurements.
+2026-09-15. Implemented platform separation; full gameplay parity remains pending.
 
 Keep the statically translated 68000 gameplay and explicit register/CCR model
 initially. Do not put a generic 68000 interpreter in the shipping game. Replace
@@ -10,9 +10,9 @@ SoR1 while progressively replacing them with semantic render/audio commands.
 
 The first target is SoR1 JUE revision 00, overseas NTSC: 512 KiB raw ROM,
 product `MK 00001019-00`, header checksum `9409`. This matches the supplied
-SoR1 disassembly header, but is **not yet a verified identity for the recompiler's
-address database**. Lock the supplied ROM SHA-256 after checking entry points and
-comparison against a Genesis emulator. Header/checksum matching alone is insufficient.
+SoR1 disassembly header. The supplied ROM is locked by SHA-256 in REFERENCE.md,
+and the recompiler entry list has been repaired and exercised against that image.
+Header/checksum matching alone is insufficient.
 
 ## Boundaries
 
@@ -48,7 +48,9 @@ replacement for gameplay fixed-point or signed/unsigned arithmetic.
 5. Complete enhanced art, full playthrough, performance budgets and hardware checklist.
 
 Current implementation is a platform checkpoint. Steps 1–5 are not complete.
-The native memory implementation is not yet connected to generated gameplay.
+Generated gameplay now uses the native memory implementation. The first section
+runs with both players, but timing parity, sound and complete campaign coverage
+remain incomplete.
 
 ## Initial budgets (reservations, NOT measured game peaks)
 
@@ -61,8 +63,8 @@ The native memory implementation is not yet connected to generated gameplay.
 | Main: audio buffers | 1 MiB |
 | Main: I/O buffers | 512 KiB |
 | Main: reserve/headroom | 3.5 MiB |
-| VRAM: framebuffers + PVR lists | 2 MiB |
-| VRAM: stage textures | 5 MiB |
+| VRAM: framebuffers + PVR lists | 3.5 MiB |
+| VRAM: stage textures | 3.5 MiB |
 | VRAM: reserve | 1 MiB |
 | AICA: driver/stream buffers | 512 KiB |
 | AICA: effects | 1 MiB |
@@ -72,3 +74,29 @@ Measure actual PVR initialization consumption: revise texture allowance downward
 if framebuffers/lists exceed reservation. A 64x96 RGBA4444 sprite is 12 KiB before
 power-of-two atlas packing; 128x192 is 48 KiB. Complete sets must be packed and
 streamed by stage; keyframes alone do not satisfy animation coverage.
+
+## PowerVR migration checkpoint
+
+Gameplay still writes the SoR VDP register/VRAM model. The renderer translates a
+frame snapshot into clipped tile quads rather than rasterizing both background
+planes pixel by pixel on SH-4. Four palette variants of each referenced 8x8 tile
+are cached as ARGB1555 PowerVR textures; only changed tile/palette data is uploaded.
+Transparent tiles are omitted. Background geometry and complete static scenes are
+cached independently from sprite animation. DMA bookkeeping registers do not
+invalidate geometry. Priority uses six depth levels, including separate window
+and low/high sprite composition.
+
+The existing sprite scanline evaluator retains sprite order, masking, hardware
+limits, and collision/overflow flags. It emits two transparent sprite layers for
+PowerVR composition. This is intentionally an intermediate native renderer;
+sprite texture upload/evaluation is a remaining CPU cost. Shadow/highlight,
+interlace, two-cell vertical scrolling, or more than 6,000 tile quads use the
+software fallback. These cases need further native work before full-game
+performance claims. Dreamcast B toggles the fallback for visual comparison.
+
+Actual allocations: 1 MiB tile VRAM, 512 KiB sprite VRAM, 256 KiB software fallback
+VRAM, plus KOS frame/list buffers. Observed free VRAM is 3,136,104 bytes. CPU scene
+storage is approximately 1.1 MiB, plus 256 KiB headers and a 64 KiB tile snapshot;
+these are part of the measured heap/BSS, not extra pools to add twice.
+RGB1555 has 5-bit color channels; tests compare the original output in that format.
+This renderer is original presentation, not remastered artwork.

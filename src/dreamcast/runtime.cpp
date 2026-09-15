@@ -18,7 +18,13 @@ MegaDriveEnvironment::MegaDriveEnvironment(VDP::Synchronization,VDP::Scaling,VDP
 }
 MegaDriveEnvironment::~MegaDriveEnvironment(){free(rom_);platform_video_shutdown();}
 void MegaDriveEnvironment::loadROM(const std::string &path){
-    FILE *f=fopen(path.c_str(),"rb"); if(!f)throw std::runtime_error("Missing /cd/SOR.BIN; boot disc image for assets");
+    FILE *f=fopen(path.c_str(),"rb");
+    size_t embeddedSize=0;const auto embedded=platform_embedded_rom(embeddedSize);
+    if(!f && embedded && embeddedSize==524288){
+        mem_.state.rom=embedded;mem_.state.rom_size=524288;
+        printf("SOR native: using embedded test ROM; direct ELF boot\n");return;
+    }
+    if(!f)throw std::runtime_error("Missing /cd/SOR.BIN; use disc image or embedded test ELF");
     rom_=static_cast<uint8_t*>(malloc(524288)); if(!rom_){fclose(f);throw std::runtime_error("ROM allocation failed");}
     if(fread(rom_,1,524288,f)!=524288 || fgetc(f)!=EOF){fclose(f);throw std::runtime_error("ROM size mismatch");}
     fclose(f); mem_.state.rom=rom_; mem_.state.rom_size=524288;
@@ -62,11 +68,15 @@ void MegaDriveEnvironment::writeBus(void *ctx,uint32_t a,unsigned w,uint32_t v){
 }
 void MegaDriveEnvironment::present(){
     const auto start=platform_time_us();
+    if(platform_render_vdp(state_,renderer_)){
+        if(frames_%600==0){auto stats=platform_memory_stats();printf("PVR frame=%lu render_us=%llu heap_used=%lu vram_free=%lu\n",(unsigned long)frames_,(unsigned long long)(platform_time_us()-start),(unsigned long)stats.heap_used,(unsigned long)stats.vram_free);}
+        return;
+    }
     renderer_.renderFrame();
     const auto renderDone=platform_time_us();
     int h=state_.activeHeight(),w=state_.activeWidth(); if(h>256)h=256;if(w>320)w=320;
     platform_video_present(fb_,w,h);
-    if(frames_%120==0){auto stats=platform_memory_stats();printf("SOR frame=%lu mode=%04x raster_us=%llu render_us=%llu heap_used=%lu vram_free=%lu faults=%lu last=%06lx\n",(unsigned long)frames_,mem_.readWord(0xffff00),(unsigned long long)(renderDone-start),(unsigned long long)(platform_time_us()-start),(unsigned long)stats.heap_used,(unsigned long)stats.vram_free,(unsigned long)mem_.state.faults,(unsigned long)last_);}
+    if(frames_%600==0){auto stats=platform_memory_stats();printf("SOR frame=%lu mode=%04x raster_us=%llu render_us=%llu heap_used=%lu vram_free=%lu faults=%lu last=%06lx\n",(unsigned long)frames_,mem_.readWord(0xffff00),(unsigned long long)(renderDone-start),(unsigned long long)(platform_time_us()-start),(unsigned long)stats.heap_used,(unsigned long)stats.vram_free,(unsigned long)mem_.state.faults,(unsigned long)last_);}
 
 }
 void MegaDriveEnvironment::waitForInterrupt(){
@@ -74,7 +84,6 @@ void MegaDriveEnvironment::waitForInterrupt(){
     // across them and inject an extra VBlank into an otherwise normal frame.
     paceCount_=0;
     platform_observe_frame(frames_,mem_.state,fb_);
-    if(frames_%120==0)debugState();
     present(); pads_.poll(); frames_++; cycles_+=896040; irq_=6;
 }
 void MegaDriveEnvironment::pace(){

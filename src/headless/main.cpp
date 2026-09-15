@@ -6,15 +6,40 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <cstdlib>
+#include "vdp_scene.hpp"
 
 namespace {
 struct ReplayFinished {};
 FILE *trace=nullptr;
 std::string capturePath;
+std::unique_ptr<sor::VdpScene> scene;
+VDPState *sceneState=nullptr;
+unsigned sceneFrames=0;
 }
+const uint8_t *platform_embedded_rom(size_t &size){size=0;return nullptr;}
 void platform_video_init(){}
 void platform_video_shutdown(){}
-void platform_video_present(const Framebuffer &,int,int){}
+bool platform_render_vdp(VDPState &state,VDPRenderer &renderer){
+    if(std::getenv("SOR_VALIDATE_GPU_SCENE")){
+        if(!scene)scene=std::make_unique<sor::VdpScene>();
+        sceneState=scene->buildCached(state,renderer)?&state:nullptr;
+    }
+    return false;
+}
+void platform_video_present(const Framebuffer &fb,int width,int height){
+    if(!sceneState)return;
+    uint16_t expected[320*240];sor::raster_scene(*scene,*sceneState,expected);
+    const auto *b=static_cast<const uint8_t*>(fb.getRawPointer());
+    for(int y=0;y<height;y++)for(int x=0;x<width;x++){
+        const auto *p=b+y*Framebuffer::PITCH+x*3;
+        if(expected[y*320+x]!=sor::VdpScene::rgb1555(p[2],p[1],p[0])){
+            fprintf(stderr,"GPU scene differs at frame %u pixel %d,%d\n",sceneFrames,x,y);
+            throw std::runtime_error("GPU scene pixel mismatch");
+        }
+    }
+    sceneFrames++;
+}
 void platform_poll_controllers(PlayersControlState &){throw std::runtime_error("Headless replay exhausted or missing");}
 uint64_t platform_time_us(){return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();}
 PlatformMemoryStats platform_memory_stats(){return {};}
@@ -41,7 +66,7 @@ int main(int argc,char **argv){
     capturePath=std::string(argv[3])+".ppm";
     int result=0;
     try {auto game=std::make_unique<StreetsOfRage>(argv[1]);game->boot();result=1;}
-    catch(const ReplayFinished &){printf("Completed %u frames\n",replay_total_frames());}
+    catch(const ReplayFinished &){printf("Completed %u frames; GPU scenes checked %u\n",replay_total_frames(),sceneFrames);}
     catch(const std::exception &error){fprintf(stderr,"Simulation failed: %s\n",error.what());result=1;}
     if(fclose(trace))result=1;
     return result;

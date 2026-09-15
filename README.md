@@ -19,9 +19,24 @@ original gameplay parity. **This is not yet the finished playable remaster.**
 
 This executes statically translated SoR code. The Dreamcast target does not contain
 a generic Genesis/68000 emulator. It temporarily retains VDP device semantics and
-a software graphics fallback while native platform boundaries are established.
+a PowerVR tile renderer with a software comparison/fallback path. Sprite scanline
+evaluation remains on the CPU; PowerVR composites the layers.
 
 ## Build and run
+
+On this machine, run:
+
+```sh
+./build-and-run.sh
+```
+
+This uses the supplied ROM in `original_rom`, builds `dist/sor-test.elf`, and starts
+it in Flycast. An explicit ROM path can be passed as the first argument. The test
+ELF embeds the ROM for direct boot; it needs no CDI. Full debug symbols remain in
+`dist/sor-test.debug.elf`. Both files contain your game data and stay out of git.
+Repeated runs replace this project's previous emulator instance.
+
+For the reproducible reference build and CD/GDEMU image:
 
 Provide your own raw 512 KiB SoR1 World/JUE revision 00 ROM. The accepted SHA-256
 is recorded in [reference notes](docs/REFERENCE.md). No game data is downloaded.
@@ -38,12 +53,14 @@ Requires KallistiOS, SH-4 GCC **with C++**, Python 3.14, CMake/SDL3 for the host
 and mkdcdisc for disc packaging. See [toolchain setup](docs/TOOLCHAIN.md).
 
 Outputs: `dist/sor.elf`, `dist/sor.cdi`, `dist/SHA256SUMS`. Images include your ROM
-and are local, ignored artifacts. Direct ELF boot alone lacks the `/cd` game data.
+and are local, ignored artifacts. The disc-build ELF alone lacks `/cd` data; use `build-and-run.sh` for a self-contained test ELF.
 For manual play, package without `SOR_REPLAY`. Flycast launches with macOS
 background/hidden flags as a best effort; the headless reference creates no window.
 
 Dreamcast controls: D-pad movement, **X attack**, **A jump**, **Y police special**,
-Start menus/pause; same mapping on port B. Input behavior still needs verification.
+Start menus/pause; same mapping on port B. **Dreamcast B** on port A toggles
+PowerVR/software rendering for comparison. It does not reset gameplay. Input
+behavior still needs full verification.
 
 ## Verification and tracking
 
@@ -54,7 +71,7 @@ Start menus/pause; same mapping on port B. Input behavior still needs verificati
 - [Physical Dreamcast checklist](docs/HARDWARE_TESTS.md)
 
 Run `./tools/test.sh`, `python3 tools/test-rom.py`, and
-`python3 tools/test-generation.py`. Arithmetic probes generated
+`python3 tools/test-generation.py`, and `./tools/test-scene.sh`. Arithmetic probes generated
 from upstream snippets run at native boot; host sanitizer execution is also supported.
 
 Original source additions use the [MIT license](LICENSE). Research/runtime code

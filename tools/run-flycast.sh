@@ -13,6 +13,28 @@ if [ "$(uname -s)" = Darwin ]; then
         echo 'On macOS FLYCAST_BIN must point inside a Flycast.app bundle.' >&2
         exit 1
     fi
+    # Replace only this binary running this exact image, not unrelated emulator sessions.
+    python3 - "$flycast" "$image" "$root/dist" <<'PY'
+import os,signal,subprocess,sys,time
+from pathlib import Path
+binary,image,dist=sys.argv[1:]
+images={image}
+if Path(image).parent==Path(dist):images.update(str(Path(dist)/name) for name in ('sor.cdi','sor-test.elf'))
+pids=[]
+for line in subprocess.check_output(['ps','-axo','pid=,command='],text=True).splitlines():
+    fields=line.strip().split(None,1)
+    if len(fields)==2 and fields[1].startswith(binary+' ') and any(fields[1].endswith(' '+p) for p in images):
+        try:
+            pid=int(fields[0]);os.kill(pid,signal.SIGTERM);pids.append(pid)
+        except ProcessLookupError: pass
+if pids:
+    time.sleep(1)
+    for pid in pids:
+        try: os.kill(pid,signal.SIGKILL)
+        except ProcessLookupError: pass
+PY
+    : > "$root/build/logs/flycast.log"
+    : > "$root/build/logs/flycast-errors.log"
     exec /usr/bin/open -g -j -n -a "$app" \
         --stdout "$root/build/logs/flycast.log" --stderr "$root/build/logs/flycast-errors.log" \
         --args -config 'config:Debug.SerialConsoleEnabled=yes' "$image"

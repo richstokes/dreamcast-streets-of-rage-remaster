@@ -1,0 +1,30 @@
+{
+  "date": "2026-09-15",
+  "environment": "Local Flycast; guest KOS timer; retail hardware unverified",
+  "scenario": "reference/scenarios/two-player-combat-smoke.json",
+  "sample_window": "first 600 consecutive gameplay-mode frame intervals",
+  "frames": 600,
+  "mean_us": 17784,
+  "p50_us_upper_bound": 20000,
+  "p95_us_upper_bound": 28000,
+  "p99_us_upper_bound": 32000,
+  "worst_us": 34457,
+  "free_vram_bytes": 3136104,
+  "observed_heap_used_bytes": 2350728,
+  "static_link": {
+    "text": 2342284,
+    "data": 5828,
+    "bss": 616808
+  },
+  "limits": [
+    "Includes diagnostic replay and serial instrumentation",
+    "Not a full campaign or retail hardware benchmark",
+    "Software fallback cases remain slow",
+    "No audio workload yet"
+  ],
+  "validation": {
+    "randomized_sanitized_scenes": 96,
+    "replay_frames_pixel_compared": 2158,
+    "ram_snapshots_unchanged": 2159
+  }
+}

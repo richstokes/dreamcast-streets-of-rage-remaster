@@ -48,3 +48,15 @@ version, artifact SHA-256, git commit and toolchain revision for each run.
 | Date / tester | Console + media | Commit / artifact hash | Result + evidence | Issue |
 | --- | --- | --- | --- | --- |
 | Pending | Pending | Pending | No physical measurements yet | All boxes open |
+
+## PowerVR renderer checks
+
+- [ ] Compare default PowerVR with Dreamcast B software toggle in the same scene.
+- [ ] Check foreground poles, player overlap, sprite limits, palette flashes and window HUD.
+- [ ] Check two-player scrolling and every stage's line-scroll/environment effects.
+- [ ] Record fallback cases (shadow/highlight, interlace, two-cell vertical scrolling).
+- [ ] Collect FRAME_STATS with hardware serial output; separate mean, p95/p99 and worst.
+- [ ] Confirm new frame/list allocation and 1.75 MiB explicit texture allocation fit retail VRAM.
+
+Use a CDI built without SOR_REPLAY for ordinary play. The embedded-ROM ELF is a
+Flycast development convenience; its retail loading path has not been tested.

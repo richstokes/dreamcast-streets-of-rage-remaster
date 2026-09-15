@@ -78,3 +78,23 @@ them. The graphical renderer remains enabled for visual verification.
 `tools/run-reference.sh` sets SDL dummy video/audio drivers; it creates no window.
 The native headless backend also creates no window and needs no SDL dependency.
 See REFERENCE.md for reproducible per-frame comparisons.
+
+## Quick direct-ELF testing
+
+`./build-and-run.sh` validates the supplied ROM, regenerates the locked translated
+code, incrementally cross-builds, and links an embedded-ROM test ELF. It preserves
+full symbols as `dist/sor-test.debug.elf` and strips only debug sections from the
+launched `dist/sor-test.elf`. Flycast's loader rejects files larger than 16 MiB even
+when the excess is nonloaded debug information, so this split is required.
+The embedded ROM is referenced directly from read-only memory; it is not copied
+to another heap buffer. Disc builds continue reading `/cd/SOR.BIN`.
+
+No changes to input are embedded by this script. Use the CD packaging command
+with `SOR_REPLAY` for diagnostic input playback. The source-staging script compares
+contents before copying so an unchanged generated source does not force a full
+recompile on every invocation.
+
+`SOR_VALIDATE_GPU_SCENE=1 python3 tools/native-reference.py ...` compares the
+PowerVR command stream against the original software renderer at every supported
+frame. `./tools/test-scene.sh` adds 96 randomized, sanitized graphics-state cases,
+including cache reuse after sprite collision/overflow status is cleared.
