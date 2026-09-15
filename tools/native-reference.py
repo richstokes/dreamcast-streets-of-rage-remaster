@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -21,6 +22,8 @@ def main():
     subprocess.run([sys.executable,str(ROOT/'tools/replay.py'),str(args.scenario),str(replay)],check=True)
     with (args.output/'run.log').open('w') as log:
         subprocess.run([str(ROOT/'build/headless/sor-headless'),str(args.rom.resolve()),str(replay),str(raw)],stdout=log,stderr=subprocess.STDOUT,check=True,timeout=300)
+    events=[dict(segment=int(i),frame=int(f),idle_frames=int(n)) for i,f,n in re.findall(r'REPLAY gate (\d+) matched at frame (\d+) after (\d+) idle frames',(args.output/'run.log').read_text())]
+    (args.output/'events.json').write_text(json.dumps(events,indent=2)+'\n')
     frames=0
     with raw.open('rb') as source,(args.output/'trace.jsonl').open('w') as target:
         while True:
@@ -28,7 +31,7 @@ def main():
             if not ram:break
             if len(ram)!=65536:raise ValueError('Truncated trace')
             target.write(json.dumps(observation(ram,frames))+'\n');frames+=1
-    (args.output/'metadata.json').write_text(json.dumps(dict(rom=identity,frames=frames-1,
+    (args.output/'metadata.json').write_text(json.dumps(dict(rom=identity,frames=frames-1,ram_first_frame=0,
         scenario_sha256=hashlib.sha256(args.scenario.read_bytes()).hexdigest(),
         backend='shared Dreamcast simulation; host offscreen platform',
         sampling='Before VBlank presentation and next input; capture is preceding presentation'),indent=2)+'\n')

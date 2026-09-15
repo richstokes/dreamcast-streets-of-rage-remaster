@@ -1,0 +1,88 @@
+{
+  "name": "NTSC-U Adam movement/attack/jump, aligned at graphics-free VBlank wait",
+  "status": "Diagnostic state gate; inputs begin at the same simulation half-cycle without changing game memory. Boot timing is compared separately.",
+  "segments": [
+    {
+      "frames": 360,
+      "capture": "intro"
+    },
+    {
+      "frames": 1,
+      "p1": [
+        "START"
+      ]
+    },
+    {
+      "frames": 120,
+      "capture": "title"
+    },
+    {
+      "frames": 1,
+      "p1": [
+        "START"
+      ]
+    },
+    {
+      "frames": 180,
+      "capture": "menu"
+    },
+    {
+      "frames": 1,
+      "p1": [
+        "START"
+      ]
+    },
+    {
+      "frames": 180,
+      "capture": "select"
+    },
+    {
+      "frames": 1,
+      "p1": [
+        "START"
+      ]
+    },
+    {
+      "frames": 540,
+      "capture": "stage"
+    },
+    {
+      "frames": 4,
+      "wait": {
+        "address": 64000,
+        "value": 2
+      },
+      "capture": "phase-anchor"
+    },
+    {
+      "frames": 60,
+      "p1": [
+        "RIGHT"
+      ],
+      "capture": "walk"
+    },
+    {
+      "frames": 1,
+      "p1": [
+        "B"
+      ]
+    },
+    {
+      "frames": 30,
+      "capture": "attack"
+    },
+    {
+      "frames": 1,
+      "p1": [
+        "C"
+      ]
+    },
+    {
+      "frames": 20,
+      "capture": "jump"
+    },
+    {
+      "frames": 60
+    }
+  ]
+}

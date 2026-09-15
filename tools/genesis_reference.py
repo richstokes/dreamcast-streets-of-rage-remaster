@@ -83,15 +83,24 @@ def observation(ram,frame):
                 p1_lives=ram[0xff20],p2_lives=ram[0xff23],actors=actors,ram_sha256=hashlib.sha256(ram).hexdigest())
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('core');p.add_argument('rom');p.add_argument('scenario');p.add_argument('output',type=Path);a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('core');p.add_argument('rom');p.add_argument('scenario');p.add_argument('output',type=Path);p.add_argument('--raw-ram',action='store_true');a=p.parse_args()
     a.output.mkdir(parents=True,exist_ok=True);g=Genesis(a.core,a.rom)
     scenario=json.loads(Path(a.scenario).read_text())
-    with (a.output/'trace.jsonl').open('w') as trace:
-        for segment in scenario['segments']:
+    from contextlib import nullcontext
+    ram=g.ram()
+    events=[]
+    with (a.output/'trace.jsonl').open('w') as trace, ((a.output/'ram.bin').open('wb') if a.raw_ram else nullcontext()) as raw:
+        for index,segment in enumerate(scenario['segments']):
             masks=[sum(1<<BUTTONS[b] for b in segment.get(k,[])) for k in ('p1','p2')]
-            for _ in range(segment['frames']):
+            gate=segment.get('wait')
+            for elapsed in range(segment['frames']+int(bool(gate))):
+                if gate and ram[gate['address']]&gate.get('mask',255)==gate['value']:
+                    events.append(dict(segment=index,frame=g.frame,idle_frames=elapsed));break
+                if gate and elapsed==segment['frames']: raise RuntimeError(f'State gate {index} timed out')
                 ram=g.step(*masks);trace.write(json.dumps(observation(ram,g.frame))+'\n')
+                if raw: raw.write(ram)
             if 'capture' in segment:g.capture(a.output/(segment['capture']+'.png'))
-    (a.output/'metadata.json').write_text(json.dumps(dict(core=str(Path(a.core).resolve()),rom_sha256=hashlib.sha256(Path(a.rom).read_bytes()).hexdigest(),frames=g.frame,audio_sample_frames=g.sample_frames),indent=2)+'\n')
+    (a.output/'events.json').write_text(json.dumps(events,indent=2)+'\n')
+    (a.output/'metadata.json').write_text(json.dumps(dict(backend='Genesis Plus GX libretro',core=str(Path(a.core).resolve()),core_sha256=hashlib.sha256(Path(a.core).read_bytes()).hexdigest(),scenario_sha256=hashlib.sha256(Path(a.scenario).read_bytes()).hexdigest(),rom_sha256=hashlib.sha256(Path(a.rom).read_bytes()).hexdigest(),frames=g.frame,ram_first_frame=1,audio_sample_frames=g.sample_frames),indent=2)+'\n')
     g.close()
 if __name__=='__main__':main()

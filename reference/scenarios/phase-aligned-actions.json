@@ -1,0 +1,143 @@
+{
+  "name": "Adam directional movement, jump kick, back attack and police special",
+  "status": "Phase-anchored diagnostic replay; action coverage requires state observations, not input names alone.",
+  "segments": [
+    {
+      "frames": 360,
+      "capture": "intro"
+    },
+    {
+      "frames": 1,
+      "p1": [
+        "START"
+      ]
+    },
+    {
+      "frames": 120,
+      "capture": "title"
+    },
+    {
+      "frames": 1,
+      "p1": [
+        "START"
+      ]
+    },
+    {
+      "frames": 180,
+      "capture": "menu"
+    },
+    {
+      "frames": 1,
+      "p1": [
+        "START"
+      ]
+    },
+    {
+      "frames": 180,
+      "capture": "select"
+    },
+    {
+      "frames": 1,
+      "p1": [
+        "START"
+      ]
+    },
+    {
+      "frames": 540,
+      "capture": "stage"
+    },
+    {
+      "frames": 4,
+      "wait": {
+        "address": 64000,
+        "value": 2
+      },
+      "capture": "phase-anchor"
+    },
+    {
+      "frames": 60,
+      "p1": [
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 60,
+      "p1": [
+        "LEFT"
+      ]
+    },
+    {
+      "frames": 30,
+      "p1": [
+        "UP"
+      ]
+    },
+    {
+      "frames": 30,
+      "p1": [
+        "DOWN"
+      ]
+    },
+    {
+      "frames": 30,
+      "p1": [
+        "UP",
+        "RIGHT"
+      ]
+    },
+    {
+      "frames": 30,
+      "p1": [
+        "DOWN",
+        "LEFT"
+      ]
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "C"
+      ]
+    },
+    {
+      "frames": 12
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "B"
+      ]
+    },
+    {
+      "frames": 100,
+      "capture": "jump-kick"
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "B",
+        "C"
+      ]
+    },
+    {
+      "frames": 100,
+      "capture": "back-attack"
+    },
+    {
+      "frames": 2,
+      "p1": [
+        "A"
+      ]
+    },
+    {
+      "frames": 900,
+      "capture": "police-special"
+    },
+    {
+      "frames": 120,
+      "p1": [
+        "RIGHT"
+      ],
+      "capture": "after-special-movement"
+    }
+  ]
+}

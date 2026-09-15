@@ -2,7 +2,27 @@
 
 ## 2026-09-15 — native checkpoint, not a completed game
 
-### Latest: native sprite pass and cached PowerVR submission
+### Latest: phase-aware original-ROM comparisons
+
+- Added SRP2 bounded state gates shared by Dreamcast and host playback. Gates read
+  WRAM and release pads; they never change simulation memory. SRP1 remains compatible.
+- Diagnosed the old jump/P2 endpoint discrepancy as opposite halves of the ROM's
+  two-VBlank update cycle at the fixed cold-boot input boundary. Explicit mailbox-2
+  anchors align tests without modifying physics or concealing boot-time differences.
+- Original ROM vs native: 1,481 directional/action observations and 761 two-player
+  encounter observations match positions, states, health, camera and lives.
+  Collision IDs and fixed-point position/velocity regions match too. The police
+  special consumes one stock and locks controls for 637 frames in both backends.
+- All 2,865 action replay frames match software-rendered pixels; repeat run has
+  2,866 identical RAM snapshots. Existing fixed-frame replay preserves its 2,159
+  snapshots. Sanitized replay parsing, timeout and pad-release tests pass.
+- Spawn timers/flags and some unclassified object bytes still differ. These tests
+  establish sampled behavior, not full RAM, cold-boot or complete combat parity.
+- Flycast action replay: first 1,200 gameplay intervals show 1,200 flips over
+  1,200 VBlanks, including the special effect; guest CPU-loop mean 16.725 ms.
+- Reproduction, limitations and results are in REFERENCE.md and reference/results.
+
+### Previous: native sprite pass and cached PowerVR submission
 
 - `./build-and-run.sh` creates and boots the manual-test `dist/sor-test.elf` with
   the supplied ROM embedded. Full symbols are in `dist/sor-test.debug.elf`.
@@ -88,8 +108,8 @@
 ### Known limitations
 
 - Original sound/AICA playback not integrated; target is deliberately silent.
-- Native cadence is partially compared: walking increments/end position match,
-  but boot/menu timing, jump phase and combat state still differ.
+- Cold-boot timing and some object bytes differ. Phase-anchored movement, action
+  and two-player observations now match; complete combat/campaign parity is open.
 - PC lockstep now completes but is nondeterministic; it is not a correctness oracle.
 - No enhanced sprites, animation sets, environment art, effects or comparison captures.
 - No full-stage/ending coverage, two-player combat parity, loading-stall or audio tests.
@@ -97,7 +117,6 @@
 
 ### Next concrete milestone
 
-Resolve original-mode cadence, verify controls/combat against
-original-ROM traces, replace expensive graphics work using measured results,
-then integrate original audio. Enhanced art starts only after the first section
+Resolve the remaining startup/object-state differences, extend encounter tests
+to grabs/throws, damage/recovery and bosses, and integrate original audio. Enhanced art starts only after the first section
 has verified behavior. The full eight rounds and endings remain required.

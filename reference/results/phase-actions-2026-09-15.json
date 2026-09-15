@@ -1,0 +1,103 @@
+{
+  "rom_sha256": "dd44f120446654bb91c448762f3e0cd0d9b034f35d0e3266a4dc34402ada95c0",
+  "scenario_sha256": "759d1c7802c00e1d029b8fa3a281260f55587dd261dd8ac85bf52e3f335b90b0",
+  "segment": 9,
+  "left_anchor": 1384,
+  "right_anchor": 1385,
+  "compared_frames": 1481,
+  "left_remaining": 1481,
+  "right_remaining": 1481,
+  "fields": {
+    "mode": {
+      "mismatched_frames": 0,
+      "first_relative_frame": null
+    },
+    "stage": {
+      "mismatched_frames": 0,
+      "first_relative_frame": null
+    },
+    "wave": {
+      "mismatched_frames": 0,
+      "first_relative_frame": null
+    },
+    "camera": {
+      "mismatched_frames": 0,
+      "first_relative_frame": null
+    },
+    "p1_lives": {
+      "mismatched_frames": 0,
+      "first_relative_frame": null
+    },
+    "p2_lives": {
+      "mismatched_frames": 0,
+      "first_relative_frame": null
+    },
+    "actors": {
+      "mismatched_frames": 0,
+      "first_relative_frame": null
+    }
+  },
+  "observations_equal": true,
+  "active_object_regions": {
+    "collision_ids": {
+      "mismatched_frames": 0,
+      "first_relative_frame": null
+    },
+    "animation": {
+      "mismatched_frames": 2,
+      "first_relative_frame": 0
+    },
+    "positions_and_velocity": {
+      "mismatched_frames": 0,
+      "first_relative_frame": null
+    },
+    "state_health_damage": {
+      "mismatched_frames": 0,
+      "first_relative_frame": null
+    },
+    "grab_target": {
+      "mismatched_frames": 0,
+      "first_relative_frame": null
+    },
+    "input": {
+      "mismatched_frames": 0,
+      "first_relative_frame": null
+    },
+    "attack_flags": {
+      "mismatched_frames": 0,
+      "first_relative_frame": null
+    },
+    "weapon": {
+      "mismatched_frames": 0,
+      "first_relative_frame": null
+    },
+    "grab_mode_target": {
+      "mismatched_frames": 0,
+      "first_relative_frame": null
+    },
+    "spawn_flags_and_timer": {
+      "mismatched_frames": 28,
+      "first_relative_frame": 0
+    },
+    "full_object": {
+      "mismatched_frames": 28,
+      "first_relative_frame": 0
+    }
+  },
+  "special_stock": {
+    "left": {
+      "p1_start": 1,
+      "p1_end": 0,
+      "control_lock_frames": 637
+    },
+    "right": {
+      "p1_start": 1,
+      "p1_end": 0,
+      "control_lock_frames": 637
+    }
+  },
+  "limitations": [
+    "Explicit gate alignment does not verify cold-boot timing.",
+    "Selected observations and object regions are not full RAM equality or complete campaign coverage."
+  ]
+}

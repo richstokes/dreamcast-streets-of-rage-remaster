@@ -46,7 +46,7 @@ PlatformMemoryStats platform_memory_stats(){return {};}
 void platform_observe_frame(uint32_t frame,const sor_memory &memory,const Framebuffer &fb){
     if(memory.faults) throw std::runtime_error("Unmapped device access in headless simulation");
     if(fwrite(memory.ram,1,sizeof(memory.ram),trace)!=sizeof(memory.ram)) throw std::runtime_error("Trace write failed");
-    if(frame>=replay_total_frames()){
+    if(replay_finished()){
         FILE *capture=fopen(capturePath.c_str(),"wb");
         if(!capture) throw std::runtime_error("Capture open failed");
         fprintf(capture,"P6\n320 224\n255\n");
@@ -66,7 +66,7 @@ int main(int argc,char **argv){
     capturePath=std::string(argv[3])+".ppm";
     int result=0;
     try {auto game=std::make_unique<StreetsOfRage>(argv[1]);game->boot();result=1;}
-    catch(const ReplayFinished &){printf("Completed %u frames; GPU scenes checked %u\n",replay_total_frames(),sceneFrames);}
+    catch(const ReplayFinished &){printf("Replay complete; GPU scenes checked %u\n",sceneFrames);}
     catch(const std::exception &error){fprintf(stderr,"Simulation failed: %s\n",error.what());result=1;}
     if(fclose(trace))result=1;
     return result;

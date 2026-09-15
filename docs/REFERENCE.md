@@ -71,11 +71,11 @@ comparison tool only, never linked into the Dreamcast executable.
 
 | Area | Required scenarios | Current evidence |
 | --- | --- | --- |
-| Movement | Four directions, diagonal, plane bounds, jump arcs | Walking increments/end position match; jump phase differs |
-| Combat | Combo presses/holds, back attack, jump kick, all grabs/throws, police | Not compared |
+| Movement | Four directions, diagonal, plane bounds, jump arcs | Phase-anchored directions, diagonals and jump actions match observed state; plane bounds not exhausted |
+| Combat | Combo presses/holds, back attack, jump kick, all grabs/throws, police | Phase-anchored attack/jump/special inputs compared; all grabs/throws still missing |
 | Enemy logic | Every family, damage, invulnerability, knockdown, recovery | Not compared |
 | Campaign | Scroll triggers/waves, transitions, all bosses, all endings | Not compared |
-| Two-player | Join, friendly fire, grabs/assists, lives/continues, scoring | Both players active in encounter probe; combat differs |
+| Two-player | Join, friendly fire, grabs/assists, lives/continues, scoring | 761 phase-anchored encounter observations match; broader interactions still required |
 | Randomness/cadence | Same reset/input stream, seeds and per-tick actor state | Native repeatability verified; original parity incomplete |
 
 Record verified, inferred and inaccurate behavior separately. Never substitute
@@ -108,4 +108,63 @@ P2 lives is byte FFFF23, verified against the disassembly (earlier traces used F
 confirms both players, walks toward enemies and pulses attack. The earlier
 `encounter-smoke.json` Start-join probe stays in one-player mode; its name/status
 records that limitation. The two-player probe reaches 2,158 frames without native
-bus faults, but P2 X differs by 10 at the end. This is not a gameplay parity pass.
+bus faults. Its unaligned cold-boot comparison put P2 X 10 pixels apart; the
+phase-anchored comparison below removes that discrepancy. This is not full parity.
+
+
+## Explicit simulation-phase comparisons
+
+The ROM posts byte 1 or 2 at WRAM `FA00` for its VBlank upload/no-upload waits
+(`10502`, `10514`; handler `19D16`). At the old movement input boundary the
+original is waiting with mailbox 2, while native is at mailbox 1. Both sample the
+same held/pressed buttons, but they update objects on opposite frame parities.
+Do not fix this by changing walking speed or jump arithmetic.
+
+SRP2 adds a bounded, read-only byte predicate to input playback. A `wait` segment
+releases both pads until `(RAM[address] & mask) == value`, then starts the next
+segment immediately. `frames` is its maximum idle-frame budget, not a fixed delay.
+Both harnesses record the exact gate frame. No game state is overwritten and no
+comparison offset is searched after the run. SRP1 fixed-frame playback remains
+supported; the loader allows at most 256 segments and rejects invalid predicates,
+pressed buttons on gates, truncated records and trailing bytes. Timeout is a
+reported failure. `tools/test-replay.sh` checks these boundaries under sanitizers.
+
+```sh
+./tools/build-headless.sh
+build/tools-venv/bin/python3 tools/genesis_reference.py \
+  research/Genesis-Plus-GX/genesis_plus_gx_libretro.dylib "$SOR_ROM" \
+  reference/scenarios/phase-aligned-actions.json build/genesis-actions --raw-ram
+SOR_VALIDATE_GPU_SCENE=1 python3 tools/native-reference.py "$SOR_ROM" \
+  reference/scenarios/phase-aligned-actions.json build/native-actions
+python3 tools/compare-phase.py build/genesis-actions build/native-actions \
+  --segment 9 --require-observations-equal
+```
+
+Use `phase-aligned-two-player.json` and `--segment 11` for the encounter probe.
+Comparison requires identical ROM/scenario hashes and reports both anchor frames,
+all remaining-frame counts, selected observations, and active-object byte regions.
+Raw files explicitly identify their first frame: original frame 1, native frame 0.
+`--require-observations-equal` does **not** require entire-object/WRAM equality.
+
+Verified against original ROM execution:
+
+- Directional/action scenario: **1,481** paired observations match mode, stage,
+  wave, camera, lives and all observed actor positions/states/health. Active-object
+  collision IDs, fixed-point positions/velocities, damage, input and attack flags
+  also match. Police stock goes 1 to 0 and the control lock lasts **637** frames
+  in both backends. The script waits for completion and moves right afterward.
+- Two-player encounter: **761** paired observations match those same public
+  gameplay fields. Collision IDs, fixed-point positions/velocities, damage, input,
+  weapon/grab fields and attack flags match in the sampled frames. This alone
+  does not prove each grab or weapon action was exercised.
+- Directional/action replay repeats with **2,866 identical native RAM snapshots**;
+  all **2,865** rendered frames match the original-mode software renderer in RGB1555.
+- Existing SRP1 two-player replay retains all 2,159 prior native RAM snapshots.
+
+Remaining differences are reported, not filtered out of the raw data. Spawn flag/
+timer bytes differ in the first 28 action frames (26 encounter frames); animation
+bytes differ in the first two. Full active-object data differs in 450 encounter
+frames, including an unclassified object-tail byte. Cold-boot/menu timing, clock,
+random-state and complete combat/campaign parity remain open. See committed
+`reference/results/phase-*.json`; older same-global-frame results remain historical
+evidence and are not replaced by a claim that boot timing now matches.

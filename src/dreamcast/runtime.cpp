@@ -7,8 +7,8 @@
 #include <stdexcept>
 
 
-void Controllers::poll(){
-    if(!replay_poll(current)) platform_poll_controllers(current);
+void Controllers::poll(const uint8_t *ram){
+    if(!replay_poll(current,ram)) platform_poll_controllers(current);
 }
 MegaDriveEnvironment::MegaDriveEnvironment(VDP::Synchronization,VDP::Scaling,VDP::SpriteLimit,uint16_t)
     :port_(state_),tile_(state_),renderer_(state_,tile_,fb_){
@@ -84,7 +84,7 @@ void MegaDriveEnvironment::waitForInterrupt(){
     // across them and inject an extra VBlank into an otherwise normal frame.
     paceCount_=0;
     platform_observe_frame(frames_,mem_.state,fb_);
-    present(); pads_.poll(); frames_++; cycles_+=896040; irq_=6;
+    present(); pads_.poll(mem_.state.ram); frames_++; cycles_+=896040; irq_=6;
 }
 void MegaDriveEnvironment::pace(){
     cycles_+=28;

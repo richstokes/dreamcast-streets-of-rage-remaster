@@ -1,0 +1,99 @@
+{
+  "gameplay_windows": [
+    {
+      "n": 600,
+      "mean_us": 16722,
+      "p50_us_le": 17000,
+      "p95_us_le": 23500,
+      "p99_us_le": 29000,
+      "worst_us": 30727,
+      "vblanks": 600,
+      "flips": 600,
+      "vblanks_without_flip": 0
+    },
+    {
+      "n": 1200,
+      "mean_us": 16725,
+      "p50_us_le": 17000,
+      "p95_us_le": 22500,
+      "p99_us_le": 25500,
+      "worst_us": 30771,
+      "vblanks": 1200,
+      "flips": 1200,
+      "vblanks_without_flip": 0
+    }
+  ],
+  "renderer_blocks": [
+    {
+      "n": 600,
+      "sprite_bytes_mean": 9809,
+      "scene_mean_us": 1429,
+      "scene_max_us": 11238,
+      "wait_mean_us": 11903,
+      "wait_max_us": 17493,
+      "upload_mean_us": 875,
+      "upload_max_us": 21609,
+      "commands_mean_us": 145,
+      "commands_max_us": 2993,
+      "submit_mean_us": 245,
+      "submit_max_us": 614,
+      "ending_present_call": 600
+    },
+    {
+      "n": 600,
+      "sprite_bytes_mean": 20908,
+      "scene_mean_us": 1480,
+      "scene_max_us": 7559,
+      "wait_mean_us": 11895,
+      "wait_max_us": 17488,
+      "upload_mean_us": 1322,
+      "upload_max_us": 12627,
+      "commands_mean_us": 17,
+      "commands_max_us": 2567,
+      "submit_mean_us": 400,
+      "submit_max_us": 3024,
+      "ending_present_call": 1200
+    },
+    {
+      "n": 600,
+      "sprite_bytes_mean": 36203,
+      "scene_mean_us": 1702,
+      "scene_max_us": 4588,
+      "wait_mean_us": 11365,
+      "wait_max_us": 16264,
+      "upload_mean_us": 1636,
+      "upload_max_us": 13905,
+      "commands_mean_us": 145,
+      "commands_max_us": 2565,
+      "submit_mean_us": 514,
+      "submit_max_us": 525,
+      "ending_present_call": 1800
+    },
+    {
+      "n": 600,
+      "sprite_bytes_mean": 21425,
+      "scene_mean_us": 2047,
+      "scene_max_us": 6809,
+      "wait_mean_us": 11218,
+      "wait_max_us": 16637,
+      "upload_mean_us": 1095,
+      "upload_max_us": 7987,
+      "commands_mean_us": 441,
+      "commands_max_us": 2749,
+      "submit_mean_us": 511,
+      "submit_max_us": 559,
+      "ending_present_call": 2400
+    }
+  ],
+  "notes": [
+    "Guest timings in Flycast; retail hardware unverified.",
+    "FRAME_STATS measures CPU-loop intervals, not individual page-flip durations.",
+    "VBlanks and flips are KOS presentation counters over the same gameplay window.",
+    "Renderer blocks include menus and are separate from gameplay windows.",
+    "Later gameplay windows can include idle time after replay completion.",
+    "Serial diagnostics are enabled; original audio is not integrated."
+  ],
+  "scenario": "reference/scenarios/phase-aligned-actions.json",
+  "date": "2026-09-15",
+  "native_script_frames": 2865
+}
