@@ -28,7 +28,7 @@ public:
     SilentSound &sound(){return sound_;}
     bool shouldQuit()const{return quit_;}
     int irqLevel()const{return irq_;} void clearInterrupt(int){irq_=0;}
-    void pace(); void waitForInterrupt();
+    void pace(); void waitForInterrupt(); void debugState();
     void traceEnter(m_long a){last_=a;} m_long lastFunction()const{return last_;}
     void reportUnhandledDispatch(m_long);
     void confirmSpeculative(m_long){}

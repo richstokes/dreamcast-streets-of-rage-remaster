@@ -73,7 +73,7 @@ class Genesis:
     def close(self): self.lib.retro_unload_game(); self.lib.retro_deinit()
 
 # Physical libretro IDs, independent of upstream's Genesis button masks.
-BUTTONS={'B':0,'A':8,'C':1,'START':3,'UP':4,'DOWN':5,'LEFT':6,'RIGHT':7}
+BUTTONS={'B':0,'A':1,'C':8,'START':3,'UP':4,'DOWN':5,'LEFT':6,'RIGHT':7}
 def observation(ram,frame):
     word=lambda a:int.from_bytes(ram[a:a+2],'big')
     actors=[]

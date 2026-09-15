@@ -1,5 +1,9 @@
 # Input audit — 2026-09-15
 
+Update: the user has now supplied the matching ROM. See [reference notes](REFERENCE.md)
+for the hash, entry-list repair and actual build results. Missing-ROM observations
+below describe the initial clean-clone audit, not a current blocker.
+
 Exact commits, including all four recursive submodules, are in
 [`upstream-lock.json`](../tools/upstream-lock.json). Both requested repositories
 were cloned recursively. Only the SoR1 assembly was inspected. Research checkouts
