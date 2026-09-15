@@ -67,3 +67,19 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+
+# Research clones, user-owned game data, and locally generated derivatives.
+/research/
+/local/
+/dist/
+*.elf
+*.cdi
+*.gdi
+*.rom
+*.bin
+*.pak
+*.vms
+*.vmi
+__pycache__/
+.pytest_cache/
+!src/dreamcast/Makefile

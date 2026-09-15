@@ -1,0 +1,34 @@
+{
+  "repositories": [
+    {
+      "path": "research/StreetsOfRageProject",
+      "url": "https://github.com/RuiNelson/StreetsOfRageProject.git",
+      "revision": "bdde6a24f80dbd3623bd7f75fd1f7076a8a18654"
+    },
+    {
+      "path": "research/StreetsOfRageProject/MegaDriveEnvironment",
+      "url": "https://github.com/RuiNelson/MegaDriveEnvironment.git",
+      "revision": "03768fab63a7d8cba0bdafafeaed0b42f5113d5c"
+    },
+    {
+      "path": "research/StreetsOfRageProject/MegaDriveEnvironmentSampleGame",
+      "url": "https://github.com/RuiNelson/MegaDriveEnvironmentSampleGame.git",
+      "revision": "6fd44871cf5bc614e13920e7c471e7fee5b20da7"
+    },
+    {
+      "path": "research/StreetsOfRageProject/RageDecompiler",
+      "url": "https://github.com/RuiNelson/RageDecompiler.git",
+      "revision": "f1370102d92a92c13bd4d41ef1aea7513d447111"
+    },
+    {
+      "path": "research/StreetsOfRageProject/StreetsOfRageRecompilation",
+      "url": "https://github.com/RuiNelson/StreetsOfRageRecompilation.git",
+      "revision": "d4e74ca619a9ff22b76a50385184ef94917bb1c7"
+    },
+    {
+      "path": "research/sor-disassemblies",
+      "url": "https://github.com/gsaurus/sor-disassemblies.git",
+      "revision": "4dd719f3ed5c24c86deee616b56cea885e3113d7"
+    }
+  ]
+}
