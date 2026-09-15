@@ -83,3 +83,7 @@ Testing/
 __pycache__/
 .pytest_cache/
 !src/dreamcast/Makefile
+
+/original_rom/
+/orignal_rom/
+.DS_Store

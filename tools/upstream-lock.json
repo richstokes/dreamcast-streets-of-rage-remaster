@@ -29,6 +29,11 @@
       "path": "research/sor-disassemblies",
       "url": "https://github.com/gsaurus/sor-disassemblies.git",
       "revision": "4dd719f3ed5c24c86deee616b56cea885e3113d7"
+    },
+    {
+      "path": "research/Genesis-Plus-GX",
+      "url": "https://github.com/libretro/Genesis-Plus-GX.git",
+      "revision": "c2838c7dc4236fc2fe94e5dbd08b41486067918e"
     }
   ]
 }
