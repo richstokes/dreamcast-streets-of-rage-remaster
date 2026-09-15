@@ -54,14 +54,20 @@ void platform_observe_frame(uint32_t,const sor_memory &memory,const Framebuffer 
     static uint64_t previous=0,sum=0,worst=0;
     static uint32_t histogram[256]{},samples=0;
     static bool wasPlaying=false;
+    static pvr_stats_t startStats{};
     auto now=timer_us_gettime64();
     bool playing=memory.ram[0xff00]==0 && memory.ram[0xff01]==0x16;
+    if(playing && !wasPlaying){
+        pvr_get_stats(&startStats);sum=worst=samples=0;
+        memset(histogram,0,sizeof(histogram));
+    }
     if(playing && wasPlaying){
         uint64_t elapsed=now-previous;sum+=elapsed;if(elapsed>worst)worst=elapsed;
         histogram[elapsed/500<256?elapsed/500:255]++;samples++;
         if(samples%600==0){
             auto percentile=[&](unsigned n){uint32_t total=0;for(unsigned i=0;i<256;i++){total+=histogram[i];if(total*100>=samples*n)return (i+1)*500;}return 128000u;};
-            printf("FRAME_STATS n=%lu mean_us=%llu p50_us_le=%u p95_us_le=%u p99_us_le=%u worst_us=%llu\n",(unsigned long)samples,(unsigned long long)(sum/samples),percentile(50),percentile(95),percentile(99),(unsigned long long)worst);
+            pvr_stats_t stats{};pvr_get_stats(&stats);
+            printf("FRAME_STATS n=%lu mean_us=%llu p50_us_le=%u p95_us_le=%u p99_us_le=%u worst_us=%llu vblanks=%lu flips=%lu\n",(unsigned long)samples,(unsigned long long)(sum/samples),percentile(50),percentile(95),percentile(99),(unsigned long long)worst,(unsigned long)(stats.vbl_count-startStats.vbl_count),(unsigned long)(stats.frame_count-startStats.frame_count));
         }
     }
     previous=now;wasPlaying=playing;

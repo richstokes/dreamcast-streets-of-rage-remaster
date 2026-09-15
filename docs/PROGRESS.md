@@ -2,27 +2,36 @@
 
 ## 2026-09-15 — native checkpoint, not a completed game
 
-### Latest: quick launcher and PowerVR rendering
+### Latest: native sprite pass and cached PowerVR submission
 
-- `./build-and-run.sh` creates and boots `dist/sor-test.elf` with the user's ROM
-  embedded. Debug symbols are retained separately; no disc build is needed to test.
-- Background/window planes are now cached PowerVR tile commands. CPU sprite
-  evaluation retains original masking/collision rules; GPU composes the layers.
-  Empty tiles are skipped, packets are submitted together, and static geometry
-  is cached independently from sprite changes. Dreamcast B toggles software mode.
-- 96 randomized ASan/UBSan graphics-state cases pass pixel and VDP status checks.
-  All 2,158 two-player replay frames match the reference software renderer in
-  RGB1555; all 2,159 WRAM snapshots are unchanged by the graphics path.
-- Actual PowerVR output visually checked in Flycast at title and two-player combat.
-- First 600 gameplay intervals: mean **17.784 ms (~56.2 fps)**, p50 <=20 ms,
-  p95 <=28 ms, p99 <=32 ms, worst 34.457 ms. Better than the previous 80–97 ms
-  software rendering, but **not stable 60 Hz**. See the committed benchmark JSON
-  in `reference/results/`. Retail performance remains unverified.
-- Latest static disc link: text 2,342,284 B, data 5,828 B, BSS 616,808 B.
-  Observed gameplay heap 2,350,728 B; free VRAM 3,136,104 B. These are not full
-  main-RAM/stack high-water measurements.
-- Further native work is needed for sprite preparation/upload and fallback cases
-  (shadow/highlight, interlace, two-cell vertical scroll, oversized command lists).
+- `./build-and-run.sh` creates and boots the manual-test `dist/sor-test.elf` with
+  the supplied ROM embedded. Full symbols are in `dist/sor-test.debug.elf`.
+- Replaced sprite-table decoding on every scanline with one traversal per frame,
+  preserving per-line masking, limits, ordering and collision/overflow flags.
+- Clear/upload only the union of old/new sprite row extents. Cached aligned
+  background packets use one KOS store-queue submission; sprite-only changes
+  no longer invalidate background commands. No new SH-4 assembly required.
+- **First 600 two-player gameplay intervals: 600 KOS page flips / 600 VBlanks** in
+  the final Flycast run. Earlier repeat runs also recorded 600/600. This supports
+  one displayed frame per refresh for this checkpoint, not a full-game or retail
+  hardware guarantee. Original audio is still absent.
+- CPU-loop mean **16.723 ms (~59.8 loops/s)**, p50 <=17 ms, p95 <=22 ms,
+  p99 <=29 ms, worst 30.746 ms (previous mean 17.784 ms). Work on either side of
+  the graphics wait makes loop intervals vary without necessarily losing a flip.
+  Both measurements are preserved in `reference/results/`.
+- Renderer block ending at call 1800: mean scene 2.155 ms, upload 1.719 ms,
+  command preparation 0.194 ms, submission 0.519 ms, graphics wait 9.979 ms;
+  mean sprite transfer 43,211 bytes. This block includes the transition into
+  gameplay; it is not the same window as the gameplay-only timing above.
+- 160 ASan/UBSan graphics cases pass pixels, VDP flags, crowded scanlines,
+  invalid links, tile bounds and partial-upload stale-pixel checks. All 2,158
+  replay frames match the software renderer in RGB1555; all 2,159 WRAM snapshots
+  remain identical. Actual two-player PowerVR output visually checked in Flycast.
+- Final disc link: text 2,345,780 B, data 5,836 B, BSS 1,579,368 B. Gameplay heap
+  observed at 2,350,760 B; free VRAM 3,136,104 B. Packet caching adds 960,320 B
+  of main RAM. These are not full main-RAM/stack high-water measurements.
+- Shadow/highlight, interlace, two-cell vertical scroll and oversized lists still
+  use the slow software fallback. Further stages/effects need profiling.
 
 ### Runs
 

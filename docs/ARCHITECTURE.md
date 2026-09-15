@@ -86,10 +86,13 @@ cached independently from sprite animation. DMA bookkeeping registers do not
 invalidate geometry. Priority uses six depth levels, including separate window
 and low/high sprite composition.
 
-The existing sprite scanline evaluator retains sprite order, masking, hardware
-limits, and collision/overflow flags. It emits two transparent sprite layers for
-PowerVR composition. This is intentionally an intermediate native renderer;
-sprite texture upload/evaluation is a remaining CPU cost. Shadow/highlight,
+The native sprite evaluator traverses the linked SAT once per frame, retaining
+per-scanline order, masking, hardware limits, and collision/overflow flags. It
+emits two transparent sprite layers for PowerVR composition. Only the union of
+previous and current occupied row extents is cleared/uploaded, so moved or hidden
+sprites cannot leave stale pixels. Tests compare against the upstream scanline
+renderer, including crowded lines, invalid links and tile spans beyond VRAM.
+This is still an intermediate renderer; sprite pixels are composed on the CPU. Shadow/highlight,
 interlace, two-cell vertical scrolling, or more than 6,000 tile quads use the
 software fallback. These cases need further native work before full-game
 performance claims. Dreamcast B toggles the fallback for visual comparison.
@@ -97,6 +100,10 @@ performance claims. Dreamcast B toggles the fallback for visual comparison.
 Actual allocations: 1 MiB tile VRAM, 512 KiB sprite VRAM, 256 KiB software fallback
 VRAM, plus KOS frame/list buffers. Observed free VRAM is 3,136,104 bytes. CPU scene
 storage is approximately 1.1 MiB, plus 256 KiB headers and a 64 KiB tile snapshot;
-these are part of the measured heap/BSS, not extra pools to add twice.
+a further 960,320 bytes caches aligned header/vertex packets. Unchanged geometry
+is sent with a single KOS store-queue submission. Packet invalidation includes
+plane geometry and transparent/visible changes of tiles actually used by planes;
+sprite-only pattern changes do not rebuild the background packets. These buffers
+are part of measured heap/BSS, not extra pools to add twice.
 RGB1555 has 5-bit color channels; tests compare the original output in that format.
 This renderer is original presentation, not remastered artwork.

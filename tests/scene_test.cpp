@@ -2,11 +2,16 @@
 #include <memory>
 #include <cstdio>
 #include <cstdint>
+#include <algorithm>
+#include <array>
+#include <cstring>
 static uint32_t seed=0x501dc;
 static uint32_t random32(){seed=seed*1664525+1013904223;return seed;}
 int main(){
  auto scene=std::make_unique<sor::VdpScene>();
- for(int n=0;n<96;n++){
+ auto uploaded=std::make_unique<std::array<uint16_t,2*512*256>>();
+ int priorTop[2]{256,256},priorBottom[2]{};
+ for(int n=0;n<160;n++){
     VDPState state;state.reset();
     for(auto &v:state.vram_)v=random32()>>24;
     for(auto &c:state.cram_)c=random32()&0xeee;
@@ -24,9 +29,32 @@ int main(){
         unsigned a=state.satBase()+base,x=random32()%512;
         state.vram_[a+6]=x>>8;state.vram_[a+7]=x;
     }
+    if(n>=96){
+        // Crowded scanlines, zero-X masking, cyclic/out-of-range links, and
+        // tile spans past VRAM exercise the frame-level sprite evaluator.
+        for(int i=0;i<80;i++){
+            int a=state.satBase()+i*8;
+            state.sat_[i*8]=0;state.sat_[i*8+1]=150;
+            state.sat_[i*8+2]=(n%4==0)?15:0;
+            int x=(n%4==1 && i==4)?0:128+i%12;
+            state.vram_[a+6]=x>>8;state.vram_[a+7]=x;
+            if(n%4==2){state.vram_[a+4]=0xff;state.vram_[a+5]=0xff;}
+        }
+        if(n%4==3)state.sat_[9*8+3]=n&1?127:3;
+        if(n%8==0)state.regs_[1]=0; // Clear previously occupied texture rows.
+    }
     VDPState reference=state;VDPTile tile(state),refTile(reference);Framebuffer fb,refFB;
     VDPRenderer renderer(state,tile,fb),refRenderer(reference,refTile,refFB);
     if(!scene->buildCached(state,renderer))return 2;
+    // Model the partial VRAM upload across changing scenes. It must equal a
+    // full texture upload, including rows vacated or hidden by display disable.
+    for(int p=0;p<2;p++){
+        int top=std::min(priorTop[p],scene->spriteTop[p]);
+        int bottom=std::max(priorBottom[p],scene->spriteBottom[p]);
+        if(bottom>top)std::memcpy(uploaded->data()+p*512*256+top*512,scene->sprites[p]+top*512,(bottom-top)*1024);
+        priorTop[p]=scene->spriteTop[p];priorBottom[p]=scene->spriteBottom[p];
+    }
+    if(std::memcmp(uploaded->data(),scene->sprites,sizeof(scene->sprites))){puts("Partial sprite upload left stale pixels");return 1;}
     refRenderer.renderFrame();uint16_t out[320*240];sor::raster_scene(*scene,state,out);
     for(int y=0;y<state.activeHeight();y++)for(int x=0;x<state.activeWidth();x++){
         auto p=refFB.pixels_+y*Framebuffer::PITCH+x*3;
@@ -39,5 +67,5 @@ int main(){
     refRenderer.renderFrame();
     if(state.status_!=reference.status_ || state.vCounter_!=reference.vCounter_){puts("VDP status mismatch");return 1;}
  }
- puts("96 scenes: pixels, window/scroll/flip/priority, sprite limits/collisions and VCounter match");
+ puts("160 scenes: pixels, window/scroll/flip/priority, sprite limits/collisions, partial uploads and VCounter match");
 }

@@ -35,13 +35,14 @@ bool same_render_regs(const VDPState &a,const VDPState &b){
 uint16_t VdpScene::rgb1555(unsigned r,unsigned g,unsigned b){
     return 0x8000|((r*255/7>>3)<<10)|((g*255/7>>3)<<5)|(b*255/7>>3);
 }
-bool VdpScene::buildCached(VDPState &s,VDPRenderer &renderer){
+bool VdpScene::buildCached(VDPState &s,VDPRenderer &){
     reused=cacheValid && same_render_regs(s,previous)
         && !std::memcmp(s.vram_,previous.vram_,sizeof(s.vram_))
         && !std::memcmp(s.cram_,previous.cram_,sizeof(s.cram_))
         && !std::memcmp(s.vsram_,previous.vsram_,sizeof(s.vsram_))
         && !std::memcmp(s.sat_,previous.sat_,sizeof(s.sat_));
     if(reused){
+        planesReused=true;
         s.status_|=spriteFlags;
         if(s.displayEnabled())s.vCounter_=height-1;
         return true;
@@ -54,31 +55,85 @@ bool VdpScene::buildCached(VDPState &s,VDPRenderer &renderer){
         && unchanged_region(s,previous,s.windowBase(),(s.h40Mode()?64:32)*32*2)
         && unchanged_region(s,previous,s.hscrollBase(),s.hscrollMode()==0?4:s.activeHeight()*4);
     const auto status=s.status_;s.status_&=~0x60;
-    cacheValid=buildImpl(s,renderer,geometrySame);spriteFlags=s.status_&0x60;s.status_|=status;
+    cacheValid=buildImpl(s,geometrySame);spriteFlags=s.status_&0x60;s.status_|=status;
     if(cacheValid)previous=s;
     return cacheValid;
 }
-bool VdpScene::build(VDPState &s,VDPRenderer &renderer){
+bool VdpScene::build(VDPState &s,VDPRenderer &){
     cacheValid=false;
-    return buildImpl(s,renderer,false);
+    return buildImpl(s,false);
 }
-bool VdpScene::buildImpl(VDPState &s,VDPRenderer &renderer,bool keepPlanes){
+bool VdpScene::buildImpl(VDPState &s,bool keepPlanes){
+    planesReused=keepPlanes;
     if(!keepPlanes)count=0;
     width=s.activeWidth();height=s.activeHeight();
     if(s.interlaced()||s.shadowHighlightEnabled()||s.vscrollMode()!=0||height>256)return false;
     unsigned mask=s.fullColorPaletteEnabled()?7:1;
     for(int i=0;i<64;i++){auto c=s.cram_[i];colors[i]=rgb1555((c>>1)&mask,(c>>5)&mask,(c>>9)&mask);}
     background=s.displayEnabled()?colors[s.bgColorPalette()*16+s.bgColorIndex()]:0x8000;
-    std::memset(sprites,0,sizeof(sprites));
+    for(int p=0;p<2;p++){
+        if(spriteBottom[p]>spriteTop[p])
+            std::memset(sprites[p]+spriteTop[p]*512,0,(spriteBottom[p]-spriteTop[p])*1024);
+        spriteTop[p]=256;spriteBottom[p]=0;
+    }
     if(!s.displayEnabled())return true;
     if(!keepPlanes){plane(s,1);plane(s,0);window(s);}
-    for(int y=0;y<height;y++){
-        s.vCounter_=y;
-        const auto *line=renderer.nativeSpriteLine(y);
-        for(int x=0;x<width;x++)if(line[x].opaque)
-            sprites[line[x].priority?1:0][y*512+x]=colors[line[x].palette*16+line[x].colorIndex];
-    }
+    spriteLayers(s);
+    s.vCounter_=height-1;
     return true;
+}
+void VdpScene::spriteLayers(VDPState &s){
+    // Traverse the linked SAT once per frame. Per-line counters preserve the
+    // VDP's evaluation limits even for transparent or off-screen sprites.
+    struct Row {uint16_t pixels=0;uint8_t count=0;bool seenX=false,masked=false,done=false;};
+    Row rows[256]{};
+    const int limit=s.h40Mode()?20:16,base=s.satBase();
+    int index=0;
+    for(int ordinal=0;ordinal<VDPState::SAT_MAX_SPRITES;ordinal++){
+        const int shadow=index*8,addr=base+shadow;
+        if(addr+7>=VDPState::VRAM_SIZE)break;
+        const int y=((s.sat_[shadow]&3)<<8|s.sat_[shadow+1])-128;
+        const int cellsH=(s.sat_[shadow+2]&3)+1;
+        const int w=(((s.sat_[shadow+2]>>2)&3)+1)*8,h=cellsH*8;
+        const int link=s.sat_[shadow+3]&127;
+        const unsigned attr=entry(s,addr+4);
+        const int rawX=((s.vram_[addr+6]&1)<<8)|s.vram_[addr+7],x=rawX-128;
+        const bool flipX=attr&0x800,flipY=attr&0x1000;
+        const int layer=(attr>>15)&1,palette=(attr>>13)&3,tile=attr&2047;
+        for(int line=std::max(0,y);line<std::min(height,y+h);line++){
+            auto &row=rows[line];
+            if(row.done)continue;
+            if(rawX)row.seenX=true;else if(row.seenX)row.masked=true;
+            if(row.masked)continue;
+            if(++row.count>limit){s.status_|=0x40;row.done=true;continue;}
+            row.pixels+=w;
+            const int start=std::max(0,x);
+            int end=std::min(width,x+w);
+            if(row.pixels>width){end=std::max(start,end-(row.pixels-width));s.status_|=0x40;}
+            const int py=flipY?h-1-(line-y):line-y;
+            const int tileRow=py/8,pixelRow=py&7;
+            auto *dest=sprites[layer]+line*512;
+            const auto *other=sprites[1-layer]+line*512;
+            bool written=false;
+            for(int screenX=start;screenX<end;screenX++){
+                const int px=flipX?w-1-(screenX-x):screenX-x;
+                const int address=(tile+(px/8)*cellsH+tileRow)*32+pixelRow*4;
+                if(address>VDPState::VRAM_SIZE-4)continue;
+                const unsigned byte=s.vram_[address+(px&7)/2];
+                const unsigned color=(px&1)?byte&15:byte>>4;
+                if(!color)continue;
+                if(dest[screenX]||other[screenX])s.status_|=0x20;
+                else {
+                    dest[screenX]=colors[palette*16+color];
+                    written=true;
+                }
+            }
+            if(written){spriteTop[layer]=std::min(spriteTop[layer],line);spriteBottom[layer]=std::max(spriteBottom[layer],line+1);}
+            if(row.pixels>=width)row.done=true;
+        }
+        if(!link||link>=VDPState::SAT_MAX_SPRITES)break;
+        index=link;
+    }
 }
 void VdpScene::add(uint16_t e,int x,int y,int w,int h,int px,int py,int lowDepth){
     if(count==MAX_QUADS)throw std::runtime_error("VDP scene quad bound exceeded");

@@ -55,7 +55,12 @@ version, artifact SHA-256, git commit and toolchain revision for each run.
 - [ ] Check foreground poles, player overlap, sprite limits, palette flashes and window HUD.
 - [ ] Check two-player scrolling and every stage's line-scroll/environment effects.
 - [ ] Record fallback cases (shadow/highlight, interlace, two-cell vertical scrolling).
-- [ ] Collect FRAME_STATS with hardware serial output; separate mean, p95/p99 and worst.
+- [ ] Run the replay procedure in TOOLCHAIN.md and capture hardware serial output.
+- [ ] Compare FRAME_STATS `vblanks`/`flips`; record missed refreshes separately from
+      CPU-loop p50/p95/p99/worst (loop intervals can vary without missing a refresh).
+- [ ] Collect GPU_STATS phase timings and partial sprite upload bytes.
+- [ ] Check disappearing/moving sprites leave no stale rows and background tiles
+      becoming visible invalidate cached commands correctly.
 - [ ] Confirm new frame/list allocation and 1.75 MiB explicit texture allocation fit retail VRAM.
 
 Use a CDI built without SOR_REPLAY for ordinary play. The embedded-ROM ELF is a

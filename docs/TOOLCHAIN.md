@@ -96,5 +96,28 @@ recompile on every invocation.
 
 `SOR_VALIDATE_GPU_SCENE=1 python3 tools/native-reference.py ...` compares the
 PowerVR command stream against the original software renderer at every supported
-frame. `./tools/test-scene.sh` adds 96 randomized, sanitized graphics-state cases,
+frame. `./tools/test-scene.sh` adds 160 randomized/adversarial, sanitized graphics-state cases,
 including cache reuse after sprite collision/overflow status is cleared.
+
+
+## Rendering performance replay
+
+```sh
+SOR_REPLAY="$PWD/reference/scenarios/two-player-combat-smoke.json" \
+  ./tools/package.sh "original_rom/Bare Knuckle - Ikari no Tetsuken ~ Streets of Rage (World).md"
+./tools/run-flycast.sh dist/sor.cdi
+# After FRAME_STATS n=600 appears in build/logs/flycast.log:
+python3 tools/summarize-profile.py build/logs/flycast.log
+```
+
+`FRAME_STATS` measures CPU-loop intervals while gameplay mode stays active.
+`vblanks` and `flips` count KOS refreshes and displayed frames over that same
+window; compare these to assess presentation cadence. CPU work before/after
+`pvr_wait_ready()` makes loop intervals vary even when every refresh has a new
+frame. `GPU_STATS` separately aggregates scene compilation, graphics waiting,
+texture upload, command preparation and submission (mean/max microseconds).
+Its 600-frame blocks include menus; they are not the gameplay-only window.
+Use the first 600 gameplay intervals for repeatable comparison: later cumulative
+windows include idle time after the 2,158-frame replay ends. Diagnostics are
+included in these measurements. Retail hardware and audio-loaded performance
+remain unverified. Repackage without `SOR_REPLAY` to restore manual CDI input.

@@ -1,0 +1,88 @@
+{
+  "gameplay_windows": [
+    {
+      "n": 600,
+      "mean_us": 16723,
+      "p50_us_le": 17000,
+      "p95_us_le": 22000,
+      "p99_us_le": 29000,
+      "worst_us": 30746,
+      "vblanks": 600,
+      "flips": 600,
+      "vblanks_without_flip": 0
+    }
+  ],
+  "renderer_blocks": [
+    {
+      "n": 600,
+      "sprite_bytes_mean": 9809,
+      "scene_mean_us": 1429,
+      "scene_max_us": 11238,
+      "wait_mean_us": 11903,
+      "wait_max_us": 17492,
+      "upload_mean_us": 875,
+      "upload_max_us": 21609,
+      "commands_mean_us": 145,
+      "commands_max_us": 2994,
+      "submit_mean_us": 245,
+      "submit_max_us": 614,
+      "ending_present_call": 600
+    },
+    {
+      "n": 600,
+      "sprite_bytes_mean": 22360,
+      "scene_mean_us": 1542,
+      "scene_max_us": 6310,
+      "wait_mean_us": 11770,
+      "wait_max_us": 17490,
+      "upload_mean_us": 1347,
+      "upload_max_us": 12654,
+      "commands_mean_us": 47,
+      "commands_max_us": 2567,
+      "submit_mean_us": 385,
+      "submit_max_us": 3012,
+      "ending_present_call": 1200
+    },
+    {
+      "n": 600,
+      "sprite_bytes_mean": 43211,
+      "scene_mean_us": 2155,
+      "scene_max_us": 6192,
+      "wait_mean_us": 9979,
+      "wait_max_us": 16336,
+      "upload_mean_us": 1719,
+      "upload_max_us": 13905,
+      "commands_mean_us": 194,
+      "commands_max_us": 2611,
+      "submit_mean_us": 519,
+      "submit_max_us": 3020,
+      "ending_present_call": 1800
+    }
+  ],
+  "notes": [
+    "Guest timings in Flycast; retail hardware unverified.",
+    "FRAME_STATS measures CPU-loop intervals, not individual page-flip durations.",
+    "VBlanks and flips are KOS presentation counters over the same gameplay window.",
+    "Renderer blocks include menus and are separate from gameplay windows.",
+    "Later gameplay windows can include idle time after replay completion.",
+    "Serial diagnostics are enabled; original audio is not integrated."
+  ],
+  "date": "2026-09-15",
+  "scenario": "reference/scenarios/two-player-combat-smoke.json",
+  "comparison_baseline": "reference/results/powervr-2026-09-15.json",
+  "sample_window": "First 600 consecutive gameplay intervals; renderer blocks separately cover present calls 1-1800",
+  "static_link": {
+    "text": 2345780,
+    "data": 5836,
+    "bss": 1579368
+  },
+  "observed_heap_used_bytes": 2350760,
+  "free_vram_bytes": 3136104,
+  "packet_cache_bytes": 960320,
+  "validation": {
+    "sanitized_randomized_and_adversarial_scenes": 160,
+    "replay_frames_pixel_compared": 2158,
+    "ram_snapshots_unchanged": 2159,
+    "flycast_visual_check": "Two players, HUD, scrolling backgrounds visible; no obvious sprite trails"
+  }
+}

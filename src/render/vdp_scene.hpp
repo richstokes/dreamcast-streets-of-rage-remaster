@@ -19,13 +19,15 @@ public:
     int width=320,height=224;
     bool build(VDPState &,VDPRenderer &);
     bool buildCached(VDPState &,VDPRenderer &);
-    bool reused=false;
+    bool reused=false,planesReused=false;
+    int spriteTop[2]{256,256},spriteBottom[2]{};
     static uint16_t rgb1555(unsigned r,unsigned g,unsigned b);
 private:
     VDPState previous;
     bool cacheValid=false;
     uint16_t spriteFlags=0;
-    bool buildImpl(VDPState &,VDPRenderer &,bool keepPlanes);
+    bool buildImpl(VDPState &,bool keepPlanes);
+    void spriteLayers(VDPState &);
     void plane(const VDPState &,int plane);
     void window(const VDPState &);
     void add(uint16_t entry,int x,int y,int w,int h,int px,int py,int lowDepth);

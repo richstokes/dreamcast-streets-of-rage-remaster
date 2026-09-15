@@ -1,5 +1,6 @@
 #include <kos.h>
 #include <cstring>
+#include <algorithm>
 #include <memory>
 #include <stdexcept>
 #include "vdp_scene.hpp"
@@ -9,8 +10,15 @@ pvr_ptr_t tiles=nullptr,spriteTexture[2]{};
 pvr_poly_hdr_t tileHeaders[8192],spriteHeaders[2];
 uint8_t previousTiles[65536]{},valid[2048]{};
 uint16_t previousColors[64]{};
-bool opaque[2048]{};
+bool opaque[2048]{},planeTiles[2048]{};
 uint32_t frames=0;
+struct alignas(32) Packet {pvr_poly_hdr_t header;pvr_vertex_t vertices[4];};
+constexpr size_t maxTileQuads=6000;
+static_assert(sizeof(Packet)==160);
+Packet packets[maxTileQuads+2];
+size_t packetCount=0;
+bool packetsValid=false;
+int uploadedTop[2]{256,256},uploadedBottom[2]{};
 void header(pvr_poly_hdr_t &h,pvr_ptr_t texture,int w,int hgt,bool linear){
     pvr_poly_cxt_t c;
     pvr_poly_cxt_txr(&c,PVR_LIST_PT_POLY,PVR_TXRFMT_ARGB1555|(linear?PVR_TXRFMT_NONTWIDDLED:0),w,hgt,texture,PVR_FILTER_NONE);
@@ -18,12 +26,11 @@ void header(pvr_poly_hdr_t &h,pvr_ptr_t texture,int w,int hgt,bool linear){
     c.depth.comparison=PVR_DEPTHCMP_GEQUAL;
     pvr_poly_compile(&h,&c);
 }
-void quad(const pvr_poly_hdr_t &h,float x,float y,float w,float hgt,float z,float u0,float v0,float u1,float v1){
-    struct alignas(32) Packet {pvr_poly_hdr_t header;pvr_vertex_t vertices[4];};
-    Packet packet{};packet.header=h;
+void quad(Packet &packet,const pvr_poly_hdr_t &h,float x,float y,float w,float hgt,float z,float u0,float v0,float u1,float v1){
+    packet={};packet.header=h;
     const float xx[]={x,x+w,x,x+w},yy[]={y,y,y+hgt,y+hgt};
     for(int i=0;i<4;i++){auto &v=packet.vertices[i];v.z=z;v.argb=0xffffffff;v.flags=i==3?PVR_CMD_VERTEX_EOL:PVR_CMD_VERTEX;v.x=xx[i];v.y=yy[i];v.u=(i&1)?u1:u0;v.v=(i&2)?v1:v0;}
-    pvr_prim(&packet,sizeof(packet));
+
 }
 }
 void dc_renderer_init(){
@@ -42,38 +49,74 @@ void dc_renderer_shutdown(){
 }
 bool dc_render_vdp(VDPState &state,VDPRenderer &renderer){
     const auto begin=timer_us_gettime64();
-    if(!scene->buildCached(state,renderer)||scene->count>6000)return false;
+    if(!scene->buildCached(state,renderer)||scene->count>maxTileQuads)return false;
     const bool same=scene->reused;
     const auto compiled=timer_us_gettime64();
     pvr_wait_ready();
-    for(int p=0;p<4;p++)if(std::memcmp(previousColors+p*16,scene->colors+p*16,32)){
-        for(auto &v:valid)v&=~(1<<p);
-        std::memcpy(previousColors+p*16,scene->colors+p*16,32);
+    const auto ready=timer_us_gettime64();
+    bool opacityChanged=false;
+    if(!same || !frames){
+        for(int p=0;p<4;p++)if(std::memcmp(previousColors+p*16,scene->colors+p*16,32)){
+            for(auto &v:valid)v&=~(1<<p);
+            std::memcpy(previousColors+p*16,scene->colors+p*16,32);
+        }
+        for(int t=0;t<2048;t++)if(std::memcmp(previousTiles+t*32,state.vram_+t*32,32)){
+            valid[t]=0;std::memcpy(previousTiles+t*32,state.vram_+t*32,32);
+            const bool wasOpaque=opaque[t];
+            opaque[t]=false;for(int j=0;j<32;j++)opaque[t]|=state.vram_[t*32+j]!=0;
+            opacityChanged|=planeTiles[t] && wasOpaque!=opaque[t];
+        }
     }
-    for(int t=0;t<2048;t++)if(std::memcmp(previousTiles+t*32,state.vram_+t*32,32)){
-        valid[t]=0;std::memcpy(previousTiles+t*32,state.vram_+t*32,32);
-        opaque[t]=false;for(int j=0;j<32;j++)opaque[t]|=state.vram_[t*32+j]!=0;
-    }
-    unsigned uploads=0;
     alignas(32) uint16_t decoded[64];
-    for(size_t i=0;i<scene->count;i++){
+    if(!same || !frames)for(size_t i=0;i<scene->count;i++){
         const auto &q=scene->quads[i];int t=q.tile,p=q.palette;
         if(!opaque[t] || (valid[t]&(1<<p)))continue;
         for(int j=0;j<64;j++){unsigned b=state.vram_[t*32+j/2],c=(j&1)?b&15:b>>4;decoded[j]=c?scene->colors[p*16+c]:0;}
         pvr_txr_load_ex(decoded,static_cast<uint8_t*>(tiles)+(p*2048+t)*128,8,8,PVR_TXRLOAD_16BPP);
-        valid[t]|=1<<p;uploads++;
+        valid[t]|=1<<p;
     }
-    if(!same || !frames)for(int p=0;p<2;p++)pvr_txr_load(scene->sprites[p],spriteTexture[p],512*256*2);
+    unsigned spriteBytes=0;
+    if(!same || !frames)for(int p=0;p<2;p++){
+        // Include the previous extent to erase pixels vacated by moving sprites.
+        const int top=frames?std::min(uploadedTop[p],scene->spriteTop[p]):0;
+        const int bottom=frames?std::max(uploadedBottom[p],scene->spriteBottom[p]):256;
+        if(bottom>top){
+            const unsigned bytes=(bottom-top)*1024;
+            pvr_txr_load(scene->sprites[p]+top*512,static_cast<uint8_t*>(spriteTexture[p])+top*1024,bytes);
+            spriteBytes+=bytes;
+        }
+        uploadedTop[p]=scene->spriteTop[p];uploadedBottom[p]=scene->spriteBottom[p];
+    }
     const auto uploaded=timer_us_gettime64();
+    if(!packetsValid || !scene->planesReused || opacityChanged){
+        packetCount=0;
+        std::fill_n(planeTiles,2048,false);
+        float sx=640.f/scene->width,sy=480.f/scene->height;
+        for(size_t i=0;i<scene->count;i++){
+            const auto &q=scene->quads[i];
+            planeTiles[q.tile]=true; // Includes empty tiles that may become visible.
+            if(!opaque[q.tile])continue;
+            quad(packets[packetCount++],tileHeaders[q.palette*2048+q.tile],q.x*sx,q.y*sy,q.w*sx,q.h*sy,q.depth,q.u0/8.f,q.v0/8.f,q.u1/8.f,q.v1/8.f);
+        }
+        for(int p=0;p<2;p++)quad(packets[packetCount++],spriteHeaders[p],0,0,640,480,p?6:3,0,0,scene->width/512.f,scene->height/256.f);
+        packetsValid=true;
+    }
+    const auto commands=timer_us_gettime64();
     auto bg=scene->background;pvr_set_bg_color(((bg>>10)&31)/31.f,((bg>>5)&31)/31.f,(bg&31)/31.f);
     pvr_scene_begin();pvr_list_begin(PVR_LIST_PT_POLY);
-    float sx=640.f/scene->width,sy=480.f/scene->height;
-    for(size_t i=0;i<scene->count;i++){
-        const auto &q=scene->quads[i];if(!opaque[q.tile])continue;
-        quad(tileHeaders[q.palette*2048+q.tile],q.x*sx,q.y*sy,q.w*sx,q.h*sy,q.depth,q.u0/8.f,q.v0/8.f,q.u1/8.f,q.v1/8.f);
-    }
-    for(int p=0;p<2;p++)quad(spriteHeaders[p],0,0,640,480,p?6:3,0,0,scene->width/512.f,scene->height/256.f);
+    pvr_prim(packets,packetCount*sizeof(Packet));
     pvr_list_finish();pvr_scene_finish();
-    if(frames++%600==0)printf("GPU quads=%u tiles_uploaded=%u compile_us=%llu wait_upload_us=%llu submit_us=%llu\n",unsigned(scene->count),uploads,(unsigned long long)(compiled-begin),(unsigned long long)(uploaded-compiled),(unsigned long long)(timer_us_gettime64()-uploaded));
+    const auto finished=timer_us_gettime64();
+    // Aggregate every frame: sparse samples mostly hit unchanged VDP frames
+    // and conceal the cost of animation, scrolling, and texture replacement.
+    static uint64_t sums[5]{},peaks[5]{},spriteSum=0;
+    const uint64_t elapsed[]={compiled-begin,ready-compiled,uploaded-ready,commands-uploaded,finished-commands};
+    for(int i=0;i<5;i++){sums[i]+=elapsed[i];peaks[i]=std::max(peaks[i],elapsed[i]);}
+    spriteSum+=spriteBytes;
+    if(++frames%600==0){
+        printf("GPU_STATS n=600 scene=%llu/%llu wait=%llu/%llu upload=%llu/%llu commands=%llu/%llu submit=%llu/%llu sprite_bytes_mean=%llu (mean/max us)\n",
+            sums[0]/600,peaks[0],sums[1]/600,peaks[1],sums[2]/600,peaks[2],sums[3]/600,peaks[3],sums[4]/600,peaks[4],spriteSum/600);
+        std::fill_n(sums,5,0);std::fill_n(peaks,5,0);spriteSum=0;
+    }
     return true;
 }

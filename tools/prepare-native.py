@@ -18,11 +18,5 @@ for f in (S/'generated').glob('SoR*'): copy(f,D/f.name)
 copy(M/'include/MegaDriveEnvironment/data_types.hpp',D/'data_types.hpp')
 for n in ['VDPState','VDPPort','VDPRenderer','VDPTile']:
     source=M/f'include/MegaDriveEnvironment/system/graphics/{n}.hpp'
-    text=source.read_text()
-    if n=='VDPRenderer':
-        needle='    private:\n'
-        assert text.count(needle)==1
-        text=text.replace(needle,'    const PixelResult *nativeSpriteLine(int y) { buildSpriteLine(y); return spriteLine_; }\n\n'+needle)
-    target=D/f'{n}.hpp'
-    if not target.exists() or target.read_text()!=text:target.write_text(text)
+    copy(source,D/f'{n}.hpp')
     copy(M/f'src/system/graphics/{n}.cpp',D/f'{n}.cpp')

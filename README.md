@@ -14,13 +14,14 @@ original gameplay parity. **This is not yet the finished playable remaster.**
 - Frame-counted two-pad diagnostic replay, Maple input boundary, KOS CD loading,
   memory/profiling diagnostics and versioned VMU settings storage implemented.
 - Player visibility is verified; gameplay fidelity is not established.
-- Target audio is currently silent. No enhanced artwork, all-stage coverage or
-  60 Hz performance claim. No physical Dreamcast validation yet.
+- Optimized two-player Flycast checkpoint presents one frame per VBlank in the
+  measured replay window. Full-game and physical Dreamcast performance unverified.
+- Target audio is currently silent. No enhanced artwork or all-stage coverage.
 
 This executes statically translated SoR code. The Dreamcast target does not contain
 a generic Genesis/68000 emulator. It temporarily retains VDP device semantics and
-a PowerVR tile renderer with a software comparison/fallback path. Sprite scanline
-evaluation remains on the CPU; PowerVR composites the layers.
+a PowerVR tile renderer with a software comparison/fallback path. Sprite evaluation uses a single SAT traversal
+with per-line limits on the CPU; PowerVR composites the layers.
 
 ## Build and run
 
