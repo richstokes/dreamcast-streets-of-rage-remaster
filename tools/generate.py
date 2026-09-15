@@ -10,6 +10,24 @@ from rom import inspect
 ROOT=Path(__file__).resolve().parents[1]
 P=ROOT/'research/StreetsOfRageProject'
 
+def verify_sprite_entry(directory):
+    """Reject partitions that silently ignore the manual SAT-building entry."""
+    functions={}
+    for path in directory.glob('SoR-*.cpp'):
+        for match in re.finditer(r'^void StreetsOfRage::(\w+)\(m_long entry_\) \{\n(.*?)^\}',path.read_text(),re.M|re.S):
+            functions[match[1]]=match[2]
+    name='enqueue_object_render_bucket'
+    visited=set()
+    while name not in visited:
+        visited.add(name)
+        body=functions.get(name,'')
+        if re.search(r'case 0x0*AE96u:',body):
+            return
+        alias=re.fullmatch(r'\s*(\w+)\(entry_\);\s*',body)
+        if not alias: break
+        name=alias[1]
+    raise RuntimeError('Manual sprite entry AE96 is not routed by generated function partitions')
+
 def main():
     ap=argparse.ArgumentParser(description=__doc__); ap.add_argument('rom',type=Path)
     a=ap.parse_args(); identity=inspect(a.rom.read_bytes())
@@ -31,11 +49,13 @@ def main():
     bad.add(0x14bdc)
     out=ROOT/'build'; out.mkdir(exist_ok=True)
     repaired=out/'repaired-aux.txt'
-    repaired.write_text(''.join(f'{v:06X}\n' for v in sorted((aux-bad)|seeds)))
+    repaired.write_text(''.join(f'{v:06X}\n' for v in sorted((aux-bad)|{v for v in seeds if 0x143D0<=v<0x158C4})))
     (out/'generation-audit.json').write_text(json.dumps(dict(rom=identity,
         removed_upstream_seeds=[f'{x:06X}' for x in sorted(bad)],assembly_seeds=len(seeds)),indent=2)+'\n')
     ca=P/'StreetsOfRageRecompilation/code-analysis'
-    return recompile([str(a.rom.resolve()),'--aux',str(repaired),'--labels-csv',str(ca/'labels.csv'),
+    result=recompile([str(a.rom.resolve()),'--aux',str(repaired),'--labels-csv',str(ca/'labels.csv'),
         '--addresses-csv',str(ca/'addresses.csv'),'--manual-functions',str(ca/'manual_functions.txt'),
         '-o',str(P/'StreetsOfRageRecompilation/generated')])
+    if result in (None,0): verify_sprite_entry(P/'StreetsOfRageRecompilation/generated')
+    return result
 if __name__=='__main__': sys.exit(main())

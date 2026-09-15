@@ -10,20 +10,22 @@
 - PC reference compiles after a reproducible correction to invalid auxiliary
   entry points. Boots through menus into Round 1; lockstep remains unreliable.
 - Native KOS/SH-4 C++ debug ELF and CDI build and boot in working local Flycast.
-  Original intro, menus and Round 1 background/HUD render. Actor visibility is
-  under investigation; do not call this verified playable gameplay.
+  Original intro, menus, Round 1 background/HUD and player render. Narrowing the
+  generation seed repair fixed missing actors; gameplay parity is unverified.
 - Two-pad frame playback reaches gameplay mode 0016 without unresolved dispatches
   or unmapped-bus faults in the observed session.
 
 ### Verified
 
 - Host ASan/UBSan memory/endian/bus-bound tests and save corruption tests pass.
+- Generation now rejects a lost manual sprite entry; the regression test covers
+  both an unreachable entry and a valid forwarding alias. ROM bounds tests pass.
+- Latest local CDI is packaged without replay for manual controller testing.
 - Executable translated arithmetic probes: 65,536 ADD.b combinations, wide carry,
   sign/shift boundaries, DIVS overflow and subregister preservation pass on host
   and SH-4 in Flycast.
-- Optimized CPU fallback matches upstream pixels/status for 96 deterministic
-  randomized VDP scenes under sanitizers. This proves that optimization's
-  equivalence, not original-console rendering fidelity.
+- An experimental CPU plane renderer matched 96 randomized scenes but did not
+  improve measured target time; removed it. Retained the color conversion lookup.
 - CD filesystem access and missing-VMU/default-settings path run. VMU write and
   recovery code is not yet exercised on a console.
 
@@ -34,11 +36,12 @@
   Heap usage is not a complete main-RAM peak or stack high-water measurement.
 - Unoptimized Round 1 rasterization about 75 ms; pixel conversion about 18 ms;
   total render/present about 97 ms. Far from 60 Hz.
-- Native optimization has passed pixel-equivalence tests; new target timings pending.
+- Color lookup reduced conversion to about 7.2 ms. Experimental plane rendering
+  was about 79 ms and total rendering about 90 ms; it was rejected. These samples
+  are not a full frame-time distribution or a worst-case campaign measurement.
 
 ### Known limitations
 
-- Missing actors in captured Round 1 frame requires investigation.
 - Original sound/AICA playback not integrated; target is deliberately silent.
 - Simulation/interrupt cadence not yet compared against Genesis.
 - PC lockstep times out; experimental barrier change did not fix it and was not retained.
@@ -48,7 +51,7 @@
 
 ### Next concrete milestone
 
-Resolve original-mode actor rendering and cadence, verify controls/combat against
+Resolve original-mode cadence, verify controls/combat against
 original-ROM traces, replace expensive graphics work using measured results,
 then integrate original audio. Enhanced art starts only after the first section
 has verified behavior. The full eight rounds and endings remain required.

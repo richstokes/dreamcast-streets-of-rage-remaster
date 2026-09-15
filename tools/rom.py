@@ -27,9 +27,12 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('rom', type=Path)
     p.add_argument('--output', type=Path)
+    p.add_argument('--require-known', action='store_true')
     a = p.parse_args()
     try:
         result = inspect(a.rom.read_bytes())
+        if a.require_known and result['sha256'] != 'dd44f120446654bb91c448762f3e0cd0d9b034f35d0e3266a4dc34402ada95c0':
+            raise ValueError('ROM SHA-256 differs from the generated-code target; refusing mixed revisions')
     except (OSError, ValueError) as e:
         p.exit(1, f'{e}\n')
     text = json.dumps(result, indent=2) + '\n'

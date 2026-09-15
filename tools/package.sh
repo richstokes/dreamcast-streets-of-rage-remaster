@@ -2,7 +2,7 @@
 set -euo pipefail
 root=$(cd -- "$(dirname -- "$0")/.." && pwd)
 rom=${1:-${SOR_ROM:-"$root/local/SOR.bin"}}
-python3 "$root/tools/rom.py" "$rom" --output "$root/build/disc-rom.json"
+python3 "$root/tools/rom.py" "$rom" --require-known --output "$root/build/disc-rom.json"
 "$root/tools/build-dreamcast.sh"
 export SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH:-1789498800}
 mkdcdisc=${MKDCDISC:-"$root/build/mkdcdisc/build/mkdcdisc"}

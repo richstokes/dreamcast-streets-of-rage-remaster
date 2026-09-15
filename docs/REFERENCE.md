@@ -22,8 +22,14 @@ conflict set and exact ROM hash. It does not replace unsupported opcodes with no
 Research source remains untouched; the repaired address list and generation report
 are local build products.
 
-Result: 25,959 decoded instructions, 1,273 function partitions, 53 manual entries;
-25,560 translated instructions, zero stubbed instructions, 30 translation units.
+Only labels within the affected Abadede range (0143D0–0158C3) are added to
+generation seeds. All other disassembly labels establish instruction boundaries
+only. Adding every valid label changes function partitioning: an initial attempt
+broke the manual call to `enqueue_object_render_bucket(0xAE96u)`, leaving actors
+invisible. Narrowing the repair restores that entry and visible actors in Flycast.
+
+Result: 25,518 decoded instructions, 844 function partitions, 53 manual entries;
+24,408 translated instructions, zero stubbed instructions, 30 translation units.
 These are generation counts, **not runtime coverage or fidelity percentages**.
 
 ## Runs and limits

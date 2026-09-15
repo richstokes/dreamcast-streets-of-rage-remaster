@@ -4,10 +4,12 @@ KOS_BUILD_SUBARCHS = pristine
 include $(KOS_BASE)/Makefile.rules
 SOURCES := $(wildcard $(ROOT)/build/native/upstream/*.cpp) $(wildcard *.cpp)
 OBJS := $(SOURCES:.cpp=.o) $(ROOT)/build/native/memory.o $(ROOT)/build/native/save.o
-KOS_CPPFLAGS += -std=gnu++23 -g -Icompat -I$(ROOT)/include -I$(ROOT)/build/native/upstream -ffunction-sections -fdata-sections
-KOS_CFLAGS += -g -I$(ROOT)/include -ffunction-sections -fdata-sections
+KOS_CPPFLAGS += -std=gnu++23 -g -Icompat -I$(ROOT)/include -I$(ROOT)/build/native/upstream -ffunction-sections -fdata-sections -MMD -MP
+KOS_CFLAGS += -g -I$(ROOT)/include -ffunction-sections -fdata-sections -MMD -MP
 KOS_LDFLAGS += -Wl,--gc-sections,-Map,$(ROOT)/build/native/sor.map
 all: $(TARGET)
+$(OBJS): Makefile
+-include $(OBJS:.o=.d)
 $(TARGET): $(OBJS)
 	kos-c++ -o $@ $(OBJS) -lm
 $(ROOT)/build/native/memory.o: $(ROOT)/src/core/memory.c
