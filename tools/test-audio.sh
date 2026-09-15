@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+upstream="$root/build/native/upstream"
+mkdir -p "$root/build/tests"
+clang++ -std=c++23 -O2 -g -fsanitize=address,undefined \
+ -I"$root/src/audio" -I"$upstream" \
+ "$root/tests/audio_test.cpp" "$root/src/audio/audio_core.cpp" \
+ "$upstream/ymfm_opn.cpp" "$upstream/ymfm_adpcm.cpp" "$upstream/ymfm_ssg.cpp" \
+ -o "$root/build/tests/audio-test"
+"$root/build/tests/audio-test"

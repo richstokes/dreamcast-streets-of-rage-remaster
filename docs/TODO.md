@@ -11,7 +11,8 @@ Evidence and measurements live in PROGRESS.md and REFERENCE.md.
 - [x] Compare sampled directions, jump actions, special and two-player encounter.
 - [ ] Explain remaining startup timers/flags and active-object tail differences.
 - [ ] Exercise grabs, throws, combos, recovery, invulnerability and enemy families.
-- [ ] Integrate original sound through a native audio boundary and measure its cost.
+- [x] Build and profile an experimental original FM/PSG/DAC-to-AICA path.
+- [ ] Optimize audio to retain 60 Hz, remove stream starvation and validate audible fidelity.
 - [ ] Wire settings/records to VMU saves; test writes, corruption and missing cards.
 
 ## Complete original mode

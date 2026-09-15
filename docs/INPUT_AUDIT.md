@@ -67,3 +67,12 @@ comparison; faithful combat, all-stage/ending testing; authentic sprite/audio
 extraction; a playable Dreamcast build. Required input is a user-owned raw
 524,288-byte SoR1 JUE revision 00 image. `tools/rom.py` rejects other layouts and
 records a SHA-256 candidate, without claiming a header checksum proves identity.
+
+## Audio dependency use
+
+The experimental native audio path uses ymfm (BSD-3-Clause, Aaron Giles) and the
+Suzuki Plan Z80 core (MIT, Yoji Suzuki) bundled in the pinned MegaDriveEnvironment
+revision. They are staged during preparation with original headers intact. Binary
+and source distribution notices are in licenses/ymfm.txt and
+licenses/suzukiplan-z80.txt. No Genesis Plus GX code is linked into the target.
+The DAC program and sample bytes come only from the user's verified ROM.

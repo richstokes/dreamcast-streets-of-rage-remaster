@@ -32,7 +32,8 @@ def summarize(text):
                 'VBlanks and flips are KOS presentation counters over the same gameplay window.',
                 'Renderer blocks include menus and are separate from gameplay windows.',
                 'Later gameplay windows can include idle time after replay completion.',
-                'Serial diagnostics are enabled; original audio is not integrated.'
+                'Serial diagnostics are enabled; experimental audio is ' +
+                ('active.' if 'AUDIO frame=' in text else 'disabled.')
             ]}
 
 

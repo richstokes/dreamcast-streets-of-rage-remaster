@@ -1,0 +1,350 @@
+{
+  "date": "2026-09-15",
+  "status": "experimental audio; 60 Hz budget failed; disabled by default",
+  "scenario": "reference/scenarios/phase-aligned-actions.json",
+  "rom_sha256": "dd44f120446654bb91c448762f3e0cd0d9b034f35d0e3266a4dc34402ada95c0",
+  "host": {
+    "game_frames": 2865,
+    "stereo_sample_frames": 2546780,
+    "sample_rate_hz": 53267,
+    "pcm_sha256": "159b3b17df95ed377fd2eedb2ff20df0c34cab1f61f5a7c2877f17c4b3d21a9d",
+    "repeat_pcm_equal": true,
+    "repeat_ram_snapshots_equal": 2866,
+    "peak_magnitude": 13338,
+    "rms": 1309.3385979384664,
+    "clipped_samples": 0,
+    "original_phase_aligned_observations_equal": 1481,
+    "audio_disabled_previous_ram_snapshots_equal": 2159
+  },
+  "sh4_pcm_checkpoints": [
+    {
+      "frame": 599,
+      "stereo_frames": 889,
+      "fnv1a": "be87a0ed",
+      "matches_host": true
+    },
+    {
+      "frame": 1199,
+      "stereo_frames": 889,
+      "fnv1a": "d4cadb81",
+      "matches_host": true
+    },
+    {
+      "frame": 1799,
+      "stereo_frames": 889,
+      "fnv1a": "c83a1041",
+      "matches_host": true
+    },
+    {
+      "frame": 2399,
+      "stereo_frames": 889,
+      "fnv1a": "d8066ab0",
+      "matches_host": true
+    }
+  ],
+  "notes": [
+    "Flycast guest counters, not physical hardware performance.",
+    "PCM equality is between native host and SH-4 checkpoints, not original Genesis waveform equality.",
+    "No listening QA or complete soundtrack/SFX coverage claimed.",
+    "Per-part sampled timings include profiling clock overhead; stream_us includes serial diagnostics.",
+    "Unclassified original/native RAM differences remain documented in phase comparison results."
+  ],
+  "flycast_audio_enabled": {
+    "gameplay_windows": [
+      {
+        "n": 600,
+        "mean_us": 37890,
+        "p50_us_le": 37500,
+        "p95_us_le": 47000,
+        "p99_us_le": 48000,
+        "worst_us": 68647,
+        "vblanks": 1359,
+        "flips": 600,
+        "vblanks_without_flip": 759
+      },
+      {
+        "n": 1200,
+        "mean_us": 39220,
+        "p50_us_le": 39000,
+        "p95_us_le": 47000,
+        "p99_us_le": 49500,
+        "worst_us": 80608,
+        "vblanks": 2814,
+        "flips": 1200,
+        "vblanks_without_flip": 1614
+      }
+    ],
+    "renderer_blocks": [
+      {
+        "n": 600,
+        "sprite_bytes_mean": 9809,
+        "scene_mean_us": 1438,
+        "scene_max_us": 11273,
+        "wait_mean_us": 0,
+        "wait_max_us": 1,
+        "upload_mean_us": 876,
+        "upload_max_us": 21609,
+        "commands_mean_us": 150,
+        "commands_max_us": 4899,
+        "submit_mean_us": 249,
+        "submit_max_us": 651,
+        "ending_present_call": 600
+      },
+      {
+        "n": 600,
+        "sprite_bytes_mean": 20908,
+        "scene_mean_us": 1483,
+        "scene_max_us": 5051,
+        "wait_mean_us": 0,
+        "wait_max_us": 1,
+        "upload_mean_us": 1328,
+        "upload_max_us": 15119,
+        "commands_mean_us": 17,
+        "commands_max_us": 2598,
+        "submit_mean_us": 394,
+        "submit_max_us": 555,
+        "ending_present_call": 1200
+      },
+      {
+        "n": 600,
+        "sprite_bytes_mean": 36203,
+        "scene_mean_us": 1712,
+        "scene_max_us": 4837,
+        "wait_mean_us": 0,
+        "wait_max_us": 1,
+        "upload_mean_us": 1637,
+        "upload_max_us": 13939,
+        "commands_mean_us": 145,
+        "commands_max_us": 2601,
+        "submit_mean_us": 522,
+        "submit_max_us": 3021,
+        "ending_present_call": 1800
+      },
+      {
+        "n": 600,
+        "sprite_bytes_mean": 21425,
+        "scene_mean_us": 2056,
+        "scene_max_us": 8297,
+        "wait_mean_us": 0,
+        "wait_max_us": 1,
+        "upload_mean_us": 1098,
+        "upload_max_us": 5805,
+        "commands_mean_us": 442,
+        "commands_max_us": 2755,
+        "submit_mean_us": 515,
+        "submit_max_us": 583,
+        "ending_present_call": 2400
+      }
+    ],
+    "notes": [
+      "Guest timings in Flycast; retail hardware unverified.",
+      "FRAME_STATS measures CPU-loop intervals, not individual page-flip durations.",
+      "VBlanks and flips are KOS presentation counters over the same gameplay window.",
+      "Renderer blocks include menus and are separate from gameplay windows.",
+      "Later gameplay windows can include idle time after replay completion.",
+      "Serial diagnostics are enabled; experimental audio is active."
+    ],
+    "stream_checkpoints": [
+      {
+        "queued": 0,
+        "underruns": 274,
+        "overruns": 0,
+        "callbacks": 276,
+        "requested_bytes": 4521984
+      },
+      {
+        "queued": 0,
+        "underruns": 553,
+        "overruns": 0,
+        "callbacks": 555,
+        "requested_bytes": 9093120
+      },
+      {
+        "queued": 0,
+        "underruns": 847,
+        "overruns": 0,
+        "callbacks": 849,
+        "requested_bytes": 13910016
+      },
+      {
+        "queued": 0,
+        "underruns": 1161,
+        "overruns": 0,
+        "callbacks": 1163,
+        "requested_bytes": 19054592
+      }
+    ],
+    "synthesis_checkpoints": [
+      {
+        "frame": 599,
+        "synth_us": 29103,
+        "stream_us": 6955,
+        "ym": 1500,
+        "psg": 200,
+        "dac": 0,
+        "z80_faults": 0
+      },
+      {
+        "frame": 1199,
+        "synth_us": 30505,
+        "stream_us": 6957,
+        "ym": 67806,
+        "psg": 229,
+        "dac": 30344,
+        "z80_faults": 0
+      },
+      {
+        "frame": 1799,
+        "synth_us": 33364,
+        "stream_us": 7039,
+        "ym": 281120,
+        "psg": 563,
+        "dac": 134096,
+        "z80_faults": 0
+      },
+      {
+        "frame": 2399,
+        "synth_us": 37229,
+        "stream_us": 7208,
+        "ym": 560906,
+        "psg": 1177,
+        "dac": 270044,
+        "z80_faults": 0
+      }
+    ]
+  },
+  "memory": {
+    "main_pcm_ring_bytes": 65536,
+    "main_callback_bytes": 16384,
+    "sound_stream_bytes": 32768,
+    "aica_free_after_stream_init_bytes": 1867776,
+    "sampled_heap_used_bytes": 2379384,
+    "sampled_vram_free_bytes": 3136104,
+    "default_elf_text_bytes": 2489944,
+    "default_elf_data_bytes": 5848,
+    "default_elf_bss_bytes": 1599192,
+    "notes": "Static stream buffers remain in BSS in disabled builds. Heap sample is not a high-water measurement; stacks and I/O peaks remain unmeasured. AICA free count includes KOS reservations."
+  },
+  "flycast_default_audio_disabled": {
+    "gameplay_windows": [
+      {
+        "n": 600,
+        "mean_us": 16722,
+        "p50_us_le": 17000,
+        "p95_us_le": 23500,
+        "p99_us_le": 29000,
+        "worst_us": 30723,
+        "vblanks": 600,
+        "flips": 600,
+        "vblanks_without_flip": 0
+      },
+      {
+        "n": 1200,
+        "mean_us": 16725,
+        "p50_us_le": 17000,
+        "p95_us_le": 22500,
+        "p99_us_le": 25500,
+        "worst_us": 30771,
+        "vblanks": 1200,
+        "flips": 1200,
+        "vblanks_without_flip": 0
+      },
+      {
+        "n": 1800,
+        "mean_us": 16724,
+        "p50_us_le": 17000,
+        "p95_us_le": 22000,
+        "p99_us_le": 24500,
+        "worst_us": 30771,
+        "vblanks": 1800,
+        "flips": 1800,
+        "vblanks_without_flip": 0
+      }
+    ],
+    "renderer_blocks": [
+      {
+        "n": 600,
+        "sprite_bytes_mean": 9809,
+        "scene_mean_us": 1429,
+        "scene_max_us": 11238,
+        "wait_mean_us": 11901,
+        "wait_max_us": 17493,
+        "upload_mean_us": 875,
+        "upload_max_us": 21609,
+        "commands_mean_us": 145,
+        "commands_max_us": 2989,
+        "submit_mean_us": 245,
+        "submit_max_us": 614,
+        "ending_present_call": 600
+      },
+      {
+        "n": 600,
+        "sprite_bytes_mean": 20908,
+        "scene_mean_us": 1480,
+        "scene_max_us": 7559,
+        "wait_mean_us": 11890,
+        "wait_max_us": 17485,
+        "upload_mean_us": 1322,
+        "upload_max_us": 12627,
+        "commands_mean_us": 17,
+        "commands_max_us": 2568,
+        "submit_mean_us": 400,
+        "submit_max_us": 3025,
+        "ending_present_call": 1200
+      },
+      {
+        "n": 600,
+        "sprite_bytes_mean": 36203,
+        "scene_mean_us": 1702,
+        "scene_max_us": 4587,
+        "wait_mean_us": 11360,
+        "wait_max_us": 16267,
+        "upload_mean_us": 1636,
+        "upload_max_us": 13905,
+        "commands_mean_us": 145,
+        "commands_max_us": 2565,
+        "submit_mean_us": 514,
+        "submit_max_us": 525,
+        "ending_present_call": 1800
+      },
+      {
+        "n": 600,
+        "sprite_bytes_mean": 21425,
+        "scene_mean_us": 2047,
+        "scene_max_us": 6808,
+        "wait_mean_us": 11213,
+        "wait_max_us": 16632,
+        "upload_mean_us": 1095,
+        "upload_max_us": 7986,
+        "commands_mean_us": 441,
+        "commands_max_us": 2748,
+        "submit_mean_us": 511,
+        "submit_max_us": 559,
+        "ending_present_call": 2400
+      },
+      {
+        "n": 600,
+        "sprite_bytes_mean": 21527,
+        "scene_mean_us": 1680,
+        "scene_max_us": 5935,
+        "wait_mean_us": 12004,
+        "wait_max_us": 16849,
+        "upload_mean_us": 991,
+        "upload_max_us": 5660,
+        "commands_mean_us": 163,
+        "commands_max_us": 2611,
+        "submit_mean_us": 517,
+        "submit_max_us": 535,
+        "ending_present_call": 3000
+      }
+    ],
+    "notes": [
+      "Guest timings in Flycast; retail hardware unverified.",
+      "FRAME_STATS measures CPU-loop intervals, not individual page-flip durations.",
+      "VBlanks and flips are KOS presentation counters over the same gameplay window.",
+      "Renderer blocks include menus and are separate from gameplay windows.",
+      "Later gameplay windows can include idle time after replay completion.",
+      "Serial diagnostics are enabled; experimental audio is disabled."
+    ]
+  }
+}

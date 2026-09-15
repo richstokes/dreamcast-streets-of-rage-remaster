@@ -6,9 +6,16 @@ import hashlib
 import json
 from pathlib import Path
 import struct
+import wave
 
 class GameInfo(C.Structure):
     _fields_=[('path',C.c_char_p),('data',C.c_void_p),('size',C.c_size_t),('meta',C.c_char_p)]
+class Geometry(C.Structure):
+    _fields_=[('base_width',C.c_uint),('base_height',C.c_uint),('max_width',C.c_uint),('max_height',C.c_uint),('aspect_ratio',C.c_float)]
+class Timing(C.Structure):
+    _fields_=[('fps',C.c_double),('sample_rate',C.c_double)]
+class AVInfo(C.Structure):
+    _fields_=[('geometry',Geometry),('timing',Timing)]
 class Variable(C.Structure):
     _fields_=[('key',C.c_char_p),('value',C.c_char_p)]
 ENV=C.CFUNCTYPE(C.c_bool,C.c_uint,C.c_void_p)
@@ -21,7 +28,7 @@ INPUT=C.CFUNCTYPE(C.c_int16,C.c_uint,C.c_uint,C.c_uint,C.c_uint)
 class Genesis:
     def __init__(self,core,rom):
         self.lib=C.CDLL(str(Path(core).resolve())); self.buttons=[0,0]; self.frame=0
-        self.pixel_format=0; self.image=None; self.sample_frames=0
+        self.audio_file=None; self.pixel_format=0; self.image=None; self.sample_frames=0
         self.directory=str(Path(rom).resolve().parent).encode()
         self.variables={b'genesis_plus_gx_region_detect':b'ntsc-u',b'genesis_plus_gx_system_hw':b'genesis',b'genesis_plus_gx_bios':b'disabled'}
         self.callbacks=[ENV(self.environment),VIDEO(self.video),AUDIO(lambda l,r:None),BATCH(self.audio),POLL(lambda:None),INPUT(self.input)]
@@ -34,6 +41,7 @@ class Genesis:
         self.rom=C.create_string_buffer(Path(rom).read_bytes())
         info=GameInfo(str(Path(rom).resolve()).encode(),C.cast(self.rom,C.c_void_p),len(self.rom)-1,None)
         if not self.lib.retro_load_game(C.byref(info)): raise RuntimeError('libretro load failed')
+        av=AVInfo();self.lib.retro_get_system_av_info(C.byref(av));self.sample_rate=av.timing.sample_rate
         self.lib.retro_set_controller_port_device(0,1); self.lib.retro_set_controller_port_device(1,1)
     def environment(self,cmd,data):
         cmd &= 0xffff
@@ -47,7 +55,13 @@ class Genesis:
         return False
     def input(self,port,device,index,button):
         return int(port<2 and bool(self.buttons[port] & (1<<button)))
-    def audio(self,data,n): self.sample_frames+=n; return n
+    def audio(self,data,n):
+        self.sample_frames+=n
+        if self.audio_file:self.audio_file.writeframesraw(C.string_at(data,n*4))
+        return n
+    def capture_audio(self,path):
+        self.audio_file=wave.open(str(path),'wb');self.audio_file.setnchannels(2)
+        self.audio_file.setsampwidth(2);self.audio_file.setframerate(round(self.sample_rate))
     def video(self,data,w,h,pitch):
         if data: self.image=(C.string_at(data,pitch*h),w,h,pitch,self.pixel_format)
     def ram(self):
@@ -70,7 +84,9 @@ class Genesis:
                     rgb=((v>>(11 if fmt==2 else 10)&31)*255//31,(v>>5&(63 if fmt==2 else 31))*255//(63 if fmt==2 else 31),(v&31)*255//31)
                 out.extend(rgb)
         Image.frombytes('RGB',(w,h),bytes(out)).save(path)
-    def close(self): self.lib.retro_unload_game(); self.lib.retro_deinit()
+    def close(self):
+        if self.audio_file:self.audio_file.close()
+        self.lib.retro_unload_game();self.lib.retro_deinit()
 
 # Physical libretro IDs, independent of upstream's Genesis button masks.
 BUTTONS={'B':0,'A':1,'C':8,'START':3,'UP':4,'DOWN':5,'LEFT':6,'RIGHT':7}
@@ -83,8 +99,9 @@ def observation(ram,frame):
                 p1_lives=ram[0xff20],p2_lives=ram[0xff23],actors=actors,ram_sha256=hashlib.sha256(ram).hexdigest())
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('core');p.add_argument('rom');p.add_argument('scenario');p.add_argument('output',type=Path);p.add_argument('--raw-ram',action='store_true');a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('core');p.add_argument('rom');p.add_argument('scenario');p.add_argument('output',type=Path);p.add_argument('--raw-ram',action='store_true');p.add_argument('--audio-wav',action='store_true');a=p.parse_args()
     a.output.mkdir(parents=True,exist_ok=True);g=Genesis(a.core,a.rom)
+    if a.audio_wav:g.capture_audio(a.output/'audio.wav')
     scenario=json.loads(Path(a.scenario).read_text())
     from contextlib import nullcontext
     ram=g.ram()
@@ -101,6 +118,6 @@ def main():
                 if raw: raw.write(ram)
             if 'capture' in segment:g.capture(a.output/(segment['capture']+'.png'))
     (a.output/'events.json').write_text(json.dumps(events,indent=2)+'\n')
-    (a.output/'metadata.json').write_text(json.dumps(dict(backend='Genesis Plus GX libretro',core=str(Path(a.core).resolve()),core_sha256=hashlib.sha256(Path(a.core).read_bytes()).hexdigest(),scenario_sha256=hashlib.sha256(Path(a.scenario).read_bytes()).hexdigest(),rom_sha256=hashlib.sha256(Path(a.rom).read_bytes()).hexdigest(),frames=g.frame,ram_first_frame=1,audio_sample_frames=g.sample_frames),indent=2)+'\n')
+    (a.output/'metadata.json').write_text(json.dumps(dict(backend='Genesis Plus GX libretro',core=str(Path(a.core).resolve()),core_sha256=hashlib.sha256(Path(a.core).read_bytes()).hexdigest(),scenario_sha256=hashlib.sha256(Path(a.scenario).read_bytes()).hexdigest(),rom_sha256=hashlib.sha256(Path(a.rom).read_bytes()).hexdigest(),frames=g.frame,ram_first_frame=1,audio_sample_frames=g.sample_frames,audio_sample_rate=g.sample_rate),indent=2)+'\n')
     g.close()
 if __name__=='__main__':main()

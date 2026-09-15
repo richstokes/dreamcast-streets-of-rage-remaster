@@ -65,3 +65,15 @@ version, artifact SHA-256, git commit and toolchain revision for each run.
 
 Use a CDI built without SOR_REPLAY for ordinary play. The embedded-ROM ELF is a
 Flycast development convenience; its retail loading path has not been tested.
+
+## Experimental original audio
+
+Default builds are still silent. See AUDIO.md for `SOR_AUDIO=1` builds; emulator
+measurements already show missed deadlines and starvation, so this is a diagnostic
+test, not a release acceptance check.
+
+- [ ] Record AICA available memory, queued frames, underruns and overruns from serial.
+- [ ] Compare original FM melody, PSG effects and sampled drums/voices against Genesis.
+- [ ] Check stereo channels, mute/pause, music changes and repeated stage loads.
+- [ ] Capture frame times with audio enabled and disabled using the same replay.
+- [ ] After CPU optimization, run for 30 minutes and check stream clock drift.

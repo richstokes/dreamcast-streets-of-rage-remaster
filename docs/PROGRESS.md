@@ -2,7 +2,24 @@
 
 ## 2026-09-15 — native checkpoint, not a completed game
 
-### Latest: phase-aware original-ROM comparisons
+### Latest: experimental original-audio path
+
+- Replaced discarded sound writes with deterministic YM2612/PSG synthesis and the
+  supplied ROM's Z80 drum/voice driver; added a bounded KOS AICA stereo stream.
+- Host replay produces 2,546,780 stereo frames without clipping; repeat PCM and
+  game RAM are identical. Four SH-4 PCM checkpoint hashes match the host.
+- All 1,481 phase-aligned action observations still match original-ROM gameplay.
+  Disabled mode preserves the earlier 2,159-snapshot regression trace.
+- Default-build Flycast regression: 1,200 gameplay flips / 1,200 VBlanks,
+  16.725 ms mean CPU-loop interval. Sanitized audio, replay, core and 160-scene
+  renderer tests pass. Manual ELF and CDI are rebuilt with audio disabled.
+- **Audio is opt-in (`SOR_AUDIO=1`), not release-ready.** It currently costs too
+  much CPU (~38–40 ms gameplay loops) and starves streaming. Ordinary builds keep
+  the silent 60 Hz checkpoint. Profiling identifies DAC interpretation, FM and
+  PSG synthesis as the next optimization targets. See AUDIO.md for reproduction,
+  licenses, buffers, measurements and remaining fidelity limitations.
+
+### Previous: phase-aware original-ROM comparisons
 
 - Added SRP2 bounded state gates shared by Dreamcast and host playback. Gates read
   WRAM and release pads; they never change simulation memory. SRP1 remains compatible.
@@ -107,7 +124,8 @@
 
 ### Known limitations
 
-- Original sound/AICA playback not integrated; target is deliberately silent.
+- Original sound/AICA prototype exists but is too slow and has stream underruns;
+  it remains disabled by default. Audio fidelity is not yet established.
 - Cold-boot timing and some object bytes differ. Phase-anchored movement, action
   and two-player observations now match; complete combat/campaign parity is open.
 - PC lockstep now completes but is nondeterministic; it is not a correctness oracle.
@@ -118,5 +136,5 @@
 ### Next concrete milestone
 
 Resolve the remaining startup/object-state differences, extend encounter tests
-to grabs/throws, damage/recovery and bosses, and integrate original audio. Enhanced art starts only after the first section
+to grabs/throws, damage/recovery and bosses, and bring original audio within the frame budget without stream underruns. Enhanced art starts only after the first section
 has verified behavior. The full eight rounds and endings remain required.
