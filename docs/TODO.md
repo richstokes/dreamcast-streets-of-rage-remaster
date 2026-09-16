@@ -12,7 +12,9 @@ Evidence and measurements live in PROGRESS.md and REFERENCE.md.
 - [ ] Explain remaining startup timers/flags and active-object tail differences.
 - [ ] Exercise grabs, throws, combos, recovery, invulnerability and enemy families.
 - [x] Build and profile an experimental original FM/PSG/DAC-to-AICA path.
-- [ ] Optimize audio to retain 60 Hz, remove stream starvation and validate audible fidelity.
+- [x] Reduce audio CPU overhead with bit-exact native hot paths and FM output specialization.
+- [ ] Replace remaining DAC driver cost; evaluate native decoding and AICA sample playback.
+- [ ] Finish FM/audio optimization to retain 60 Hz, remove starvation and validate audible fidelity.
 - [ ] Wire settings/records to VMU saves; test writes, corruption and missing cards.
 
 ## Complete original mode

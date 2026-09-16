@@ -5,6 +5,7 @@
 #define Z80_DISABLE_NESTCHECK
 #define Z80_NO_FUNCTIONAL
 #include "sor_z80.hpp"
+#include "z80_hot.hpp"
 #include <algorithm>
 #include <array>
 
@@ -14,18 +15,24 @@ struct NativeAudio::Impl:ymfm::ymfm_interface {
     std::unique_ptr<suzukiplan::Z80> cpu;
     const uint8_t *rom=nullptr;size_t romSize=0;
     uint32_t bank=0;bool reset=true,bus=false;
-    uint64_t samples=0,ztime=0,timer[2]{};
+    uint64_t samples=0,ztime=0,zTarget=0,ymClock=0,timer[2]{};
+    unsigned zFraction=0;
     uint32_t remainder=0;
     uint16_t tone[3]{1,1,1},counter[4]{1,1,1,16},noise=0x8000;
     uint8_t volume[4]{15,15,15,15},noiseControl=0,latch=0;
     bool polarity[4]{},noiseClock=false;
     uint8_t ymAddress[2]{};unsigned psgRemainder=0;
+    static constexpr int amplitude[]={2800,2224,1767,1403,1115,886,704,559,444,353,280,222,177,140,111,0};
+    int psgLevel=0;
+    void setPolarity(unsigned c,bool value){
+        if(polarity[c]!=value){polarity[c]=value;psgLevel+=(value?2:-2)*amplitude[volume[c]];}
+    }
     explicit Impl(NativeAudio &o):owner(o),fm(*this){fm.reset();resetCpu();}
-    void ymfm_set_timer(uint32_t n,int32_t clocks)override{timer[n]=clocks<0?0:samples*144+clocks;}
-    void clockTimers(){for(unsigned n=0;n<2;n++)if(timer[n]&&samples*144>=timer[n]){timer[n]=0;m_engine->engine_timer_expired(n);}}
+    void ymfm_set_timer(uint32_t n,int32_t clocks)override{timer[n]=clocks<0?0:ymClock+clocks;}
+    void clockTimers(){for(unsigned n=0;n<2;n++)if(timer[n]&&ymClock>=timer[n]){timer[n]=0;m_engine->engine_timer_expired(n);}}
     void resetCpu(){
         cpu=std::make_unique<suzukiplan::Z80>(read,write,in,out,this);
-        bank=0;ztime=samples*1008/15;
+        bank=0;ztime=zTarget;
     }
     static unsigned char in(void*,unsigned short){return 255;}
     static void out(void*,unsigned short,unsigned char){}
@@ -46,29 +53,31 @@ struct NativeAudio::Impl:ymfm::ymfm_interface {
     }
     void runZ80(uint64_t target){
         if(reset||bus){ztime=target;return;}
-        if(ztime<target)ztime+=cpu->execute(int(target-ztime));
+        if(ztime<target)ztime+=soundZ80Execute(*cpu,owner.ram,int(target-ztime));
     }
     void psgWrite(uint8_t v){
         if(v&128)latch=(v>>4)&7;
         unsigned ch=latch>>1;
-        if(latch&1)volume[ch]=v&15;
+        if(latch&1){
+            int sign=polarity[ch]?1:-1;
+            psgLevel-=sign*amplitude[volume[ch]];volume[ch]=v&15;
+            psgLevel+=sign*amplitude[volume[ch]];
+        }
         else if(ch==3){noiseControl=v&7;noise=0x8000;}
         else if(v&128)tone[ch]=(tone[ch]&0x3f0)|(v&15);
         else tone[ch]=(tone[ch]&15)|((v&63)<<4);
     }
     int psgSample(){
         // Integrate all PSG divider edges across one YM sample (1008 master clocks).
-        static constexpr int amplitude[]={2800,2224,1767,1403,1115,886,704,559,444,353,280,222,177,140,111,0};
         int sum=0;unsigned remaining=1008;
         while(remaining){
-            unsigned span=std::min(remaining,240-psgRemainder);int level=0;
-            for(int c=0;c<4;c++)level+=(polarity[c]?1:-1)*amplitude[volume[c]];
-            sum+=level*int(span);remaining-=span;psgRemainder+=span;
+            unsigned span=std::min(remaining,240-psgRemainder);
+            sum+=psgLevel*int(span);remaining-=span;psgRemainder+=span;
             if(psgRemainder==240){
                 psgRemainder=0;
                 bool tone2Rise=false;
                 for(int c=0;c<3;c++)if(!--counter[c]){
-                    counter[c]=std::max<unsigned>(1,tone[c]);polarity[c]=!polarity[c];
+                    counter[c]=std::max<unsigned>(1,tone[c]);setPolarity(c,!polarity[c]);
                     if(c==2)tone2Rise=polarity[c];
                 }
                 bool shiftNoise=tone2Rise;
@@ -78,7 +87,7 @@ struct NativeAudio::Impl:ymfm::ymfm_interface {
                 }
                 if(shiftNoise){
                     bool feedback=(noiseControl&4)?((noise^(noise>>3))&1):(noise&1);
-                    noise=(noise>>1)|(unsigned(feedback)<<15);polarity[3]=noise&1;
+                    noise=(noise>>1)|(unsigned(feedback)<<15);setPolarity(3,noise&1);
                 }
             }
         }
@@ -94,7 +103,7 @@ void NativeAudio::setBusRequest(bool b){
     impl->bus=b;
     // Native callers retry BUSREQ immediately; permit the DAC driver to finish
     // its short critical section rather than deadlocking on a frozen busy flag.
-    if(!b&&!impl->reset)for(int i=0;i<128&&(ram[0x1ffd]&128);i++)impl->ztime+=impl->cpu->execute(16);
+    if(!b&&!impl->reset)for(int i=0;i<128&&(ram[0x1ffd]&128);i++)impl->ztime+=soundZ80Execute(*impl->cpu,ram,16);
 }
 void NativeAudio::writeYM(unsigned p,uint8_t v){
     if(!impl)return;
@@ -111,7 +120,10 @@ unsigned NativeAudio::renderFrame(int16_t *out,uint64_t (*clock)()){
     impl->remainder+=896040;unsigned n=impl->remainder/1008;impl->remainder%=1008;
     for(unsigned i=0;i<n;i++){
         auto before=clock?clock():0;
-        impl->samples++;impl->runZ80(impl->samples*1008/15);impl->clockTimers();
+        // 1008 / 15 = 67 + 3/15 Z80 clocks per sample, without wide division.
+        impl->samples++;impl->zTarget+=67;impl->zFraction+=3;
+        if(impl->zFraction>=15){impl->zFraction-=15;impl->zTarget++;}
+        impl->ymClock+=144;impl->runZ80(impl->zTarget);impl->clockTimers();
         auto afterZ80=clock?clock():0;
         ymfm::ym2612::output_data fm;impl->fm.generate(&fm);
         auto afterFM=clock?clock():0;

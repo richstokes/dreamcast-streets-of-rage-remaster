@@ -223,7 +223,7 @@
     "default_elf_text_bytes": 2489944,
     "default_elf_data_bytes": 5848,
     "default_elf_bss_bytes": 1599192,
-    "notes": "Static stream buffers remain in BSS in disabled builds. Heap sample is not a high-water measurement; stacks and I/O peaks remain unmeasured. AICA free count includes KOS reservations."
+    "notes": "Correction after map inspection: the compiler removes static stream buffers from disabled builds. Heap sample is not a high-water measurement; stacks and I/O peaks remain unmeasured. AICA free count includes KOS reservations."
   },
   "flycast_default_audio_disabled": {
     "gameplay_windows": [

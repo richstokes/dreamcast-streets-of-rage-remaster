@@ -24,9 +24,14 @@ for n in ['VDPState','VDPPort','VDPRenderer','VDPTile']:
     copy(M/f'src/system/graphics/{n}.cpp',D/f'{n}.cpp')
 
 # Sound-only dependencies retain their upstream license headers.
-for f in (M/'include/MegaDriveEnvironment/system/sound/mame_ymfm').glob('*'):
-    if f.is_file():copy(f,D/f.name)
-for f in (M/'src/system/sound/mame_ymfm').glob('*.cpp'):copy(f,D/f.name)
+from audio_patches import patch as patch_audio
+for directory,pattern in [('include/MegaDriveEnvironment/system/sound/mame_ymfm','*'),
+                          ('src/system/sound/mame_ymfm','*.cpp')]:
+    for f in (M/directory).glob(pattern):
+        if not f.is_file():continue
+        text=patch_audio(f.name,f.read_text())
+        target=D/f.name
+        if not target.exists() or target.read_text()!=text:target.write_text(text)
 copy(M/'include/MegaDriveEnvironment/system/z80/suzukiplan/z80.hpp',D/'sor_z80.hpp')
 
 if '--dreamcast' in sys.argv:

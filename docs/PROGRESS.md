@@ -2,7 +2,21 @@
 
 ## 2026-09-15 — native checkpoint, not a completed game
 
-### Latest: experimental original-audio path
+### Latest: reduce audio CPU cost without changing PCM
+
+- Mean audio-enabled loop cost over the first 1,200 gameplay intervals falls from
+  39.220 to 29.218 ms (25.5%); p95 falls from 47.0 to 37.5 ms in Flycast.
+- Incremental clocks, cached PSG levels, native polling/delay instructions and
+  direct FM single-channel output retain all 2,546,780 host stereo frames and
+  2,866 RAM snapshots. Four SH-4 PCM hashes match too.
+- Sanitized instruction-boundary/state tests and 65,536 synthetic stereo FM
+  samples match the upstream implementations. No new audio buffers are needed.
+- Default-build regression again records 1,200 flips / 1,200 VBlanks.
+- Audio still starves and stays opt-in. Native DAC decoding / AICA sample playback
+  and further FM work are the next candidates; AUDIO_OPTIMIZATION.md records the
+  hardware split and the fidelity gates. No new ARM firmware or assembly is used.
+
+### Previous: experimental original-audio path
 
 - Replaced discarded sound writes with deterministic YM2612/PSG synthesis and the
   supplied ROM's Z80 drum/voice driver; added a bounded KOS AICA stereo stream.

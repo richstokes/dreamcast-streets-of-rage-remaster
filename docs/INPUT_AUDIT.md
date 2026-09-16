@@ -76,3 +76,7 @@ revision. They are staged during preparation with original headers intact. Binar
 and source distribution notices are in licenses/ymfm.txt and
 licenses/suzukiplan-z80.txt. No Genesis Plus GX code is linked into the target.
 The DAC program and sample bytes come only from the user's verified ROM.
+`tools/audio_patches.py` now applies a checked ymfm single-channel output
+specialization while retaining its copyright/license headers and chip arithmetic.
+The Z80 dependency remains unchanged; native hot instructions live separately
+in `src/audio/z80_hot.hpp` and are compared against its register/cycle behavior.

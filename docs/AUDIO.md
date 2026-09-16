@@ -43,8 +43,8 @@ SOR_AUDIO=1 SOR_REPLAY="$PWD/reference/scenarios/phase-aligned-actions.json" \
   is 64 KiB, callback buffer 16 KiB, and explicit sound-RAM stream is 32 KiB,
   separate from the AICA driver and KOS staging buffers. Allocation failures and
   invalid bank reads are reported. No desktop paths are used on the console.
-  Static PCM buffers remain reserved in BSS when audio is disabled, but the
-  synthesizer and AICA stream are not initialized. The default ELF has 2,489,944
+  The compiler removes static PCM buffers when audio is disabled, and the
+  synthesizer and AICA stream are not initialized. The optimized default ELF has 2,504,864
   text, 5,848 data and 1,599,192 BSS bytes. Audio-enabled sampled heap use is
   2,379,384 bytes; free VRAM is 3,136,104 bytes, and free AICA memory after stream
   initialization is 1,867,776 bytes. These are samples, not proven peak budgets.
@@ -85,7 +85,14 @@ to reproduce the earlier silent WRAM traces. `--audio-wav` explicitly enables it
   This establishes cross-platform synthesis at those checkpoints, not equality
   with the original console's complete waveform or with AICA output after streaming.
 
-## Performance failure and next work
+## Performance and next work
+
+The optimization pass in AUDIO_OPTIMIZATION.md lowers the first 1,200 gameplay
+intervals from 39.220 to 29.218 ms mean (25.5%). p95 falls from 47.0 to 37.5 ms.
+It preserves the full host PCM/RAM replay and four SH-4 PCM checkpoints. Audio
+still underruns and remains opt-in. The following figures describe the earlier
+prototype baseline; current counters are in
+`reference/results/audio-optimized-2026-09-15.json`.
 
 The current interpreter/synthesizer is too expensive for retail-budget 60 Hz.
 The measured Flycast audio-enabled checkpoint took about 38–40 ms per gameplay
