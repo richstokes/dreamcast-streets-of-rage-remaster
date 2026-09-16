@@ -1,5 +1,8 @@
 # Audio optimization and hardware split
 
+Current audio update: [native DAC decoding and AICA evaluation](NATIVE_DAC.md).
+The playback loop now has a validated native path; interpreter setup/fallback remains.
+
 ## Decision
 
 Keep the original sound sequencer on SH-4. Use AICA for sample playback, playback

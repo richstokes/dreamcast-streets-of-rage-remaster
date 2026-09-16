@@ -2,7 +2,20 @@
 
 ## 2026-09-15 — native checkpoint, not a completed game
 
-### Latest: reduce audio CPU cost without changing PCM
+### Latest: native drum/voice decoding and hardware playback evaluation
+
+- Native C++ DPCM playback reduces audio-enabled mean loop time from 29.218 to
+  23.393 ms (19.9%) over the first 1,200 gameplay intervals in Flycast.
+- An optional four-channel AICA stem backend measures 24.022 ms, so combined
+  streaming remains the experimental default. Audio still misses 60 Hz/underruns.
+- All reference PCM and gameplay snapshots remain identical; 33 driver cases and
+  a 1,000-frame reset/BUSREQ/stem integration test pass with sanitizers.
+- Silent-build regression retains 1,200 flips / 1,200 VBlanks (16.725 ms mean).
+- See NATIVE_DAC.md for measured memory, hardware decisions and reproduction.
+- Next: reduce FM synthesis cost with waveform equivalence checks; continue
+  combat-reference coverage. Retail audio fidelity and full-game coverage remain open.
+
+### Previous: reduce audio CPU cost without changing PCM
 
 - Mean audio-enabled loop cost over the first 1,200 gameplay intervals falls from
   39.220 to 29.218 ms (25.5%); p95 falls from 47.0 to 37.5 ms in Flycast.

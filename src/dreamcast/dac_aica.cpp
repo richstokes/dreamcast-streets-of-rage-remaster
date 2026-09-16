@@ -46,14 +46,14 @@ void start(){
     written=played=lastPosition=0;transfer(chipFrames);
     AICA_CMDSTR_CHANNEL(packet,command,channel);
     std::memset(packet,0,sizeof(packet));
-    snd_sh4_to_aica_stop();uint64_t mask=0;
+    snd_sh4_to_aica_stop();uint32_t mask=0;
     for(unsigned c=0;c<4;c++){
         command->cmd=AICA_CMD_CHAN;command->size=AICA_CMDSTR_CHANNEL_SIZE;command->cmd_id=channels[c];
         channel->cmd=AICA_CH_CMD_START|AICA_CH_START_DELAY;
         channel->base=memory[c];channel->type=AICA_SM_16BIT;channel->length=chipFrames;
         channel->loop=1;channel->loopstart=0;channel->loopend=chipFrames;channel->freq=rate;
         channel->vol=255;channel->pan=(c&1)?255:0;
-        snd_sh4_to_aica(packet,command->size);mask|=uint64_t(1)<<channels[c];
+        snd_sh4_to_aica(packet,command->size);mask|=uint32_t(1)<<channels[c];
     }
     // One hardware key-on mask starts all four voices on the same sample edge.
     command->cmd_id=mask;channel->cmd=AICA_CH_CMD_START|AICA_CH_START_SYNC;
@@ -66,7 +66,9 @@ void dac_aica_init(unsigned sampleRate){
     written=played=uploaded=transferTime=transferWorst=0;playing=false;
     for(unsigned c=0;c<4;c++){
         channels[c]=snd_sfx_chn_alloc();memory[c]=snd_mem_malloc(chipFrames*2);
-        if(channels[c]<0||!memory[c]){dac_aica_shutdown();throw std::runtime_error("DAC AICA channels/memory unavailable");}
+        // Stock KOS START_SYNC carries a 32-bit channel mask. Reject higher
+        // allocations instead of silently dropping voices from synchronized start.
+        if(channels[c]<0||channels[c]>=32||!memory[c]){dac_aica_shutdown();throw std::runtime_error("DAC AICA channels/memory unavailable");}
     }
     printf("AICA_DAC: four synchronized voices, 65536 sound-RAM bytes, available=%lu\n",(unsigned long)snd_mem_available());
 }

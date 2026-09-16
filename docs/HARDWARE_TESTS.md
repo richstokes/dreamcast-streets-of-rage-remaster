@@ -77,3 +77,13 @@ test, not a release acceptance check.
 - [ ] Check stereo channels, mute/pause, music changes and repeated stage loads.
 - [ ] Capture frame times with audio enabled and disabled using the same replay.
 - [ ] After CPU optimization, run for 30 minutes and check stream clock drift.
+
+## Native DAC / optional AICA stems
+
+See NATIVE_DAC.md for build flags and known performance limits.
+
+- [ ] Compare combined and four-channel output using the same replay; listen for
+      stereo phase, changed clipping, missing samples and drum/voice timing.
+- [ ] Record AICA_DAC underruns, resyncs, overruns and transfer mean/max timings.
+- [ ] Exercise pause, resets and repeated loads; check synchronized recovery after stalls.
+- [ ] Measure stack/heap peaks and sound RAM usage on unmodified retail hardware.

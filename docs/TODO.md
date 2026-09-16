@@ -13,7 +13,7 @@ Evidence and measurements live in PROGRESS.md and REFERENCE.md.
 - [ ] Exercise grabs, throws, combos, recovery, invulnerability and enemy families.
 - [x] Build and profile an experimental original FM/PSG/DAC-to-AICA path.
 - [x] Reduce audio CPU overhead with bit-exact native hot paths and FM output specialization.
-- [ ] Replace remaining DAC driver cost; evaluate native decoding and AICA sample playback.
+- [x] Replace DAC playback loop with native decoding; evaluate optional AICA stem playback.
 - [ ] Finish FM/audio optimization to retain 60 Hz, remove starvation and validate audible fidelity.
 - [ ] Wire settings/records to VMU saves; test writes, corruption and missing cards.
 

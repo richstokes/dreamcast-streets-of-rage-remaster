@@ -1,5 +1,8 @@
 # Original audio development checkpoint
 
+Current audio update: [native DAC decoding and AICA evaluation](NATIVE_DAC.md).
+The playback loop now has a validated native path; interpreter setup/fallback remains.
+
 **Experimental, disabled by default on Dreamcast.** The audio path is functional,
 including the original sound sequencer, FM, PSG, and the ROM's sampled drum/voice
 driver. It currently misses frame deadlines and starves the AICA stream. It is

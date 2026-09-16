@@ -1,0 +1,396 @@
+{
+  "date": "2026-09-15",
+  "baseline_commit": "5f186a8",
+  "implementation_commit": "8cb1eb9",
+  "scenario": "reference/scenarios/phase-aligned-actions.json",
+  "hardware_verified": false,
+  "configurations": {
+    "combined": {
+      "gameplay_windows": [
+        {
+          "n": 600,
+          "mean_us": 22134,
+          "p50_us_le": 22000,
+          "p95_us_le": 31000,
+          "p99_us_le": 33000,
+          "worst_us": 56302,
+          "vblanks": 794,
+          "flips": 601,
+          "vblanks_without_flip": 193
+        },
+        {
+          "n": 1200,
+          "mean_us": 23393,
+          "p50_us_le": 23000,
+          "p95_us_le": 31000,
+          "p99_us_le": 33500,
+          "worst_us": 66101,
+          "vblanks": 1679,
+          "flips": 1201,
+          "vblanks_without_flip": 478
+        }
+      ],
+      "renderer_blocks": [
+        {
+          "n": 600,
+          "sprite_bytes_mean": 9809,
+          "scene_mean_us": 1431,
+          "scene_max_us": 11284,
+          "wait_mean_us": 1036,
+          "wait_max_us": 3738,
+          "upload_mean_us": 875,
+          "upload_max_us": 24157,
+          "commands_mean_us": 146,
+          "commands_max_us": 2989,
+          "submit_mean_us": 246,
+          "submit_max_us": 652,
+          "ending_present_call": 600
+        },
+        {
+          "n": 600,
+          "sprite_bytes_mean": 20908,
+          "scene_mean_us": 1474,
+          "scene_max_us": 5044,
+          "wait_mean_us": 811,
+          "wait_max_us": 3755,
+          "upload_mean_us": 1327,
+          "upload_max_us": 12660,
+          "commands_mean_us": 17,
+          "commands_max_us": 2570,
+          "submit_mean_us": 392,
+          "submit_max_us": 556,
+          "ending_present_call": 1200
+        },
+        {
+          "n": 600,
+          "sprite_bytes_mean": 36203,
+          "scene_mean_us": 1710,
+          "scene_max_us": 4588,
+          "wait_mean_us": 13,
+          "wait_max_us": 1660,
+          "upload_mean_us": 1641,
+          "upload_max_us": 13939,
+          "commands_mean_us": 145,
+          "commands_max_us": 2605,
+          "submit_mean_us": 517,
+          "submit_max_us": 560,
+          "ending_present_call": 1800
+        },
+        {
+          "n": 600,
+          "sprite_bytes_mean": 21425,
+          "scene_mean_us": 2062,
+          "scene_max_us": 6868,
+          "wait_mean_us": 0,
+          "wait_max_us": 1,
+          "upload_mean_us": 1090,
+          "upload_max_us": 5793,
+          "commands_mean_us": 451,
+          "commands_max_us": 5134,
+          "submit_mean_us": 515,
+          "submit_max_us": 582,
+          "ending_present_call": 2400
+        }
+      ],
+      "notes": [
+        "Guest timings in Flycast; retail hardware unverified.",
+        "FRAME_STATS measures CPU-loop intervals, not individual page-flip durations.",
+        "VBlanks and flips are KOS presentation counters over the same gameplay window.",
+        "Renderer blocks include menus and are separate from gameplay windows.",
+        "Later gameplay windows can include idle time after replay completion.",
+        "Serial diagnostics are enabled; experimental audio is active."
+      ],
+      "pcm_checkpoints": [
+        [
+          "599",
+          "889",
+          "be87a0ed"
+        ],
+        [
+          "1199",
+          "889",
+          "d4cadb81"
+        ],
+        [
+          "1799",
+          "889",
+          "c83a1041"
+        ],
+        [
+          "2399",
+          "889",
+          "d8066ab0"
+        ]
+      ],
+      "audio_diagnostics": [
+        "DAC_NATIVE starts=0 samples=0",
+        "AUDIO_PARTS z80=1960 fm=7736 psg=2265",
+        "DAC_NATIVE starts=20 samples=30344",
+        "AUDIO_PARTS z80=1964 fm=8890 psg=2254",
+        "DAC_NATIVE starts=67 samples=134096",
+        "AUDIO_PARTS z80=3225 fm=11659 psg=2434",
+        "DAC_NATIVE starts=127 samples=270044",
+        "AUDIO_PARTS z80=1998 fm=14659 psg=2414",
+        "DAC_NATIVE starts=187 samples=405840",
+        "AUDIO_PARTS z80=3149 fm=14730 psg=2416",
+        "DAC_NATIVE starts=247 samples=542743",
+        "AUDIO_PARTS z80=3119 fm=14208 psg=2453",
+        "DAC_NATIVE starts=308 samples=677578"
+      ],
+      "local_log": "build/logs/native-dac-combined-final.log"
+    },
+    "aica_stems": {
+      "gameplay_windows": [
+        {
+          "n": 600,
+          "mean_us": 22740,
+          "p50_us_le": 22500,
+          "p95_us_le": 31000,
+          "p99_us_le": 33000,
+          "worst_us": 62084,
+          "vblanks": 816,
+          "flips": 601,
+          "vblanks_without_flip": 215
+        },
+        {
+          "n": 1200,
+          "mean_us": 24022,
+          "p50_us_le": 23500,
+          "p95_us_le": 31500,
+          "p99_us_le": 33500,
+          "worst_us": 71677,
+          "vblanks": 1724,
+          "flips": 1201,
+          "vblanks_without_flip": 523
+        }
+      ],
+      "renderer_blocks": [
+        {
+          "n": 600,
+          "sprite_bytes_mean": 9809,
+          "scene_mean_us": 1429,
+          "scene_max_us": 11275,
+          "wait_mean_us": 727,
+          "wait_max_us": 3087,
+          "upload_mean_us": 871,
+          "upload_max_us": 21609,
+          "commands_mean_us": 146,
+          "commands_max_us": 2993,
+          "submit_mean_us": 247,
+          "submit_max_us": 645,
+          "ending_present_call": 600
+        },
+        {
+          "n": 600,
+          "sprite_bytes_mean": 20908,
+          "scene_mean_us": 1491,
+          "scene_max_us": 5049,
+          "wait_mean_us": 587,
+          "wait_max_us": 3133,
+          "upload_mean_us": 1327,
+          "upload_max_us": 15160,
+          "commands_mean_us": 17,
+          "commands_max_us": 2567,
+          "submit_mean_us": 392,
+          "submit_max_us": 551,
+          "ending_present_call": 1200
+        },
+        {
+          "n": 600,
+          "sprite_bytes_mean": 36203,
+          "scene_mean_us": 1708,
+          "scene_max_us": 6868,
+          "wait_mean_us": 0,
+          "wait_max_us": 1,
+          "upload_mean_us": 1641,
+          "upload_max_us": 13940,
+          "commands_mean_us": 145,
+          "commands_max_us": 2605,
+          "submit_mean_us": 518,
+          "submit_max_us": 564,
+          "ending_present_call": 1800
+        },
+        {
+          "n": 600,
+          "sprite_bytes_mean": 21425,
+          "scene_mean_us": 2051,
+          "scene_max_us": 7216,
+          "wait_mean_us": 0,
+          "wait_max_us": 1,
+          "upload_mean_us": 1090,
+          "upload_max_us": 5766,
+          "commands_mean_us": 442,
+          "commands_max_us": 2762,
+          "submit_mean_us": 515,
+          "submit_max_us": 582,
+          "ending_present_call": 2400
+        }
+      ],
+      "notes": [
+        "Guest timings in Flycast; retail hardware unverified.",
+        "FRAME_STATS measures CPU-loop intervals, not individual page-flip durations.",
+        "VBlanks and flips are KOS presentation counters over the same gameplay window.",
+        "Renderer blocks include menus and are separate from gameplay windows.",
+        "Later gameplay windows can include idle time after replay completion.",
+        "Serial diagnostics are enabled; experimental audio is active."
+      ],
+      "pcm_checkpoints": [
+        [
+          "599",
+          "889",
+          "be87a0ed"
+        ],
+        [
+          "1199",
+          "889",
+          "d4cadb81"
+        ],
+        [
+          "1799",
+          "889",
+          "c83a1041"
+        ],
+        [
+          "2399",
+          "889",
+          "d8066ab0"
+        ]
+      ],
+      "audio_diagnostics": [
+        "AICA_DAC: four synchronized voices, 65536 sound-RAM bytes, available=1835008",
+        "AICA_DAC queued=1509 underruns=198 overruns=0 resyncs=0 uploaded=5364224 positions=6991/6992/6992/6993 transfer_mean_us=340 transfer_max_us=2348",
+        "DAC_NATIVE starts=0 samples=0",
+        "AUDIO_PARTS z80=1954 fm=7756 psg=2268",
+        "AICA_DAC queued=489 underruns=445 overruns=0 resyncs=0 uploaded=10757632 positions=1230/1231/1231/1232 transfer_mean_us=338 transfer_max_us=2348",
+        "DAC_NATIVE starts=20 samples=30344",
+        "AUDIO_PARTS z80=1943 fm=8910 psg=2261",
+        "AICA_DAC queued=0 underruns=996 overruns=0 resyncs=0 uploaded=16530048 positions=1873/1874/1874/1875 transfer_mean_us=344 transfer_max_us=2348",
+        "DAC_NATIVE starts=67 samples=134096",
+        "AUDIO_PARTS z80=3250 fm=11672 psg=2411",
+        "AICA_DAC queued=0 underruns=1614 overruns=0 resyncs=0 uploaded=22943616 positions=767/768/768/770 transfer_mean_us=355 transfer_max_us=2918",
+        "DAC_NATIVE starts=127 samples=270044",
+        "AUDIO_PARTS z80=1935 fm=14705 psg=2418"
+      ],
+      "local_log": "build/logs/native-dac-aica-measured.log"
+    },
+    "silent_regression": {
+      "gameplay_windows": [
+        {
+          "n": 600,
+          "mean_us": 16722,
+          "p50_us_le": 17000,
+          "p95_us_le": 23500,
+          "p99_us_le": 29000,
+          "worst_us": 30726,
+          "vblanks": 600,
+          "flips": 600,
+          "vblanks_without_flip": 0
+        },
+        {
+          "n": 1200,
+          "mean_us": 16725,
+          "p50_us_le": 17000,
+          "p95_us_le": 22500,
+          "p99_us_le": 25500,
+          "worst_us": 30770,
+          "vblanks": 1200,
+          "flips": 1200,
+          "vblanks_without_flip": 0
+        }
+      ],
+      "renderer_blocks": [
+        {
+          "n": 600,
+          "sprite_bytes_mean": 9809,
+          "scene_mean_us": 1429,
+          "scene_max_us": 11238,
+          "wait_mean_us": 11901,
+          "wait_max_us": 17490,
+          "upload_mean_us": 875,
+          "upload_max_us": 21609,
+          "commands_mean_us": 145,
+          "commands_max_us": 2989,
+          "submit_mean_us": 245,
+          "submit_max_us": 614,
+          "ending_present_call": 600
+        },
+        {
+          "n": 600,
+          "sprite_bytes_mean": 20908,
+          "scene_mean_us": 1481,
+          "scene_max_us": 7559,
+          "wait_mean_us": 11890,
+          "wait_max_us": 17486,
+          "upload_mean_us": 1322,
+          "upload_max_us": 12628,
+          "commands_mean_us": 17,
+          "commands_max_us": 2567,
+          "submit_mean_us": 400,
+          "submit_max_us": 3024,
+          "ending_present_call": 1200
+        },
+        {
+          "n": 600,
+          "sprite_bytes_mean": 36203,
+          "scene_mean_us": 1702,
+          "scene_max_us": 4588,
+          "wait_mean_us": 11360,
+          "wait_max_us": 16261,
+          "upload_mean_us": 1636,
+          "upload_max_us": 13905,
+          "commands_mean_us": 145,
+          "commands_max_us": 2565,
+          "submit_mean_us": 515,
+          "submit_max_us": 526,
+          "ending_present_call": 1800
+        },
+        {
+          "n": 600,
+          "sprite_bytes_mean": 21425,
+          "scene_mean_us": 2047,
+          "scene_max_us": 6809,
+          "wait_mean_us": 11213,
+          "wait_max_us": 16632,
+          "upload_mean_us": 1095,
+          "upload_max_us": 7987,
+          "commands_mean_us": 441,
+          "commands_max_us": 2749,
+          "submit_mean_us": 511,
+          "submit_max_us": 560,
+          "ending_present_call": 2400
+        }
+      ],
+      "notes": [
+        "Guest timings in Flycast; retail hardware unverified.",
+        "FRAME_STATS measures CPU-loop intervals, not individual page-flip durations.",
+        "VBlanks and flips are KOS presentation counters over the same gameplay window.",
+        "Renderer blocks include menus and are separate from gameplay windows.",
+        "Later gameplay windows can include idle time after replay completion.",
+        "Serial diagnostics are enabled; experimental audio is disabled."
+      ]
+    }
+  },
+  "validation": {
+    "driver_cases": 33,
+    "integration_frames": 1000,
+    "pcm_stereo_frames_identical": 2546780,
+    "ram_snapshots_identical": 2866,
+    "pcm_sha256": "159b3b17df95ed377fd2eedb2ff20df0c34cab1f61f5a7c2877f17c4b3d21a9d",
+    "passed": [
+      "ASan/UBSan DAC driver",
+      "ASan/UBSan DAC integration",
+      "Z80 hot and idle loops",
+      "audio core",
+      "ymfm output specialization",
+      "replay",
+      "core arithmetic and save codec"
+    ]
+  },
+  "limitations": [
+    "Audio underruns in both configurations; not 60 Hz.",
+    "PCM hashes compare native host and SH-4, not certified Genesis analog output.",
+    "Four-channel post-resampling hardware mix not captured.",
+    "Underrun units differ between backends.",
+    "Full game, original audio fidelity and retail performance remain unverified."
+  ]
+}

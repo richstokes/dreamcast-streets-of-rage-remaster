@@ -1,5 +1,8 @@
 # Input audit — 2026-09-15
 
+Current audio update: [native DAC decoding and AICA evaluation](NATIVE_DAC.md).
+The playback loop now has a validated native path; interpreter setup/fallback remains.
+
 Update: the user has now supplied the matching ROM. See [reference notes](REFERENCE.md)
 for the hash, entry-list repair and actual build results. Missing-ROM observations
 below describe the initial clean-clone audit, not a current blocker.
