@@ -88,28 +88,56 @@ struct NativeAudio::Impl:ymfm::ymfm_interface {
         else if(v&128)tone[ch]=(tone[ch]&0x3f0)|(v&15);
         else tone[ch]=(tone[ch]&15)|((v&63)<<4);
     }
+    static unsigned dividerAdvance(uint16_t &left,unsigned period,unsigned ticks){
+        if(ticks<left){left-=ticks;return 0;}
+        ticks-=left;
+        // A sample crosses at most five divider ticks. Most muted tones have
+        // period one; avoid SH-4 software division in that common case.
+        unsigned edges=1;
+        if(period==1){edges+=ticks;left=1;}
+        else {while(ticks>=period){ticks-=period;edges++;}left=period-ticks;}
+        return edges;
+    }
     int psgSample(){
-        // Integrate all PSG divider edges across one YM sample (1008 master clocks).
+        if((volume[0]&volume[1]&volume[2]&volume[3])==15){
+            unsigned ticks=(psgRemainder+1008)/240;psgRemainder=(psgRemainder+1008)%240;
+            unsigned tone2Edges=0;bool wasTone2=polarity[2];
+            for(unsigned c=0;c<3;c++){
+                unsigned edges=dividerAdvance(counter[c],std::max<unsigned>(1,tone[c]),ticks);
+                if(c==2)tone2Edges=edges;
+                polarity[c]^=bool(edges&1);
+            }
+            unsigned shifts;
+            if((noiseControl&3)==3)shifts=(tone2Edges+!wasTone2)/2;
+            else {
+                unsigned edges=dividerAdvance(counter[3],16u<<(noiseControl&3),ticks);
+                shifts=(edges+!noiseClock)/2;noiseClock^=bool(edges&1);
+            }
+            while(shifts--){bool feedback=(noiseControl&4)?((noise^(noise>>3))&1):(noise&1);noise=(noise>>1)|(unsigned(feedback)<<15);polarity[3]=noise&1;}
+            return 0;
+        }
+        // Jump between audible divider edges; all counters still advance in
+        // their original 240-master-clock domain, including muted oscillators.
         int sum=0;unsigned remaining=1008;
         while(remaining){
-            unsigned span=std::min(remaining,240-psgRemainder);
+            unsigned edge=std::min({unsigned(counter[0]),unsigned(counter[1]),unsigned(counter[2]),
+                                  (noiseControl&3)==3?65536u:unsigned(counter[3])});
+            unsigned span=std::min(remaining,edge*240-psgRemainder);
             sum+=psgLevel*int(span);remaining-=span;psgRemainder+=span;
-            if(psgRemainder==240){
-                psgRemainder=0;
-                bool tone2Rise=false;
-                for(int c=0;c<3;c++)if(!--counter[c]){
-                    counter[c]=std::max<unsigned>(1,tone[c]);setPolarity(c,!polarity[c]);
-                    if(c==2)tone2Rise=polarity[c];
-                }
-                bool shiftNoise=tone2Rise;
-                if((noiseControl&3)!=3){
-                    shiftNoise=false;
-                    if(!--counter[3]){counter[3]=16u<<(noiseControl&3);noiseClock=!noiseClock;shiftNoise=noiseClock;}
-                }
-                if(shiftNoise){
-                    bool feedback=(noiseControl&4)?((noise^(noise>>3))&1):(noise&1);
-                    noise=(noise>>1)|(unsigned(feedback)<<15);setPolarity(3,noise&1);
-                }
+            unsigned ticks=psgRemainder/240;psgRemainder%=240;
+            bool tone2Rise=false;
+            for(unsigned c=0;c<3;c++){
+                counter[c]-=ticks;
+                if(!counter[c]){counter[c]=std::max<unsigned>(1,tone[c]);setPolarity(c,!polarity[c]);if(c==2)tone2Rise=polarity[c];}
+            }
+            bool shiftNoise=tone2Rise;
+            if((noiseControl&3)!=3){
+                counter[3]-=ticks;shiftNoise=false;
+                if(!counter[3]){counter[3]=16u<<(noiseControl&3);noiseClock=!noiseClock;shiftNoise=noiseClock;}
+            }
+            if(shiftNoise){
+                bool feedback=(noiseControl&4)?((noise^(noise>>3))&1):(noise&1);
+                noise=(noise>>1)|(unsigned(feedback)<<15);setPolarity(3,noise&1);
             }
         }
         return sum/1008;
