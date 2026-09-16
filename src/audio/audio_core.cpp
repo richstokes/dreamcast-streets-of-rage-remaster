@@ -23,7 +23,8 @@ struct NativeAudio::Impl:ymfm::ymfm_interface {
     struct WriteEvent {uint16_t sample;uint8_t port,value;};
     std::array<WriteEvent,2048> events{};
     std::array<ymfm::ym2612::output_data,890> block{};
-    unsigned eventCount=0,eventSample=0;bool collecting=false;
+    unsigned eventCount=0,eventSample=0,eventSamples=0;bool collecting=false,burst=false,driving=false;
+    uint64_t instructionClock=0;std::array<uint64_t,890> sampleTargets{};
 
     uint32_t remainder=0;
     uint16_t tone[3]{1,1,1},counter[4]{1,1,1,16},noise=0x8000;
@@ -54,6 +55,10 @@ struct NativeAudio::Impl:ymfm::ymfm_interface {
     }
     static void write(void *p,unsigned short a,unsigned char v){
         auto &s=*static_cast<Impl*>(p);
+        if(s.burst && a>=0x4000 && a<0x6000){
+            uint64_t now=s.instructionClock+(s.driving?s.dac.eventOffset:0);
+            while(s.eventSample+1<s.eventSamples && s.sampleTargets[s.eventSample]<=now)s.eventSample++;
+        }
         if(a<0x4000){s.owner.ram[a&8191]=v;return;}
         if(a<0x6000){s.owner.writeYM(a&3,v);return;}
         if((a&0xff00)==0x6000){s.bank=((s.bank>>1)|((v&1)<<8))&511;return;}
@@ -64,8 +69,9 @@ struct NativeAudio::Impl:ymfm::ymfm_interface {
         if(!owner.nativeDac || !driverKnown)return soundZ80Execute(*cpu,owner.ram,clocks);
         int elapsed=0;
         while(elapsed<clocks){
+            instructionClock=ztime+elapsed;
             if(dac.active()){
-                elapsed+=dac.advance(clocks-elapsed);
+                driving=true;elapsed+=dac.advance(clocks-elapsed);driving=false;
                 if(!dac.active())cpu->reg.PC=0x2f;
             }else if(cpu->reg.PC==0xd9){
                 auto &r=cpu->reg;
@@ -175,8 +181,9 @@ void NativeAudio::writeYM(unsigned p,uint8_t v){
 uint8_t NativeAudio::readYM(unsigned p){return impl?impl->fm.read(p):0;}
 void NativeAudio::writePSG(uint8_t v){if(impl){psgWrites++;impl->psgWrite(v);}}
 unsigned NativeAudio::renderFrame(int16_t *out,uint64_t (*clock)(),int16_t *dacStereo){
-    std::fill_n(profile,3,0);
+    std::fill_n(profile,5,0);
     if(!impl)return 0;
+    impl->fm.profile_clock=clock;impl->fm.profile_clocking=impl->fm.profile_output=0;
     impl->remainder+=896040;unsigned n=impl->remainder/1008;impl->remainder%=1008;
     // The hash-verified SoR DAC program writes the YM bus and reads RAM/ROM;
     // its busy-bit polls see the same always-ready interface in both paths,
@@ -188,22 +195,17 @@ unsigned NativeAudio::renderFrame(int16_t *out,uint64_t (*clock)(),int16_t *dacS
         batchFrames++;
         auto begin=clock?clock():0;
         impl->eventCount=0;impl->collecting=true;
+        impl->eventSample=0;impl->eventSamples=n;
         for(unsigned i=0;i<n;i++){
-            unsigned pc=impl->cpu->reg.PC;
-            if(!impl->dac.active() && ram[0x1fff]<0x81 && (pc==0x32 || pc==0x33 || pc==0x35)){
-                // No writer can change the command mailbox during this frame.
-                // Advance the remaining idle polls once; final CPU state and
-                // deadline overshoot are identical, with no intervening bus event.
-                unsigned left=n-i,fraction=impl->zFraction+left*3;
-                impl->samples+=left;impl->zTarget+=left*67+fraction/15;impl->zFraction=fraction%15;
-                impl->runZ80(impl->zTarget);
-                for(unsigned t=0;t<left;t++){impl->ymClock+=144;impl->clockTimers();}
-                break;
-            }
-            impl->eventSample=i;impl->samples++;impl->zTarget+=67;impl->zFraction+=3;
+            impl->samples++;impl->zTarget+=67;impl->zFraction+=3;
             if(impl->zFraction>=15){impl->zFraction-=15;impl->zTarget++;}
-            impl->runZ80(impl->zTarget);impl->ymClock+=144;impl->clockTimers();
+            impl->sampleTargets[i]=impl->zTarget;
         }
+        // The locked driver only polls YM busy (always ready in this model).
+        // No gameplay thread writes the mailbox during synthesis. Retain each
+        // write's original sample boundary using its instruction start clock.
+        impl->burst=true;impl->runZ80(impl->zTarget);impl->burst=false;
+        for(unsigned i=0;i<n;i++){impl->ymClock+=144;impl->clockTimers();}
         impl->collecting=false;
         auto generated=clock?clock():0;
         unsigned at=0,event=0;
@@ -235,7 +237,7 @@ unsigned NativeAudio::renderFrame(int16_t *out,uint64_t (*clock)(),int16_t *dacS
                 out[i*2+c]=combined-component;if(dacStereo)dacStereo[i*2+c]=component;
             }
         }
-        if(clock){profile[0]=generated-begin;profile[1]=mixed-generated;profile[2]=clock()-mixed;}
+        if(clock){profile[0]=generated-begin;profile[1]=mixed-generated;profile[2]=clock()-mixed;fmWorkload=impl->fm.workload();profile[3]=impl->fm.profile_clocking;profile[4]=impl->fm.profile_output;}
         return n;
     }
     interleavedFrames++;

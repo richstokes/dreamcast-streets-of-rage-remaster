@@ -15,7 +15,8 @@ public:
     void writeYM(unsigned port,uint8_t value);uint8_t readYM(unsigned port);
     void writePSG(uint8_t value);
     unsigned renderFrame(int16_t *stereo,uint64_t (*clock)()=nullptr,int16_t *dacStereo=nullptr);
-    uint64_t profile[3]{}; // At most 890 stereo frames.
+    uint32_t fmWorkload=0;
+    uint64_t profile[5]{}; // At most 890 stereo frames.
     uint64_t nativeDacSamples=0,nativeDacStarts=0;
     uint64_t batchFrames=0,interleavedFrames=0;
     uint64_t ymWrites=0,psgWrites=0,dacWrites=0,z80Faults=0;

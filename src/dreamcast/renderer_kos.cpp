@@ -5,6 +5,7 @@
 #include <memory>
 #include <stdexcept>
 #include "vdp_scene.hpp"
+#include "pvr_tiles.hpp"
 namespace {
 std::unique_ptr<sor::VdpScene> scene;
 pvr_ptr_t tiles=nullptr,spriteTexture[2]{};
@@ -20,9 +21,9 @@ Packet packets[maxTileQuads+2];
 size_t packetCount=0;
 bool packetsValid=false;
 int uploadedTop[2]{256,256},uploadedBottom[2]{};
-void header(pvr_poly_hdr_t &h,pvr_ptr_t texture,int w,int hgt,bool linear){
+void header(pvr_poly_hdr_t &h,pvr_ptr_t texture,int w,int hgt,bool linear,int palette=-1){
     pvr_poly_cxt_t c;
-    pvr_poly_cxt_txr(&c,PVR_LIST_PT_POLY,PVR_TXRFMT_ARGB1555|(linear?PVR_TXRFMT_NONTWIDDLED:0),w,hgt,texture,PVR_FILTER_NONE);
+    pvr_poly_cxt_txr(&c,PVR_LIST_PT_POLY,palette<0 ? (PVR_TXRFMT_ARGB1555|(linear?PVR_TXRFMT_NONTWIDDLED:0)) : (PVR_TXRFMT_PAL4BPP|PVR_TXRFMT_4BPP_PAL(palette)),w,hgt,texture,PVR_FILTER_NONE);
     c.gen.culling=PVR_CULLING_NONE;
     c.depth.comparison=PVR_DEPTHCMP_GEQUAL;
     pvr_poly_compile(&h,&c);
@@ -36,12 +37,13 @@ void quad(Packet &packet,const pvr_poly_hdr_t &h,float x,float y,float w,float h
 }
 void dc_renderer_init(){
     scene=std::make_unique<sor::VdpScene>();
-    tiles=pvr_mem_malloc(8192*128);
+    tiles=pvr_mem_malloc(2048*32);
+    pvr_set_pal_format(PVR_PAL_ARGB1555);
     for(int p=0;p<2;p++)spriteTexture[p]=pvr_mem_malloc(512*256*2);
     if(!tiles||!spriteTexture[0]||!spriteTexture[1])throw std::runtime_error("PowerVR texture budget exhausted");
-    for(int i=0;i<8192;i++)header(tileHeaders[i],static_cast<uint8_t*>(tiles)+i*128,8,8,false);
+    for(int i=0;i<8192;i++)header(tileHeaders[i],static_cast<uint8_t*>(tiles)+(i%2048)*32,8,8,false,i/2048);
     for(int p=0;p<2;p++)header(spriteHeaders[p],spriteTexture[p],512,256,true);
-    sor_log("PowerVR tile cache: 1048576 bytes; sprite layers: 524288 bytes\n");
+    sor_log("PowerVR indexed tile cache: 65536 bytes; sprite layers: 524288 bytes\n");
 }
 void dc_renderer_shutdown(){
     if(tiles)pvr_mem_free(tiles);
@@ -57,8 +59,8 @@ bool dc_render_vdp(VDPState &state,VDPRenderer &renderer){
     const auto ready=timer_us_gettime64();
     bool opacityChanged=false;
     if(!same || !frames){
-        for(int p=0;p<4;p++)if(std::memcmp(previousColors+p*16,scene->colors+p*16,32)){
-            for(auto &v:valid)v&=~(1<<p);
+        for(int p=0;p<4;p++)if(!frames || std::memcmp(previousColors+p*16,scene->colors+p*16,32)){
+            for(int c=0;c<16;c++)pvr_set_pal_entry(p*16+c,c?scene->colors[p*16+c]:0);
             std::memcpy(previousColors+p*16,scene->colors+p*16,32);
         }
         for(int t=0;t<2048;t++)if(std::memcmp(previousTiles+t*32,state.vram_+t*32,32)){
@@ -68,13 +70,13 @@ bool dc_render_vdp(VDPState &state,VDPRenderer &renderer){
             opacityChanged|=planeTiles[t] && wasOpaque!=opaque[t];
         }
     }
-    alignas(32) uint16_t decoded[64];
+    alignas(32) uint16_t decoded[16];
     if(!same || !frames)for(size_t i=0;i<scene->count;i++){
-        const auto &q=scene->quads[i];int t=q.tile,p=q.palette;
-        if(!opaque[t] || (valid[t]&(1<<p)))continue;
-        for(int j=0;j<64;j++){unsigned b=state.vram_[t*32+j/2],c=(j&1)?b&15:b>>4;decoded[j]=c?scene->colors[p*16+c]:0;}
-        pvr_txr_load_ex(decoded,static_cast<uint8_t*>(tiles)+(p*2048+t)*128,8,8,PVR_TXRLOAD_16BPP);
-        valid[t]|=1<<p;
+        const auto &q=scene->quads[i];int t=q.tile;
+        if(!opaque[t] || valid[t])continue;
+        sor::pack_pvr_tile4(state.vram_+t*32,decoded);
+        pvr_txr_load(decoded,static_cast<uint8_t*>(tiles)+t*32,32);
+        valid[t]=1;
     }
     unsigned spriteBytes=0;
     if(!same || !frames)for(int p=0;p<2;p++){

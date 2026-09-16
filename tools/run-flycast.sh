@@ -14,12 +14,15 @@ if [ "$(uname -s)" = Darwin ]; then
         exit 1
     fi
     # Replace only this binary running this exact image, not unrelated emulator sessions.
-    python3 - "$flycast" "$image" "$root/dist" <<'PY'
+    python3 - "$flycast" "$image" "$root" <<'PY'
 import os,signal,subprocess,sys,time
 from pathlib import Path
-binary,image,dist=sys.argv[1:]
-images={image}
-if Path(image).parent==Path(dist):images.update(str(Path(dist)/name) for name in ('sor.cdi','sor-test.elf'))
+binary,image,root=sys.argv[1:]
+root=Path(root)
+images={image,str(root/'build/benchmark-running.cdi')}
+images.update(str(root/'dist'/name) for name in ('sor.cdi','sor-test.elf'))
+snapshot=root/'build/flycast-run'
+images.update(str(p) for p in snapshot.glob('*') if p.suffix in ('.cdi','.elf'))
 pids=[]
 for line in subprocess.check_output(['ps','-axo','pid=,command='],text=True).splitlines():
     fields=line.strip().split(None,1)
@@ -33,6 +36,18 @@ if pids:
         try: os.kill(pid,signal.SIGKILL)
         except ProcessLookupError: pass
 PY
+    # Flycast reads CD sectors on demand. Keep its image immutable while the
+    # next build rewrites dist/sor.cdi, and record the launched image's hash.
+    image=$(python3 - "$image" "$root" <<'PY'
+import hashlib,json,shutil,sys
+from pathlib import Path
+source=Path(sys.argv[1]);root=Path(sys.argv[2]);target=root/'build/flycast-run'/source.name
+target.parent.mkdir(parents=True,exist_ok=True)
+if source!=target:shutil.copyfile(source,target)
+(root/'build/logs/flycast-run.json').write_text(json.dumps({'source':str(source),'image':str(target),'sha256':hashlib.sha256(target.read_bytes()).hexdigest()},indent=2)+'\n')
+print(target)
+PY
+    )
     : > "$root/build/logs/flycast.log"
     : > "$root/build/logs/flycast-errors.log"
     exec /usr/bin/open -g -j -n -a "$app" \

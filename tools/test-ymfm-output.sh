@@ -17,4 +17,4 @@ for variant in pinned staged; do
  "$root/build/tests/ymfm-$variant" > "$root/build/tests/ymfm-$variant.pcm32"
 done
 cmp "$root/build/tests/ymfm-pinned.pcm32" "$root/build/tests/ymfm-staged.pcm32"
-echo 'ymfm: 65536 synthetic stereo samples match pinned output across register changes'
+echo 'ymfm: 98304 stereo samples match pinned output across register changes, quiet intervals and state restoration'

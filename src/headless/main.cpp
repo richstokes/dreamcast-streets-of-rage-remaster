@@ -85,4 +85,4 @@ bool platform_audio_native_dac(){const char *p=std::getenv("SOR_DAC_NATIVE");ret
 
 bool platform_audio_split_dac(){const char *p=std::getenv("SOR_DAC_AICA");return p && std::string(p)=="1";}
 
-bool platform_audio_profile(){return false;}
+bool platform_audio_profile(){const char *p=std::getenv("SOR_AUDIO_PROFILE");return p && p[0]=='1';}

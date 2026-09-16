@@ -21,7 +21,7 @@ int main(int argc,char **argv){
  assert(argc==3);std::ifstream f(argv[1],std::ios::binary);std::vector<uint8_t> rom((std::istreambuf_iterator<char>(f)),{});
  std::array<uint8_t,8192> initial;std::ifstream(argv[2],std::ios::binary).read((char*)initial.data(),initial.size());
  assert(NativeDacDriver::recognizes(initial.data()));unsigned checked=0;
- for(unsigned command=0x81;command<=0x91;command++)for(unsigned stop:{0u,5000u,1u}){
+ for(unsigned quantum:{67u,59733u})for(unsigned command=0x81;command<=0x91;command++)for(unsigned stop:{0u,5000u,1u}){
   if(stop==1 && command!=0x81)continue;
   Bus ref;ref.ram=initial;ref.rom=&rom;suzukiplan::Z80 cpu(Bus::read,Bus::write,Bus::in,Bus::out,&ref);
   for(int i=0;cpu.reg.PC!=0x32;i++){assert(i<10000);cpu.execute(1);}
@@ -36,7 +36,7 @@ int main(int argc,char **argv){
   auto &r=cpu.reg;native.start((r.pair.D<<8)|r.pair.E,(r.pair.B<<8)|r.pair.C,r.IY,r.back.C,r.SP);
   uint64_t rt=0,nt=0,target=0;bool ended=false,interrupted=false;
   while(native.active()||!ended){
-   target+=67+(target%5==0);
+   target+=quantum+(target%5==0);
    if(stop>1 && target>=stop&&!interrupted){ref.ram[0x1fff]=fast.ram[0x1fff]=0x81;interrupted=true;}
    while(rt<target&&!ended){rt+=cpu.execute(1);ended=cpu.reg.PC==0x2f;}
    if(nt<target&&native.active())nt+=native.advance(int(target-nt));
@@ -49,5 +49,5 @@ int main(int argc,char **argv){
   }
   checked++;std::printf("DAC %02x stop=%u samples=%zu clocks=%llu match\n",command,stop,ref.pcm.size(),(unsigned long long)rt);
  }
- assert(checked==33);
+ assert(checked==66);
 }

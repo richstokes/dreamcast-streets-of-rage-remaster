@@ -10,45 +10,80 @@ void NativeDacDriver::start(uint16_t data,uint16_t bytes,uint16_t descriptor,uin
     pointer_=data;remaining_=bytes;descriptor_=descriptor;accumulator_=accumulator;stack_=stack;
     active_=true;phase(High);
 }
-int NativeDacDriver::advance(int clocks){
-    static constexpr Step high[]={{7,ReadHigh},{7,None},{4,None},{10,Choose}};
-    static constexpr Step low[]={{7,None},{4,None},{10,Choose}};
-    static constexpr Step highNormal[]={
+const NativeDacDriver::Step NativeDacDriver::highProgram_[]={{7,ReadHigh},{7,None},{4,None},{10,Choose}};
+const NativeDacDriver::Step NativeDacDriver::lowProgram_[]={{7,None},{4,None},{10,Choose}};
+const NativeDacDriver::Step NativeDacDriver::highNormalProgram_[]={
         {4,None},{4,None},{4,None},{4,None},{7,None},{4,None},{4,None},
         {7,Delta},{13,StoreDelta},{4,Accumulate},{4,None},{7,None},{13,BusyOn},{19,LoadDelay},
         {12,None},{7,None},{10,Address},{6,None},{7,Data},{6,None},{0,Delay},{4,None},{13,BusyOff},
         {4,None},{7,ReadLow}};
-    static constexpr Step lowNormal[]={
+const NativeDacDriver::Step NativeDacDriver::lowNormalProgram_[]={
         {4,None},{4,None},{4,None},{4,None},{7,None},{4,None},{4,None},
         {7,Delta},{13,StoreDelta},{4,Accumulate},{4,None},{7,None},{13,BusyOn},{19,LoadDelay},
         {12,None},{7,None},{10,Address},{6,None},{4,None},{7,Data},{6,None},{0,Delay},{13,BusyOff}};
-    static constexpr Step zeroSetup[]={{13,RepeatCount},{4,None}};
-    static constexpr Step zeroLoop[]={
+const NativeDacDriver::Step NativeDacDriver::zeroSetupProgram_[]={{13,RepeatCount},{4,None}};
+const NativeDacDriver::Step NativeDacDriver::zeroLoopProgram_[]={
         {4,None},{4,None},{4,None},{4,None},{4,None},{4,None},{4,None},{17,Call},
         {13,Delta},{4,Accumulate},{4,None},{7,None},{13,BusyOn},{19,LoadDelay},
         {12,None},{7,None},{10,Address},{6,None},{4,None},{7,Data},{6,None},{0,Delay},
         {13,BusyOff},{10,None},{4,None},{4,RepeatDec},{10,RepeatDone},
         {4,None},{4,None},{4,None},{4,None},{10,RepeatAgain}};
-    static constexpr Step highTail[]={{4,None},{7,ReadLow}};
-    static constexpr Step finishByte[]={{4,None},{12,Command},{10,Interrupt},{6,NextByte},{6,CountByte},{4,None},{4,None},{10,More}};
-    static constexpr Step end[]={{10,None},{10,None},{4,None},{7,ClearVoice},{10,Done}};
+const NativeDacDriver::Step NativeDacDriver::highTailProgram_[]={{4,None},{7,ReadLow}};
+const NativeDacDriver::Step NativeDacDriver::finishByteProgram_[]={{4,None},{12,Command},{10,Interrupt},{6,NextByte},{6,CountByte},{4,None},{4,None},{10,More}};
+const NativeDacDriver::Step NativeDacDriver::endProgram_[]={{10,None},{10,None},{4,None},{7,ClearVoice},{10,Done}};
+NativeDacDriver::Program NativeDacDriver::makeProgram(const Step *steps,unsigned size){
+    Program p{steps,size,0,0,0};
+    for(unsigned i=0;i<size;i++){
+        if(steps[i].action==Address)p.addressAt=p.fixedClocks;
+        if(steps[i].action==Data)p.dataAt=p.fixedClocks;
+        p.fixedClocks+=steps[i].clocks;
+    }
+    return p;
+}
+const NativeDacDriver::Program NativeDacDriver::programs_[9]={
+    makeProgram(highProgram_,sizeof(highProgram_)/sizeof(highProgram_[0])),
+    makeProgram(highNormalProgram_,sizeof(highNormalProgram_)/sizeof(highNormalProgram_[0])),
+    makeProgram(lowProgram_,sizeof(lowProgram_)/sizeof(lowProgram_[0])),
+    makeProgram(lowNormalProgram_,sizeof(lowNormalProgram_)/sizeof(lowNormalProgram_[0])),
+    makeProgram(zeroSetupProgram_,sizeof(zeroSetupProgram_)/sizeof(zeroSetupProgram_[0])),
+    makeProgram(zeroLoopProgram_,sizeof(zeroLoopProgram_)/sizeof(zeroLoopProgram_[0])),
+    makeProgram(highTailProgram_,sizeof(highTailProgram_)/sizeof(highTailProgram_[0])),
+    makeProgram(finishByteProgram_,sizeof(finishByteProgram_)/sizeof(finishByteProgram_[0])),
+    makeProgram(endProgram_,sizeof(endProgram_)/sizeof(endProgram_[0])),
+};
+
+int NativeDacDriver::advance(int clocks){
     int elapsed=0;
     while(active_ && elapsed<clocks){
-        const Step *steps=nullptr;unsigned size=0;
-        switch(phase_){
-#define SELECT(p,a) case p:steps=a;size=sizeof(a)/sizeof(a[0]);break
-            SELECT(High,high);SELECT(Low,low);SELECT(HighNormal,highNormal);SELECT(LowNormal,lowNormal);
-            SELECT(ZeroSetup,zeroSetup);SELECT(ZeroLoop,zeroLoop);SELECT(HighTail,highTail);SELECT(FinishByte,finishByte);SELECT(End,end);
-#undef SELECT
+        // Complete an uninterrupted normal nibble directly. At short deadlines
+        // the instruction-boundary path below retains every intermediate state.
+        const unsigned delayAddress=uint16_t(descriptor_+4);
+        const bool stableDelay=delayAddress>=0x8000 ||
+            (delayAddress<0x4000 && (delayAddress&8191)!=0x2e && (delayAddress&8191)!=0x1ffd);
+        if(!step_ && (phase_==HighNormal || phase_==LowNormal) && stableDelay && clocks-elapsed>=256){
+            unsigned delay=read_(context_,delayAddress);
+            const auto &program=programs_[phase_];
+            unsigned duration=program.fixedClocks+13*(delay?delay:256)-5;
+            if(unsigned(clocks-elapsed)>=duration){
+                delta_=ram_[0x1e + nibble_];ram_[0x2e]=delta_;accumulator_+=delta_;
+                ram_[0x1ffd]=0x80;delay_=delay;
+                eventOffset=elapsed+program.addressAt;write_(context_,0x4000,0x2a);
+                eventOffset=elapsed+program.dataAt;write_(context_,0x4001,accumulator_);samples++;
+                delay_=0;ram_[0x1ffd]=0;
+                if(phase_==HighNormal){low_=true;nibble_=read_(context_,pointer_)&15;phase(Low);}
+                else phase(FinishByte);
+                elapsed+=duration;continue;
+            }
         }
-        auto oldPhase=phase_;Step s=steps[step_++];int cost=s.clocks;
+        eventOffset=elapsed;
+        auto oldPhase=phase_;Step s=steps_[step_++];int cost=s.clocks;
         // Group arithmetic-only timing steps while retaining the exact final
         // instruction boundary. No device/RAM event may be crossed here.
         if(s.action==None){
             elapsed+=cost;
-            while(elapsed<clocks && step_<size && steps[step_].action==None)
-                elapsed+=steps[step_++].clocks;
-            if(step_==size && phase_==ZeroSetup)phase(ZeroLoop);
+            while(elapsed<clocks && step_<size_ && steps_[step_].action==None)
+                elapsed+=steps_[step_++].clocks;
+            if(step_==size_ && phase_==ZeroSetup)phase(ZeroLoop);
             continue;
         }
         switch(s.action){
@@ -85,7 +120,7 @@ int NativeDacDriver::advance(int clocks){
         case Done:active_=false;break;
         }
         elapsed+=cost;
-        if(phase_==oldPhase && step_==size){
+        if(phase_==oldPhase && step_==size_){
             if(phase_==ZeroSetup)phase(ZeroLoop);
             else if(phase_==LowNormal)phase(FinishByte);
         }

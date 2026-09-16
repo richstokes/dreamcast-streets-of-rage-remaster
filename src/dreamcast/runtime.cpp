@@ -101,7 +101,7 @@ void MegaDriveEnvironment::waitForInterrupt(){
         sor_log("AUDIO_PCM frame=%lu frames=%u fnv=%08lx\n",(unsigned long)frames_,count,(unsigned long)digest);
     }
     if(audio_.enabled&&frames_%600==599)sor_log("DAC_NATIVE starts=%llu samples=%llu batch_frames=%llu interleaved_frames=%llu\n",audio_.nativeDacStarts,audio_.nativeDacSamples,audio_.batchFrames,audio_.interleavedFrames);
-    if(audio_.enabled&&platform_audio_profile()&&frames_%600==599)sor_log("AUDIO_PARTS z80=%llu fm=%llu psg=%llu\n",audio_.profile[0],audio_.profile[1],audio_.profile[2]);
+    if(audio_.enabled&&platform_audio_profile()&&frames_%600==599)sor_log("AUDIO_PARTS z80=%llu fm=%llu psg=%llu dynamic_ops=%lu ssg_ops=%lu live_ops=%lu fm_clock_us=%llu fm_output_us=%llu audible_ops=%lu\n",audio_.profile[0],audio_.profile[1],audio_.profile[2],(unsigned long)(audio_.fmWorkload&255),(unsigned long)((audio_.fmWorkload>>8)&255),(unsigned long)((audio_.fmWorkload>>16)&255),audio_.profile[3],audio_.profile[4],(unsigned long)(audio_.fmWorkload>>24));
     present(); pads_.poll(mem_.state.ram); frames_++; cycles_+=896040; irq_=6;
 }
 void MegaDriveEnvironment::pace(){
