@@ -62,3 +62,28 @@ Reproduce with `tools/test-psg-events.sh`, `tools/test-dac-integration.sh`,
 
 Next: measure native memory traffic savings and use the synthesis phase timings
 to choose the next change. Audio is still opt-in while deadlines and underruns fail.
+
+## Native indexed plane textures
+
+PowerVR now consumes 4-bit indexed plane tiles. Four palette selectors share the
+same 64 KiB tile storage; CRAM changes update 64 palette entries instead of
+re-expanding every referenced tile. Sprite priority layers remain separate.
+This follows the pinned KOS palette API and its Morton texture layout; see
+https://kos-docs.dreamcast.wiki/group__pvr__pal__mgmt.html .
+
+- Plane VRAM: 1,048,576 → 65,536 bytes (960 KiB saved).
+- Same action replay with the then-current audio: first 600 gameplay intervals
+  displayed 600 flips / 600 VBlanks. The complete 1,653-interval run still missed
+  refreshes: 1,721 VBlanks / 1,653 flips, mean 17.420 ms, 164 stream underruns.
+- First gameplay renderer block's maximum upload time: 13.935 → 4.338 ms;
+  free VRAM increased from 3,136,104 to 4,119,144 bytes.
+- `tools/test-pvr-tiles.sh`: 524,288 decoded palette indices match the original
+  pixels, including transparent index zero (ASan/UBSan).
+- Background Flycast capture inspected at `build/palette-flycast.png`: stage,
+  HUD and character appear correctly. A full pixel comparison of GPU captures
+  remains outstanding; the CPU scene oracle is still the rendering regression.
+
+Benchmarks now run from an immutable copy in `build/flycast-run/`. Rebuilding a
+CDI that Flycast is reading can mix sectors from two builds; one failed replay
+was discarded for this reason. The launcher records the image SHA-256 in
+`build/logs/flycast-run.json`. It still uses background launch flags.
