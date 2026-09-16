@@ -24,6 +24,38 @@ a generic Genesis/68000 emulator. It temporarily retains VDP device semantics an
 a PowerVR tile renderer with a software comparison/fallback path. Sprite evaluation uses a single SAT traversal
 with per-line limits on the CPU; PowerVR composites the layers.
 
+## Required ROM
+
+Supply your own **Streets of Rage / Bare Knuckle (World/JUE), revision 00** ROM.
+The build requires this exact dump:
+
+| Property | Required value |
+| --- | --- |
+| Format | Raw big-endian Mega Drive ROM; no copier header, byte swapping or interleaving |
+| Size | **524,288 bytes (512 KiB)** |
+| Product code | `MK 00001019-00` |
+| Region header | `JUE` (initial execution target: overseas NTSC) |
+| ROM checksum | `9409` |
+| SHA-256 | `dd44f120446654bb91c448762f3e0cd0d9b034f35d0e3266a4dc34402ada95c0` |
+
+For the default launcher, place it at:
+
+```text
+original_rom/Bare Knuckle - Ikari no Tetsuken ~ Streets of Rage (World).md
+```
+
+The filename alone does not establish compatibility. Verify the contents with:
+
+```sh
+python3 tools/rom.py "original_rom/Bare Knuckle - Ikari no Tetsuken ~ Streets of Rage (World).md" --require-known
+```
+
+A different filename/location is fine when passed explicitly, for example
+`./build-and-run.sh "/absolute/path/to/your-ROM.bin"`. Other revisions or modified
+ROMs are not supported by the current generated code; the build rejects a hash
+mismatch. ROMs are not supplied or downloaded by this project. Keep your ROM and
+ROM-containing build artifacts out of git and do not redistribute them.
+
 ## Build and run
 
 On this machine, run:
@@ -40,8 +72,8 @@ Repeated runs replace this project's previous emulator instance.
 
 For the reproducible reference build and CD/GDEMU image:
 
-Provide your own raw 512 KiB SoR1 World/JUE revision 00 ROM. The accepted SHA-256
-is recorded in [reference notes](docs/REFERENCE.md). No game data is downloaded.
+Use the exact ROM specified above. See [reference notes](docs/REFERENCE.md) for
+validation and comparison details.
 
 ```
 python3 tools/bootstrap.py

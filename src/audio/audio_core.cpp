@@ -6,12 +6,14 @@
 #define Z80_NO_FUNCTIONAL
 #include "sor_z80.hpp"
 #include "z80_hot.hpp"
+#include "dac_driver.hpp"
 #include <algorithm>
 #include <array>
 
 
 struct NativeAudio::Impl:ymfm::ymfm_interface {
     NativeAudio &owner;ymfm::ym2612 fm;
+    NativeDacDriver dac;bool driverKnown=false;
     std::unique_ptr<suzukiplan::Z80> cpu;
     const uint8_t *rom=nullptr;size_t romSize=0;
     uint32_t bank=0;bool reset=true,bus=false;
@@ -27,12 +29,12 @@ struct NativeAudio::Impl:ymfm::ymfm_interface {
     void setPolarity(unsigned c,bool value){
         if(polarity[c]!=value){polarity[c]=value;psgLevel+=(value?2:-2)*amplitude[volume[c]];}
     }
-    explicit Impl(NativeAudio &o):owner(o),fm(*this){fm.reset();resetCpu();}
+    explicit Impl(NativeAudio &o):owner(o),fm(*this),dac(o.ram,this,read,write){fm.reset();resetCpu();}
     void ymfm_set_timer(uint32_t n,int32_t clocks)override{timer[n]=clocks<0?0:ymClock+clocks;}
     void clockTimers(){for(unsigned n=0;n<2;n++)if(timer[n]&&ymClock>=timer[n]){timer[n]=0;m_engine->engine_timer_expired(n);}}
     void resetCpu(){
         cpu=std::make_unique<suzukiplan::Z80>(read,write,in,out,this);
-        bank=0;ztime=zTarget;
+        bank=0;ztime=zTarget;dac.cancel();driverKnown=false;
     }
     static unsigned char in(void*,unsigned short){return 255;}
     static void out(void*,unsigned short,unsigned char){}
@@ -51,9 +53,28 @@ struct NativeAudio::Impl:ymfm::ymfm_interface {
         if((a&0xfff9)==0x7f11){s.owner.writePSG(v);return;}
         s.owner.z80Faults++;
     }
+    int runSound(int clocks){
+        if(!owner.nativeDac || !driverKnown)return soundZ80Execute(*cpu,owner.ram,clocks);
+        int elapsed=0;
+        while(elapsed<clocks){
+            if(dac.active()){
+                elapsed+=dac.advance(clocks-elapsed);
+                if(!dac.active())cpu->reg.PC=0x2f;
+            }else if(cpu->reg.PC==0xd9){
+                auto &r=cpu->reg;
+                dac.start((unsigned(r.pair.D)<<8)|r.pair.E,(unsigned(r.pair.B)<<8)|r.pair.C,r.IY,r.back.C,r.SP);
+                owner.nativeDacStarts++;
+            }else if(cpu->reg.PC>=0x2f && cpu->reg.PC<=0x3a &&
+                     (owner.ram[0x1fff]<0x81 || owner.ram[0x1fff]>=0x92)){
+                elapsed+=soundZ80Idle(*cpu,owner.ram,clocks-elapsed);
+            }else elapsed+=cpu->execute(1); // short command/header setup only
+        }
+        owner.nativeDacSamples=dac.samples;
+        return elapsed;
+    }
     void runZ80(uint64_t target){
         if(reset||bus){ztime=target;return;}
-        if(ztime<target)ztime+=soundZ80Execute(*cpu,owner.ram,int(target-ztime));
+        if(ztime<target)ztime+=runSound(int(target-ztime));
     }
     void psgWrite(uint8_t v){
         if(v&128)latch=(v>>4)&7;
@@ -94,16 +115,16 @@ struct NativeAudio::Impl:ymfm::ymfm_interface {
         return sum/1008;
     }
 };
-NativeAudio::NativeAudio(bool active):enabled(active),impl(active?std::make_unique<Impl>(*this):nullptr){}
+NativeAudio::NativeAudio(bool active,bool native):enabled(active),nativeDac(native),impl(active?std::make_unique<Impl>(*this):nullptr){}
 NativeAudio::~NativeAudio()=default;
 void NativeAudio::setROM(const uint8_t *r,size_t n){if(impl){impl->rom=r;impl->romSize=n;}}
-void NativeAudio::setReset(bool b){if(impl){impl->reset=b;if(b)impl->resetCpu();}}
+void NativeAudio::setReset(bool b){if(impl){impl->reset=b;if(b)impl->resetCpu();else impl->driverKnown=NativeDacDriver::recognizes(ram);}}
 void NativeAudio::setBusRequest(bool b){
     if(!impl)return;
     impl->bus=b;
     // Native callers retry BUSREQ immediately; permit the DAC driver to finish
     // its short critical section rather than deadlocking on a frozen busy flag.
-    if(!b&&!impl->reset)for(int i=0;i<128&&(ram[0x1ffd]&128);i++)impl->ztime+=soundZ80Execute(*impl->cpu,ram,16);
+    if(!b&&!impl->reset)for(int i=0;i<128&&(ram[0x1ffd]&128);i++)impl->ztime+=impl->runSound(16);
 }
 void NativeAudio::writeYM(unsigned p,uint8_t v){
     if(!impl)return;
@@ -114,7 +135,7 @@ void NativeAudio::writeYM(unsigned p,uint8_t v){
 }
 uint8_t NativeAudio::readYM(unsigned p){return impl?impl->fm.read(p):0;}
 void NativeAudio::writePSG(uint8_t v){if(impl){psgWrites++;impl->psgWrite(v);}}
-unsigned NativeAudio::renderFrame(int16_t *out,uint64_t (*clock)()){
+unsigned NativeAudio::renderFrame(int16_t *out,uint64_t (*clock)(),int16_t *dacStereo){
     std::fill_n(profile,3,0);
     if(!impl)return 0;
     impl->remainder+=896040;unsigned n=impl->remainder/1008;impl->remainder%=1008;
@@ -129,7 +150,17 @@ unsigned NativeAudio::renderFrame(int16_t *out,uint64_t (*clock)()){
         auto afterFM=clock?clock():0;
         int psg=impl->psgSample();
         if(clock){profile[0]+=afterZ80-before;profile[1]+=afterFM-afterZ80;profile[2]+=clock()-afterFM;}
-        for(int c=0;c<2;c++)out[i*2+c]=std::clamp<int32_t>(fm.data[c]+psg,-32768,32767);
+        ymfm::ym2612::output_data dac;
+        if(dacStereo)impl->fm.dac_component(dac);
+        for(int c=0;c<2;c++){
+            int combined=std::clamp<int32_t>(fm.data[c]+psg,-32768,32767);
+            int component=dacStereo?dac.data[c]:0;
+            // Keep both PCM16 stems in range and their integer sum exact, even
+            // when the reference mixer clips. AICA performs the final addition.
+            if(combined-component < -32768 || combined-component > 32767)component=0;
+            out[i*2+c]=combined-component;
+            if(dacStereo)dacStereo[i*2+c]=component;
+        }
     }
     return n;
 }

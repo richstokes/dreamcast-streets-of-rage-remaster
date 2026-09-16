@@ -2,11 +2,11 @@ ROOT := ../..
 TARGET := $(ROOT)/build/native/sor.elf
 KOS_BUILD_SUBARCHS = pristine
 include $(KOS_BASE)/Makefile.rules
-SOURCES := $(wildcard $(ROOT)/build/native/upstream/*.cpp) $(wildcard *.cpp) ../render/vdp_scene.cpp ../audio/audio_core.cpp
+SOURCES := $(wildcard $(ROOT)/build/native/upstream/*.cpp) $(wildcard *.cpp) ../render/vdp_scene.cpp ../audio/audio_core.cpp ../audio/dac_driver.cpp
 OBJS := $(SOURCES:.cpp=.o) $(ROOT)/build/native/memory.o $(ROOT)/build/native/save.o
 # Keep the synthesizer and its callbacks visible to the optimizer across files.
 # No fast-math: the PCM regression must remain byte-for-byte identical.
-AUDIO_OBJS := ../audio/audio_core.o $(wildcard $(ROOT)/build/native/upstream/ymfm_*.cpp)
+AUDIO_OBJS := ../audio/audio_core.o ../audio/dac_driver.o $(wildcard $(ROOT)/build/native/upstream/ymfm_*.cpp)
 AUDIO_OBJS := $(AUDIO_OBJS:.cpp=.o)
 $(AUDIO_OBJS): KOS_CPPFLAGS += -O3 -flto
 KOS_CPPFLAGS += -std=gnu++23 -g -Icompat -I../render -I../audio -I$(ROOT)/include -I$(ROOT)/build/native/upstream -ffunction-sections -fdata-sections -MMD -MP

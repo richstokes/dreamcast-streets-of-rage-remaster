@@ -74,7 +74,13 @@ int main(int argc,char **argv){
 
 namespace {FILE *audioCapture=nullptr;}
 void platform_audio_init(unsigned){if(const char *path=std::getenv("SOR_AUDIO_CAPTURE")){audioCapture=fopen(path,"wb");if(!audioCapture)throw std::runtime_error("Audio capture open failed");}}
-void platform_audio_submit(const int16_t *samples,unsigned frames){if(audioCapture && fwrite(samples,4,frames,audioCapture)!=frames)throw std::runtime_error("Audio capture failed");}
+void platform_audio_submit(const int16_t *samples,unsigned frames,const int16_t *dac){
+    int16_t mixed[1780];if(dac){for(unsigned i=0;i<frames*2;i++)mixed[i]=int(samples[i])+dac[i];samples=mixed;}
+    if(audioCapture && fwrite(samples,4,frames,audioCapture)!=frames)throw std::runtime_error("Audio capture failed");}
 void platform_audio_shutdown(){if(audioCapture){fclose(audioCapture);audioCapture=nullptr;}}
 
 bool platform_audio_enabled(){const char *p=std::getenv("SOR_AUDIO");return !p || std::string(p)!="0";}
+
+bool platform_audio_native_dac(){const char *p=std::getenv("SOR_DAC_NATIVE");return !p || std::string(p)!="0";}
+
+bool platform_audio_split_dac(){const char *p=std::getenv("SOR_DAC_AICA");return p && std::string(p)=="1";}

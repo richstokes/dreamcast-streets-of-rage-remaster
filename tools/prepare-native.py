@@ -37,6 +37,10 @@ copy(M/'include/MegaDriveEnvironment/system/z80/suzukiplan/z80.hpp',D/'sor_z80.h
 if '--dreamcast' in sys.argv:
     audio=os.environ.get('SOR_AUDIO','0')
     if audio not in ('0','1'):raise SystemExit('SOR_AUDIO must be 0 or 1')
+    native=os.environ.get('SOR_DAC_NATIVE','1')
+    if native not in ('0','1'):raise SystemExit('SOR_DAC_NATIVE must be 0 or 1')
+    split=os.environ.get('SOR_DAC_AICA','0')
+    if split not in ('0','1'):raise SystemExit('SOR_DAC_AICA must be 0 or 1')
     config=D/'sor_audio_config.hpp'
-    text='#pragma once\n#define SOR_ENABLE_EXPERIMENTAL_AUDIO '+audio+'\n'
+    text='#pragma once\n#define SOR_ENABLE_EXPERIMENTAL_AUDIO '+audio+'\n#define SOR_ENABLE_NATIVE_DAC '+native+'\n#define SOR_ENABLE_AICA_DAC '+split+'\n'
     if not config.exists() or config.read_text()!=text:config.write_text(text)

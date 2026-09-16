@@ -1,5 +1,6 @@
 #include <kos.h>
 #include "sor_audio_config.hpp"
+#include "dac_aica.hpp"
 #include <dc/sound/stream.h>
 #include <dc/sound/sound.h>
 #include <algorithm>
@@ -25,16 +26,20 @@ void *callback(snd_stream_hnd_t,int requested,int *received){
     *received=n*4;return output;
 }
 }
+bool platform_audio_split_dac(){return SOR_ENABLE_AICA_DAC!=0;}
+bool platform_audio_native_dac(){return SOR_ENABLE_NATIVE_DAC!=0;}
 bool platform_audio_enabled(){return SOR_ENABLE_EXPERIMENTAL_AUDIO!=0;}
 void platform_audio_init(unsigned rate){
     if(!platform_audio_enabled())return;
+    if(platform_audio_split_dac()){dac_aica_init(rate);return;}
     if(snd_stream_init_ex(2,16384)<0)throw std::runtime_error("AICA stream init failed");
     stream=snd_stream_alloc(callback,16384);
     if(stream==SND_STREAM_INVALID)throw std::runtime_error("AICA stream allocation failed");
     sampleRate=rate;
     printf("AICA stream: 32768 sound-RAM bytes; available=%lu\n",(unsigned long)snd_mem_available());
 }
-void platform_audio_submit(const int16_t *samples,unsigned frames){
+void platform_audio_submit(const int16_t *samples,unsigned frames,const int16_t *dac){
+    if(platform_audio_split_dac()){dac_aica_submit(samples,dac,frames);return;}
     if(frames>capacity-queued){overruns++;frames=capacity-queued;}
     for(unsigned i=0;i<frames;i++){
         ring[writeAt*2]=samples[i*2];ring[writeAt*2+1]=samples[i*2+1];writeAt=(writeAt+1)%capacity;
@@ -44,4 +49,4 @@ void platform_audio_submit(const int16_t *samples,unsigned frames){
     if(playing)snd_stream_poll(stream);
     if(++calls%600==0)printf("AICA queued=%u underruns=%u overruns=%u callbacks=%u requested_bytes=%llu\n",queued,underruns,overruns,callbacks,(unsigned long long)requestedBytes);
 }
-void platform_audio_shutdown(){if(stream!=SND_STREAM_INVALID){snd_stream_destroy(stream);snd_stream_shutdown();stream=SND_STREAM_INVALID;}}
+void platform_audio_shutdown(){if(platform_audio_split_dac()){dac_aica_shutdown();return;}if(stream!=SND_STREAM_INVALID){snd_stream_destroy(stream);snd_stream_shutdown();stream=SND_STREAM_INVALID;}}

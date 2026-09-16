@@ -19,6 +19,10 @@ PlatformMemoryStats platform_memory_stats();
 void platform_observe_frame(uint32_t,const sor_memory &,const Framebuffer &);
 
 void platform_audio_init(unsigned sampleRate);
-void platform_audio_submit(const int16_t *,unsigned frames);
+void platform_audio_submit(const int16_t *,unsigned frames,const int16_t *dac=nullptr);
 void platform_audio_shutdown();
 bool platform_audio_enabled();
+
+bool platform_audio_native_dac();
+
+bool platform_audio_split_dac();

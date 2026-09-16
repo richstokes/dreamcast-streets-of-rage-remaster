@@ -43,6 +43,7 @@ def main():
             if len(ram)!=65536:raise ValueError('Truncated trace')
             target.write(json.dumps(observation(ram,frames))+'\n');frames+=1
     (args.output/'metadata.json').write_text(json.dumps(dict(rom=identity,frames=frames-1,ram_first_frame=0,audio_enabled=run_env.get('SOR_AUDIO','1')!='0',
+        native_dac=run_env.get('SOR_DAC_NATIVE','1')!='0',aica_split=run_env.get('SOR_DAC_AICA','0')=='1',
         scenario_sha256=hashlib.sha256(args.scenario.read_bytes()).hexdigest(),
         backend='shared Dreamcast simulation; host offscreen platform',
         sampling='Before VBlank presentation and next input; capture is preceding presentation'),indent=2)+'\n')

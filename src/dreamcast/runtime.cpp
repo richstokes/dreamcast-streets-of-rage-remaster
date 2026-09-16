@@ -11,7 +11,7 @@ void Controllers::poll(const uint8_t *ram){
     if(!replay_poll(current,ram)) platform_poll_controllers(current);
 }
 MegaDriveEnvironment::MegaDriveEnvironment(VDP::Synchronization,VDP::Scaling,VDP::SpriteLimit,uint16_t)
-    :port_(state_),tile_(state_),renderer_(state_,tile_,fb_),audio_(platform_audio_enabled()){
+    :port_(state_),tile_(state_),renderer_(state_,tile_,fb_),audio_(platform_audio_enabled(),platform_audio_native_dac()){
     state_.reset(); port_.setEnvironment(this);
     mem_.state.read_device=readBus; mem_.state.write_device=writeBus; mem_.state.device=this;
     platform_video_init();platform_audio_init(NativeAudio::sampleRate);
@@ -89,15 +89,17 @@ void MegaDriveEnvironment::waitForInterrupt(){
     // across them and inject an extra VBlank into an otherwise normal frame.
     paceCount_=0;
     platform_observe_frame(frames_,mem_.state,fb_);
-    alignas(32) int16_t samples[890*2];
+    alignas(32) int16_t samples[890*2],dacSamples[890*2];
+    int16_t *dac=platform_audio_split_dac()?dacSamples:nullptr;
     const auto audioStart=platform_time_us();
-    unsigned count=audio_.renderFrame(samples,frames_%600==599?platform_time_us:nullptr);const auto synthDone=platform_time_us();if(count)platform_audio_submit(samples,count);
+    unsigned count=audio_.renderFrame(samples,frames_%600==599?platform_time_us:nullptr,dac);const auto synthDone=platform_time_us();if(count)platform_audio_submit(samples,count,dac);
     if(audio_.enabled&&frames_%600==599)printf("AUDIO frame=%lu synth_us=%llu stream_us=%llu ym=%llu psg=%llu dac=%llu z80_faults=%llu\n",(unsigned long)frames_,(unsigned long long)(synthDone-audioStart),(unsigned long long)(platform_time_us()-synthDone),(unsigned long long)audio_.ymWrites,(unsigned long long)audio_.psgWrites,(unsigned long long)audio_.dacWrites,(unsigned long long)audio_.z80Faults);
     if(audio_.enabled&&frames_%600==599){
         uint32_t digest=2166136261u;
-        for(unsigned i=0;i<count*2;i++){uint16_t v=samples[i];digest=(digest^(v&255))*16777619u;digest=(digest^(v>>8))*16777619u;}
+        for(unsigned i=0;i<count*2;i++){uint16_t v=int(samples[i])+(dac?dac[i]:0);digest=(digest^(v&255))*16777619u;digest=(digest^(v>>8))*16777619u;}
         printf("AUDIO_PCM frame=%lu frames=%u fnv=%08lx\n",(unsigned long)frames_,count,(unsigned long)digest);
     }
+    if(audio_.enabled&&frames_%600==599)printf("DAC_NATIVE starts=%llu samples=%llu\n",audio_.nativeDacStarts,audio_.nativeDacSamples);
     if(audio_.enabled&&frames_%600==599)printf("AUDIO_PARTS z80=%llu fm=%llu psg=%llu\n",audio_.profile[0],audio_.profile[1],audio_.profile[2]);
     present(); pads_.poll(mem_.state.ram); frames_++; cycles_+=896040; irq_=6;
 }
