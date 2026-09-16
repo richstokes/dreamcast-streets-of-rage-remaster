@@ -2,7 +2,15 @@
 
 ## 2026-09-15 — native checkpoint, not a completed game
 
-### Latest: native drum/voice decoding and hardware playback evaluation
+### Active: original audio at 60 Hz
+
+- Optimization continues; the target is not met. Retained audio/renderer changes
+  measure 20.596 ms mean over the first 1,200 gameplay intervals, with underruns.
+- Direct native RAM/ROM access is implemented and passes 300,000 differential
+  accesses plus the full PCM/RAM replay; Dreamcast measurement is in progress.
+- `OPTIMIZATION_LOG.md` records measured decisions, removed experiments and tests.
+
+### Previous: native drum/voice decoding and hardware playback evaluation
 
 - Native C++ DPCM playback reduces audio-enabled mean loop time from 29.218 to
   23.393 ms (19.9%) over the first 1,200 gameplay intervals in Flycast.

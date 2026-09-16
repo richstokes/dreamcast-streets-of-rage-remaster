@@ -15,6 +15,10 @@ def patch(name, text):
             '\tvoid sor_cache_attenuation() { uint32_t v=m_env_attenuation >> m_cache.eg_shift; '
             'if (RegisterType::EG_HAS_SSG && m_ssg_inverted) v=(0x200-v)&0x3ff; '
             'm_sor_attenuation=v+m_cache.total_level; }')
+        old='\tvoid output_4op(output_data &output, uint32_t rshift, int32_t clipmax) const;'
+        text=replace_once(text,old,old+'\n\ttemplate<int Algorithm> void output_4op_fixed(output_data &output, uint32_t rshift, int32_t clipmax) const;')
+        text=replace_once(text,'\tmutable int16_t m_feedback_in;',
+            '\tuint8_t m_sor_algorithm=0, m_sor_feedback=0, m_sor_pan=0;\n\tmutable int16_t m_feedback_in;')
         old='\tvoid clock(uint32_t env_counter, int32_t lfo_raw_pm);'
         assert text.count(old)==2
         text=text.replace(old, '\ttemplate<bool Envelope> void clock_fast(uint32_t env_counter, int32_t lfo_raw_pm);\n'
@@ -57,20 +61,6 @@ void fm_engine_base<RegisterType>::output_single(output_data &result, uint32_t r
         text=text[:start]+part+text[end:]
         text=replace_once(text, 'uint32_t env_attenuation = envelope_attenuation(am_offset) << 2;',
             'uint32_t env_attenuation = std::min<uint32_t>(m_sor_attenuation + (m_sor_am ? am_offset : 0), 0x3ff) << 2;')
-        text=replace_once(text, 'template<class RegisterType>\nfm_operator<RegisterType>::fm_operator(',
-            '''// Construct in static storage before playback: no half-megabyte stack temporary
-// and no local-static guard in the per-operator hot path.
-struct sor_fm_volume_table {
-    uint16_t data[1024*256];
-    sor_fm_volume_table() {
-        for (unsigned env=0;env<1024;env++) for (unsigned p=0;p<256;p++)
-            data[env*256+p]=attenuation_to_volume(abs_sin_attenuation(p)+(env<<2));
-    }
-};
-inline const sor_fm_volume_table sor_fm_volumes;
-
-template<class RegisterType>
-fm_operator<RegisterType>::fm_operator(''')
         # Decide the envelope phase once per chip sample rather than 24 times.
         for cls in ('fm_operator','fm_channel'):
             old='template<class RegisterType>\nvoid '+cls+'<RegisterType>::clock(uint32_t env_counter, int32_t lfo_raw_pm)'
@@ -89,16 +79,36 @@ fm_operator<RegisterType>::fm_operator(''')
         for (uint32_t chnum=0;chnum<CHANNELS;chnum++) if (bitfield(chanmask,chnum))
             m_channel[chnum]->template clock_fast<false>(m_env_counter,lfo_raw_pm);
     }''')
-        # A bounded 512 KiB quarter-wave table trades retail RAM for SH-4 work.
-        # It is derived from the pinned chip tables, never from game assets.
-        text=replace_once(text, 'int32_t result = attenuation_to_volume((sin_attenuation & 0x7fff) + env_attenuation);',
-            '''int32_t result;
-    if constexpr (RegisterType::WAVEFORMS == 1 && RegisterType::WAVEFORM_LENGTH == 1024)
-    {
-        unsigned p=phase&255;if (phase&256) p^=255;
-        result=sor_fm_volumes.data[(env_attenuation>>2)*256+p];
+        text=replace_once(text,'bool fm_channel<RegisterType>::prepare()\n{',
+            '''bool fm_channel<RegisterType>::prepare()
+{
+    m_sor_algorithm=m_regs.ch_algorithm(m_choffs);
+    m_sor_feedback=m_regs.ch_feedback(m_choffs);
+    m_sor_pan=m_regs.ch_output_any(m_choffs);''')
+        marker='template<class RegisterType>\nvoid fm_channel<RegisterType>::output_4op(output_data &output, uint32_t rshift, int32_t clipmax) const'
+        wrapper=marker+''' {
+    switch(m_sor_algorithm) {
+        case 0: output_4op_fixed<0>(output,rshift,clipmax);break;
+        case 1: output_4op_fixed<1>(output,rshift,clipmax);break;
+        case 2: output_4op_fixed<2>(output,rshift,clipmax);break;
+        case 3: output_4op_fixed<3>(output,rshift,clipmax);break;
+        case 4: output_4op_fixed<4>(output,rshift,clipmax);break;
+        case 5: output_4op_fixed<5>(output,rshift,clipmax);break;
+        case 6: output_4op_fixed<6>(output,rshift,clipmax);break;
+        case 7: output_4op_fixed<7>(output,rshift,clipmax);break;
+        default: output_4op_fixed<-1>(output,rshift,clipmax);break;
     }
-    else result = attenuation_to_volume((sin_attenuation & 0x7fff) + env_attenuation);''')
+}
+
+template<class RegisterType>
+template<int Algorithm>
+void fm_channel<RegisterType>::output_4op_fixed(output_data &output, uint32_t rshift, int32_t clipmax) const'''
+        text=replace_once(text,marker,wrapper)
+        a=text.index('void fm_channel<RegisterType>::output_4op_fixed(')
+        b=text.index('//  output_rhythm_ch6',a)
+        part=text[a:b].replace('m_regs.ch_feedback(m_choffs)','m_sor_feedback').replace('m_regs.ch_output_any(m_choffs)','m_sor_pan')
+        part=part.replace('s_algorithm_ops[m_regs.ch_algorithm(m_choffs)]','s_algorithm_ops[Algorithm < 0 ? m_sor_algorithm : Algorithm]')
+        text=text[:a]+part+text[b:]
         # Keep this small hot operator calculation inline on SH-4. Arithmetic is unchanged.
         text=replace_once(text, 'int32_t fm_operator<RegisterType>::compute_volume(uint32_t phase, uint32_t am_offset) const',
             'inline __attribute__((always_inline)) int32_t fm_operator<RegisterType>::compute_volume(uint32_t phase, uint32_t am_offset) const')

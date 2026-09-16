@@ -1,3 +1,4 @@
+#include "diagnostics.hpp"
 #include <kos.h>
 #include <cstring>
 #include <algorithm>
@@ -40,7 +41,7 @@ void dc_renderer_init(){
     if(!tiles||!spriteTexture[0]||!spriteTexture[1])throw std::runtime_error("PowerVR texture budget exhausted");
     for(int i=0;i<8192;i++)header(tileHeaders[i],static_cast<uint8_t*>(tiles)+i*128,8,8,false);
     for(int p=0;p<2;p++)header(spriteHeaders[p],spriteTexture[p],512,256,true);
-    printf("PowerVR tile cache: 1048576 bytes; sprite layers: 524288 bytes\n");
+    sor_log("PowerVR tile cache: 1048576 bytes; sprite layers: 524288 bytes\n");
 }
 void dc_renderer_shutdown(){
     if(tiles)pvr_mem_free(tiles);
@@ -114,7 +115,7 @@ bool dc_render_vdp(VDPState &state,VDPRenderer &renderer){
     for(int i=0;i<5;i++){sums[i]+=elapsed[i];peaks[i]=std::max(peaks[i],elapsed[i]);}
     spriteSum+=spriteBytes;
     if(++frames%600==0){
-        printf("GPU_STATS n=600 scene=%llu/%llu wait=%llu/%llu upload=%llu/%llu commands=%llu/%llu submit=%llu/%llu sprite_bytes_mean=%llu (mean/max us)\n",
+        sor_log("GPU_STATS n=600 scene=%llu/%llu wait=%llu/%llu upload=%llu/%llu commands=%llu/%llu submit=%llu/%llu sprite_bytes_mean=%llu (mean/max us)\n",
             sums[0]/600,peaks[0],sums[1]/600,peaks[1],sums[2]/600,peaks[2],sums[3]/600,peaks[3],sums[4]/600,peaks[4],spriteSum/600);
         std::fill_n(sums,5,0);std::fill_n(peaks,5,0);spriteSum=0;
     }

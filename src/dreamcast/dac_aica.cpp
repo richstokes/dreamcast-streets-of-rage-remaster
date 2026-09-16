@@ -1,3 +1,4 @@
+#include "diagnostics.hpp"
 #include "dac_aica.hpp"
 #include <kos.h>
 #include <dc/spu.h>
@@ -70,7 +71,7 @@ void dac_aica_init(unsigned sampleRate){
         // allocations instead of silently dropping voices from synchronized start.
         if(channels[c]<0||channels[c]>=32||!memory[c]){dac_aica_shutdown();throw std::runtime_error("DAC AICA channels/memory unavailable");}
     }
-    printf("AICA_DAC: four synchronized voices, 65536 sound-RAM bytes, available=%lu\n",(unsigned long)snd_mem_available());
+    sor_log("AICA_DAC: four synchronized voices, 65536 sound-RAM bytes, available=%lu\n",(unsigned long)snd_mem_available());
 }
 void dac_aica_submit(const int16_t *fm,const int16_t *dac,unsigned frames){
     if(!dac)throw std::runtime_error("Missing DAC stem");
@@ -96,7 +97,7 @@ void dac_aica_submit(const int16_t *fm,const int16_t *dac,unsigned frames){
         }
         lastPoll=now;
     }
-    if(++calls%600==0)printf("AICA_DAC queued=%u underruns=%u overruns=%u resyncs=%u uploaded=%llu positions=%u/%u/%u/%u transfer_mean_us=%llu transfer_max_us=%llu\n",queued,underruns,overruns,resyncs,(unsigned long long)uploaded,snd_get_pos(channels[0]),snd_get_pos(channels[1]),snd_get_pos(channels[2]),snd_get_pos(channels[3]),(unsigned long long)(transfers?transferTime/transfers:0),(unsigned long long)transferWorst);
+    if(++calls%600==0)dac_aica_report();
 }
 void dac_aica_shutdown(){
     if(playing)sendStop();
@@ -104,4 +105,8 @@ void dac_aica_shutdown(){
         if(channels[c]>=0){snd_sfx_chn_free(channels[c]);channels[c]=-1;}
         if(memory[c]){snd_mem_free(memory[c]);memory[c]=0;}
     }
+}
+
+void dac_aica_report(){
+    sor_log("AICA_DAC queued=%u underruns=%u overruns=%u resyncs=%u uploaded=%llu positions=%u/%u/%u/%u transfer_mean_us=%llu transfer_max_us=%llu\n",queued,underruns,overruns,resyncs,(unsigned long long)uploaded,snd_get_pos(channels[0]),snd_get_pos(channels[1]),snd_get_pos(channels[2]),snd_get_pos(channels[3]),(unsigned long long)(transfers?transferTime/transfers:0),(unsigned long long)transferWorst);
 }

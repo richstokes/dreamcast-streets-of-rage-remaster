@@ -1,3 +1,4 @@
+#include "diagnostics.hpp"
 #include "platform.hpp"
 #include "MegaDriveEnvironment.hpp"
 #include "Logger.hpp"
@@ -22,13 +23,13 @@ void MegaDriveEnvironment::loadROM(const std::string &path){
     size_t embeddedSize=0;const auto embedded=platform_embedded_rom(embeddedSize);
     if(!f && embedded && embeddedSize==524288){
         mem_.state.rom=embedded;mem_.state.rom_size=524288;audio_.setROM(mem_.state.rom,mem_.state.rom_size);
-        printf("SOR native: using embedded test ROM; direct ELF boot\n");return;
+        sor_log("SOR native: using embedded test ROM; direct ELF boot\n");return;
     }
     if(!f)throw std::runtime_error("Missing /cd/SOR.BIN; use disc image or embedded test ELF");
     rom_=static_cast<uint8_t*>(malloc(524288)); if(!rom_){fclose(f);throw std::runtime_error("ROM allocation failed");}
     if(fread(rom_,1,524288,f)!=524288 || fgetc(f)!=EOF){fclose(f);throw std::runtime_error("ROM size mismatch");}
     fclose(f); mem_.state.rom=rom_; mem_.state.rom_size=524288;audio_.setROM(mem_.state.rom,mem_.state.rom_size);
-    printf("SOR native: ROM loaded; %s audio; no enhanced art\n",audio_.enabled?"experimental":"disabled");
+    sor_log("SOR native: ROM loaded; %s audio; no enhanced art\n",audio_.enabled?"experimental":"disabled");
 }
 uint32_t MegaDriveEnvironment::readBus(void *ctx,uint32_t a,unsigned w){
     auto &e=*static_cast<MegaDriveEnvironment*>(ctx);
@@ -74,14 +75,14 @@ void MegaDriveEnvironment::writeBus(void *ctx,uint32_t a,unsigned w,uint32_t v){
 void MegaDriveEnvironment::present(){
     const auto start=platform_time_us();
     if(platform_render_vdp(state_,renderer_)){
-        if(frames_%600==0){auto stats=platform_memory_stats();printf("PVR frame=%lu render_us=%llu heap_used=%lu vram_free=%lu\n",(unsigned long)frames_,(unsigned long long)(platform_time_us()-start),(unsigned long)stats.heap_used,(unsigned long)stats.vram_free);}
+        if(frames_%600==0){auto stats=platform_memory_stats();sor_log("PVR frame=%lu render_us=%llu heap_used=%lu vram_free=%lu\n",(unsigned long)frames_,(unsigned long long)(platform_time_us()-start),(unsigned long)stats.heap_used,(unsigned long)stats.vram_free);}
         return;
     }
     renderer_.renderFrame();
     const auto renderDone=platform_time_us();
     int h=state_.activeHeight(),w=state_.activeWidth(); if(h>256)h=256;if(w>320)w=320;
     platform_video_present(fb_,w,h);
-    if(frames_%600==0){auto stats=platform_memory_stats();printf("SOR frame=%lu mode=%04x raster_us=%llu render_us=%llu heap_used=%lu vram_free=%lu faults=%lu last=%06lx\n",(unsigned long)frames_,mem_.readWord(0xffff00),(unsigned long long)(renderDone-start),(unsigned long long)(platform_time_us()-start),(unsigned long)stats.heap_used,(unsigned long)stats.vram_free,(unsigned long)mem_.state.faults,(unsigned long)last_);}
+    if(frames_%600==0){auto stats=platform_memory_stats();sor_log("SOR frame=%lu mode=%04x raster_us=%llu render_us=%llu heap_used=%lu vram_free=%lu faults=%lu last=%06lx\n",(unsigned long)frames_,mem_.readWord(0xffff00),(unsigned long long)(renderDone-start),(unsigned long long)(platform_time_us()-start),(unsigned long)stats.heap_used,(unsigned long)stats.vram_free,(unsigned long)mem_.state.faults,(unsigned long)last_);}
 
 }
 void MegaDriveEnvironment::waitForInterrupt(){
@@ -92,15 +93,15 @@ void MegaDriveEnvironment::waitForInterrupt(){
     alignas(32) int16_t samples[890*2],dacSamples[890*2];
     int16_t *dac=platform_audio_split_dac()?dacSamples:nullptr;
     const auto audioStart=platform_time_us();
-    unsigned count=audio_.renderFrame(samples,frames_%600==599?platform_time_us:nullptr,dac);const auto synthDone=platform_time_us();if(count)platform_audio_submit(samples,count,dac);
-    if(audio_.enabled&&frames_%600==599)printf("AUDIO frame=%lu synth_us=%llu stream_us=%llu ym=%llu psg=%llu dac=%llu z80_faults=%llu\n",(unsigned long)frames_,(unsigned long long)(synthDone-audioStart),(unsigned long long)(platform_time_us()-synthDone),(unsigned long long)audio_.ymWrites,(unsigned long long)audio_.psgWrites,(unsigned long long)audio_.dacWrites,(unsigned long long)audio_.z80Faults);
+    unsigned count=audio_.renderFrame(samples,platform_audio_profile()&&frames_%600==599?platform_time_us:nullptr,dac);const auto synthDone=platform_time_us();if(count)platform_audio_submit(samples,count,dac);
+    if(audio_.enabled&&frames_%600==599)sor_log("AUDIO frame=%lu synth_us=%llu stream_us=%llu ym=%llu psg=%llu dac=%llu z80_faults=%llu\n",(unsigned long)frames_,(unsigned long long)(synthDone-audioStart),(unsigned long long)(platform_time_us()-synthDone),(unsigned long long)audio_.ymWrites,(unsigned long long)audio_.psgWrites,(unsigned long long)audio_.dacWrites,(unsigned long long)audio_.z80Faults);
     if(audio_.enabled&&frames_%600==599){
         uint32_t digest=2166136261u;
         for(unsigned i=0;i<count*2;i++){uint16_t v=int(samples[i])+(dac?dac[i]:0);digest=(digest^(v&255))*16777619u;digest=(digest^(v>>8))*16777619u;}
-        printf("AUDIO_PCM frame=%lu frames=%u fnv=%08lx\n",(unsigned long)frames_,count,(unsigned long)digest);
+        sor_log("AUDIO_PCM frame=%lu frames=%u fnv=%08lx\n",(unsigned long)frames_,count,(unsigned long)digest);
     }
-    if(audio_.enabled&&frames_%600==599)printf("DAC_NATIVE starts=%llu samples=%llu\n",audio_.nativeDacStarts,audio_.nativeDacSamples);
-    if(audio_.enabled&&frames_%600==599)printf("AUDIO_PARTS z80=%llu fm=%llu psg=%llu\n",audio_.profile[0],audio_.profile[1],audio_.profile[2]);
+    if(audio_.enabled&&frames_%600==599)sor_log("DAC_NATIVE starts=%llu samples=%llu batch_frames=%llu interleaved_frames=%llu\n",audio_.nativeDacStarts,audio_.nativeDacSamples,audio_.batchFrames,audio_.interleavedFrames);
+    if(audio_.enabled&&platform_audio_profile()&&frames_%600==599)sor_log("AUDIO_PARTS z80=%llu fm=%llu psg=%llu\n",audio_.profile[0],audio_.profile[1],audio_.profile[2]);
     present(); pads_.poll(mem_.state.ram); frames_++; cycles_+=896040; irq_=6;
 }
 void MegaDriveEnvironment::pace(){
@@ -109,12 +110,12 @@ void MegaDriveEnvironment::pace(){
     if(++paceCount_>=32000){paceCount_=0;if(!irq_ && cpuInterruptMask()<6)waitForInterrupt();}
 }
 void MegaDriveEnvironment::reportUnhandledDispatch(m_long a){
-    printf("SOR UNHANDLED %06lx caller=%06lx\n",(unsigned long)a,(unsigned long)last_);
+    sor_log("SOR UNHANDLED %06lx caller=%06lx\n",(unsigned long)a,(unsigned long)last_);
     dumpUnhandledDispatchCpuState(); throw std::runtime_error("Untranslated dispatch");
 }
 
 void MegaDriveEnvironment::debugState(){
-    printf("DIAG frame=%lu mode=%04x mailbox=%02x irq=%d last=%06lx cycles=%llu faults=%lu addr=%06lx\n",(unsigned long)frames_,mem_.readWord(0xffff00),mem_.readByte(0xfffa00),irq_,(unsigned long)last_,(unsigned long long)cycles_,(unsigned long)mem_.state.faults,(unsigned long)mem_.state.last_fault_address);
-    printf("P1 type=%02x pos=%04x,%04x,%04x state=%04x health=%04x held=%02x SAT=%02x%02x%02x%02x\n",mem_.readByte(0xffb800),mem_.readWord(0xffb810),mem_.readWord(0xffb814),mem_.readWord(0xffb818),mem_.readWord(0xffb830),mem_.readWord(0xffb832),mem_.readByte(0xfffc04),state_.sat_[0],state_.sat_[1],state_.sat_[2],state_.sat_[3]);
+    sor_log("DIAG frame=%lu mode=%04x mailbox=%02x irq=%d last=%06lx cycles=%llu faults=%lu addr=%06lx\n",(unsigned long)frames_,mem_.readWord(0xffff00),mem_.readByte(0xfffa00),irq_,(unsigned long)last_,(unsigned long long)cycles_,(unsigned long)mem_.state.faults,(unsigned long)mem_.state.last_fault_address);
+    sor_log("P1 type=%02x pos=%04x,%04x,%04x state=%04x health=%04x held=%02x SAT=%02x%02x%02x%02x\n",mem_.readByte(0xffb800),mem_.readWord(0xffb810),mem_.readWord(0xffb814),mem_.readWord(0xffb818),mem_.readWord(0xffb830),mem_.readWord(0xffb832),mem_.readByte(0xfffc04),state_.sat_[0],state_.sat_[1],state_.sat_[2],state_.sat_[3]);
     dumpUnhandledDispatchCpuState();
 }

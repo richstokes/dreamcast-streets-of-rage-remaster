@@ -1,6 +1,8 @@
+#include "diagnostics.hpp"
 #include <kos.h>
 #include "sor_audio_config.hpp"
 #include "dac_aica.hpp"
+#include "platform.hpp"
 #include <dc/sound/stream.h>
 #include <dc/sound/sound.h>
 #include <algorithm>
@@ -28,6 +30,7 @@ void *callback(snd_stream_hnd_t,int requested,int *received){
 }
 bool platform_audio_split_dac(){return SOR_ENABLE_AICA_DAC!=0;}
 bool platform_audio_native_dac(){return SOR_ENABLE_NATIVE_DAC!=0;}
+bool platform_audio_profile(){return SOR_ENABLE_AUDIO_PROFILE!=0;}
 bool platform_audio_enabled(){return SOR_ENABLE_EXPERIMENTAL_AUDIO!=0;}
 void platform_audio_init(unsigned rate){
     if(!platform_audio_enabled())return;
@@ -36,7 +39,7 @@ void platform_audio_init(unsigned rate){
     stream=snd_stream_alloc(callback,16384);
     if(stream==SND_STREAM_INVALID)throw std::runtime_error("AICA stream allocation failed");
     sampleRate=rate;
-    printf("AICA stream: 32768 sound-RAM bytes; available=%lu\n",(unsigned long)snd_mem_available());
+    sor_log("AICA stream: 32768 sound-RAM bytes; available=%lu\n",(unsigned long)snd_mem_available());
 }
 void platform_audio_submit(const int16_t *samples,unsigned frames,const int16_t *dac){
     if(platform_audio_split_dac()){dac_aica_submit(samples,dac,frames);return;}
@@ -47,6 +50,12 @@ void platform_audio_submit(const int16_t *samples,unsigned frames,const int16_t 
     queued+=frames;
     if(!playing && queued>=8192){snd_stream_start(stream,sampleRate,1);starting=false;playing=true;}
     if(playing)snd_stream_poll(stream);
-    if(++calls%600==0)printf("AICA queued=%u underruns=%u overruns=%u callbacks=%u requested_bytes=%llu\n",queued,underruns,overruns,callbacks,(unsigned long long)requestedBytes);
+    if(++calls%600==0)platform_audio_report();
 }
 void platform_audio_shutdown(){if(platform_audio_split_dac()){dac_aica_shutdown();return;}if(stream!=SND_STREAM_INVALID){snd_stream_destroy(stream);snd_stream_shutdown();stream=SND_STREAM_INVALID;}}
+
+void platform_audio_report(){
+    if(!platform_audio_enabled())return;
+    if(platform_audio_split_dac()){dac_aica_report();return;}
+    sor_log("AICA queued=%u underruns=%u overruns=%u callbacks=%u requested_bytes=%llu\n",queued,underruns,overruns,callbacks,(unsigned long long)requestedBytes);
+}

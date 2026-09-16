@@ -1,7 +1,9 @@
+#include "diagnostics.hpp"
 #include <kos.h>
 #include <malloc.h>
 #include <stdexcept>
 #include "platform.hpp"
+#include "replay.hpp"
 void dc_renderer_init();
 void dc_renderer_shutdown();
 bool dc_render_vdp(VDPState &,VDPRenderer &);
@@ -17,7 +19,7 @@ void platform_poll_controllers(PlayersControlState &current){
         *out[i]={}; auto dev=maple_enum_dev(i,0);
         if(!dev || !(dev->info.functions&MAPLE_FUNC_CONTROLLER))continue;
         auto s=static_cast<cont_state_t*>(maple_dev_status(dev)); if(!s)continue;
-        if(i==0){bool toggle=s->buttons&CONT_B;if(toggle&&!previousToggle){useGpu=!useGpu;printf("Renderer: %s\n",useGpu?"PowerVR":"software comparison");}previousToggle=toggle;}
+        if(i==0){bool toggle=s->buttons&CONT_B;if(toggle&&!previousToggle){useGpu=!useGpu;sor_log("Renderer: %s\n",useGpu?"PowerVR":"software comparison");}previousToggle=toggle;}
         auto &p=*out[i]; p.connected=true;
         p.up=s->buttons&CONT_DPAD_UP; p.down=s->buttons&CONT_DPAD_DOWN;
         p.left=s->buttons&CONT_DPAD_LEFT; p.right=s->buttons&CONT_DPAD_RIGHT;
@@ -53,7 +55,8 @@ PlatformMemoryStats platform_memory_stats(){auto m=mallinfo();return {uint32_t(m
 void platform_observe_frame(uint32_t,const sor_memory &memory,const Framebuffer &){
     static uint64_t previous=0,sum=0,worst=0;
     static uint32_t histogram[256]{},samples=0;
-    static bool wasPlaying=false;
+    static bool wasPlaying=false,reported=false;
+    bool finished=replay_finished() && !reported;
     static pvr_stats_t startStats{};
     auto now=timer_us_gettime64();
     bool playing=memory.ram[0xff00]==0 && memory.ram[0xff01]==0x16;
@@ -64,13 +67,14 @@ void platform_observe_frame(uint32_t,const sor_memory &memory,const Framebuffer 
     if(playing && wasPlaying){
         uint64_t elapsed=now-previous;sum+=elapsed;if(elapsed>worst)worst=elapsed;
         histogram[elapsed/500<256?elapsed/500:255]++;samples++;
-        if(samples%600==0){
+        if(samples%600==0 || finished){
             auto percentile=[&](unsigned n){uint32_t total=0;for(unsigned i=0;i<256;i++){total+=histogram[i];if(total*100>=samples*n)return (i+1)*500;}return 128000u;};
             pvr_stats_t stats{};pvr_get_stats(&stats);
-            printf("FRAME_STATS n=%lu mean_us=%llu p50_us_le=%u p95_us_le=%u p99_us_le=%u worst_us=%llu vblanks=%lu flips=%lu\n",(unsigned long)samples,(unsigned long long)(sum/samples),percentile(50),percentile(95),percentile(99),(unsigned long long)worst,(unsigned long)(stats.vbl_count-startStats.vbl_count),(unsigned long)(stats.frame_count-startStats.frame_count));
+            sor_log("FRAME_STATS n=%lu mean_us=%llu p50_us_le=%u p95_us_le=%u p99_us_le=%u worst_us=%llu vblanks=%lu flips=%lu\n",(unsigned long)samples,(unsigned long long)(sum/samples),percentile(50),percentile(95),percentile(99),(unsigned long long)worst,(unsigned long)(stats.vbl_count-startStats.vbl_count),(unsigned long)(stats.frame_count-startStats.frame_count));
         }
     }
     previous=now;wasPlaying=playing;
+    if(finished){reported=true;sor_log("BENCHMARK replay complete; subsequent serial drain is outside the measured window\n");platform_audio_report();sor_flush_log();}
 }
 
 extern "C" {

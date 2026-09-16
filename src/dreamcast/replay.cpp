@@ -1,3 +1,4 @@
+#include "diagnostics.hpp"
 #include "replay.hpp"
 #include <cstdio>
 #include <cstdint>
@@ -22,7 +23,7 @@ bool replay_load(const char *path){
   segments[i]={le(b,4),uint16_t(le(b+4,2)),uint16_t(le(b+6,2)),uint16_t(le(b+8,2)),b[10],b[11],le(b+12,4)};
   if(!segments[i].frames||segments[i].frames>60000||segments[i].p1>255||segments[i].p2>255||segments[i].flags>1||(segments[i].flags && (segments[i].p1 || segments[i].p2 || (segments[i].value&segments[i].mask)!=segments[i].value))){fclose(f);return false;}
  }
- if(fgetc(f)==EOF){count=n;remaining=segments[0].frames;printf("REPLAY enabled: %u segments (SRP%c)\n",n,h[3]);}fclose(f);
+ if(fgetc(f)==EOF){count=n;remaining=segments[0].frames;sor_log("REPLAY enabled: %u segments (SRP%c)\n",n,h[3]);}fclose(f);
  return count!=0;
 }
 bool replay_finished(){return count && index==count;}
@@ -30,17 +31,17 @@ bool replay_poll(PlayersControlState &p,const uint8_t *ram){
  if(!count)return false;
  while(index<count && segments[index].flags &&
        (ram[segments[index].address]&segments[index].mask)==segments[index].value){
-  printf("REPLAY gate %u matched at frame %lu after %lu idle frames\n",index,(unsigned long)played,(unsigned long)(segments[index].frames-remaining));
+  sor_log("REPLAY gate %u matched at frame %lu after %lu idle frames\n",index,(unsigned long)played,(unsigned long)(segments[index].frames-remaining));
   if(++index<count)remaining=segments[index].frames;
  }
  if(index==count){p={decode(0),decode(0)};return true;}
  played++;
  auto &s=segments[index];p={decode(s.p1),decode(s.p2)};
  if(s.flags){
-  if(!remaining){printf("REPLAY gate %u timed out after %lu idle frames\n",index,(unsigned long)s.frames);throw std::runtime_error("Replay state gate timed out");}
+  if(!remaining){sor_log("REPLAY gate %u timed out after %lu idle frames\n",index,(unsigned long)s.frames);throw std::runtime_error("Replay state gate timed out");}
   --remaining;
  }else if(!--remaining){
-  printf("REPLAY segment %u complete\n",index);
+  sor_log("REPLAY segment %u complete\n",index);
   if(++index<count)remaining=segments[index].frames;
  }
  return true;

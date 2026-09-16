@@ -6,6 +6,8 @@ SOURCES := $(wildcard $(ROOT)/build/native/upstream/*.cpp) $(wildcard *.cpp) ../
 OBJS := $(SOURCES:.cpp=.o) $(ROOT)/build/native/memory.o $(ROOT)/build/native/save.o
 # Keep the synthesizer and its callbacks visible to the optimizer across files.
 # No fast-math: the PCM regression must remain byte-for-byte identical.
+# Repeat -O3 on the link command: KOS supplies a later -O2 in KOS_LDFLAGS,
+# which otherwise downgrades LTO optimization of these audio objects.
 AUDIO_OBJS := ../audio/audio_core.o ../audio/dac_driver.o $(wildcard $(ROOT)/build/native/upstream/ymfm_*.cpp)
 AUDIO_OBJS := $(AUDIO_OBJS:.cpp=.o)
 $(AUDIO_OBJS): KOS_CPPFLAGS += -O3 -flto
@@ -16,9 +18,9 @@ all: $(TARGET)
 $(OBJS): Makefile
 -include $(OBJS:.o=.d)
 $(TARGET): $(OBJS)
-	kos-c++ -o $@ $(OBJS) -lm
+	kos-c++ -O3 -flto -o $@ $(OBJS) -lm
 $(ROOT)/build/native/sor-test.elf: $(OBJS) $(ROOT)/build/native/embedded-rom.o
-	kos-c++ -o $@ $(OBJS) $(ROOT)/build/native/embedded-rom.o -lm
+	kos-c++ -O3 -flto -o $@ $(OBJS) $(ROOT)/build/native/embedded-rom.o -lm
 $(ROOT)/build/native/memory.o: $(ROOT)/src/core/memory.c
 	kos-cc -c $< -o $@
 $(ROOT)/build/native/save.o: $(ROOT)/src/core/save.c

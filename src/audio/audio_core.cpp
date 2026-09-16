@@ -9,6 +9,7 @@
 #include "dac_driver.hpp"
 #include <algorithm>
 #include <array>
+#include <stdexcept>
 
 
 struct NativeAudio::Impl:ymfm::ymfm_interface {
@@ -19,10 +20,16 @@ struct NativeAudio::Impl:ymfm::ymfm_interface {
     uint32_t bank=0;bool reset=true,bus=false;
     uint64_t samples=0,ztime=0,zTarget=0,ymClock=0,timer[2]{};
     unsigned zFraction=0;
+    struct WriteEvent {uint16_t sample;uint8_t port,value;};
+    std::array<WriteEvent,2048> events{};
+    std::array<ymfm::ym2612::output_data,890> block{};
+    unsigned eventCount=0,eventSample=0;bool collecting=false;
+
     uint32_t remainder=0;
     uint16_t tone[3]{1,1,1},counter[4]{1,1,1,16},noise=0x8000;
     uint8_t volume[4]{15,15,15,15},noiseControl=0,latch=0;
     bool polarity[4]{},noiseClock=false;
+    uint16_t ymBusAddress=0;uint8_t ymMode=0;
     uint8_t ymAddress[2]{};unsigned psgRemainder=0;
     static constexpr int amplitude[]={2800,2224,1767,1403,1115,886,704,559,444,353,280,222,177,140,111,0};
     int psgLevel=0;
@@ -157,9 +164,13 @@ void NativeAudio::setBusRequest(bool b){
 void NativeAudio::writeYM(unsigned p,uint8_t v){
     if(!impl)return;
     ymWrites++;
-    if(!(p&1))impl->ymAddress[p>>1]=v;
+    if(!(p&1)){impl->ymAddress[p>>1]=v;impl->ymBusAddress=((p&2)?0x100:0)|v;}
     else if(p==1&&impl->ymAddress[0]==0x2a)dacWrites++;
-    impl->fm.write(p,v);
+    if(p==1 && impl->ymBusAddress==0x27)impl->ymMode=v;
+    if(impl->collecting){
+        if(impl->eventCount==impl->events.size())throw std::runtime_error("Native sound event bound exceeded");
+        impl->events[impl->eventCount++]={uint16_t(impl->eventSample),uint8_t(p),v};
+    }else impl->fm.write(p,v);
 }
 uint8_t NativeAudio::readYM(unsigned p){return impl?impl->fm.read(p):0;}
 void NativeAudio::writePSG(uint8_t v){if(impl){psgWrites++;impl->psgWrite(v);}}
@@ -167,6 +178,67 @@ unsigned NativeAudio::renderFrame(int16_t *out,uint64_t (*clock)(),int16_t *dacS
     std::fill_n(profile,3,0);
     if(!impl)return 0;
     impl->remainder+=896040;unsigned n=impl->remainder/1008;impl->remainder%=1008;
+    // The hash-verified SoR DAC program writes the YM bus and reads RAM/ROM;
+    // its busy-bit polls see the same always-ready interface in both paths,
+    // and it does not write PSG. With CSM disabled, timer expirations affect
+    // status only. Advance their exact sample clocks while collecting, then collect
+    // those writes first, then render constant-register spans in one hot loop.
+    // Unknown drivers and timer users retain the interleaved reference path.
+    if(nativeDac && impl->driverKnown && !(impl->ymMode&0x80)){
+        batchFrames++;
+        auto begin=clock?clock():0;
+        impl->eventCount=0;impl->collecting=true;
+        for(unsigned i=0;i<n;i++){
+            unsigned pc=impl->cpu->reg.PC;
+            if(!impl->dac.active() && ram[0x1fff]<0x81 && (pc==0x32 || pc==0x33 || pc==0x35)){
+                // No writer can change the command mailbox during this frame.
+                // Advance the remaining idle polls once; final CPU state and
+                // deadline overshoot are identical, with no intervening bus event.
+                unsigned left=n-i,fraction=impl->zFraction+left*3;
+                impl->samples+=left;impl->zTarget+=left*67+fraction/15;impl->zFraction=fraction%15;
+                impl->runZ80(impl->zTarget);
+                for(unsigned t=0;t<left;t++){impl->ymClock+=144;impl->clockTimers();}
+                break;
+            }
+            impl->eventSample=i;impl->samples++;impl->zTarget+=67;impl->zFraction+=3;
+            if(impl->zFraction>=15){impl->zFraction-=15;impl->zTarget++;}
+            impl->runZ80(impl->zTarget);impl->ymClock+=144;impl->clockTimers();
+        }
+        impl->collecting=false;
+        auto generated=clock?clock():0;
+        unsigned at=0,event=0;
+        while(at<n){
+            while(event<impl->eventCount && impl->events[event].sample==at){
+                const auto &e=impl->events[event++];impl->fm.write(e.port,e.value);
+            }
+            // Address-latch writes have no waveform effect. Apply them ahead
+            // of the next data write so they do not split an otherwise constant span.
+            while(event<impl->eventCount && !(impl->events[event].port&1)){
+                const auto &e=impl->events[event++];impl->fm.write(e.port,e.value);
+            }
+            unsigned end=event<impl->eventCount?impl->events[event].sample:n;
+            impl->fm.generate(impl->block.data()+at,end-at);
+            if(dacStereo){
+                ymfm::ym2612::output_data component;impl->fm.dac_component(component);
+                for(unsigned i=at;i<end;i++)for(unsigned c=0;c<2;c++)dacStereo[i*2+c]=component.data[c];
+            }
+            at=end;
+        }
+
+        auto mixed=clock?clock():0;
+        for(unsigned i=0;i<n;i++){
+            int psg=impl->psgSample();
+            for(unsigned c=0;c<2;c++){
+                int combined=std::clamp<int32_t>(impl->block[i].data[c]+psg,-32768,32767);
+                int component=dacStereo?dacStereo[i*2+c]:0;
+                if(combined-component < -32768 || combined-component > 32767)component=0;
+                out[i*2+c]=combined-component;if(dacStereo)dacStereo[i*2+c]=component;
+            }
+        }
+        if(clock){profile[0]=generated-begin;profile[1]=mixed-generated;profile[2]=clock()-mixed;}
+        return n;
+    }
+    interleavedFrames++;
     for(unsigned i=0;i<n;i++){
         auto before=clock?clock():0;
         // 1008 / 15 = 67 + 3/15 Z80 clocks per sample, without wide division.

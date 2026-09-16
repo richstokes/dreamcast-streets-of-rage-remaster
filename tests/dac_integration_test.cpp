@@ -14,6 +14,14 @@ int main(int argc,char **argv){
  for(unsigned frame=0;frame<1000;frame++){
   random^=random<<13;random^=random>>17;random^=random<<5;
   for(auto core:cores){
+   if(frame%29==0){
+    // Live timers without CSM may be batched; CSM must retain the
+    // interleaved path because expiry retriggers FM operators.
+    core->writeYM(0,0x24);core->writeYM(1,random>>8);
+    core->writeYM(0,0x25);core->writeYM(1,random&3);
+    core->writeYM(0,0x26);core->writeYM(1,random>>16);
+    core->writeYM(0,0x27);core->writeYM(1,frame%58?0x3f:0xbf);
+   }
    if(frame%17==0)core->ram[0x1fff]=0x81+random%17;
    if(frame%113==0){core->setReset(true);core->setReset(false);}
    if(frame%3==0){
@@ -27,9 +35,11 @@ int main(int argc,char **argv){
   }
   auto n=reference.renderFrame(a);assert(n==native.renderFrame(b));assert(n==split.renderFrame(fm,nullptr,dac));
   assert(!std::memcmp(a,b,n*4));
+  assert(reference.readYM(0)==native.readYM(0));assert(reference.readYM(0)==split.readYM(0));
   for(unsigned i=0;i<n*2;i++)assert(int(fm[i])+dac[i]==a[i]);
   assert(!std::memcmp(reference.ram,native.ram,8192));assert(!std::memcmp(reference.ram,split.ram,8192));
  }
  assert(native.nativeDacSamples>1000&&split.nativeDacSamples==native.nativeDacSamples);
- puts("DAC integration: 1000 frames, commands/resets/BUSREQ/pan/low-bit; PCM, sound RAM and stem sums match");
+ assert(native.batchFrames>0 && native.interleavedFrames>0);
+ puts("DAC integration: 1000 frames, commands/resets/BUSREQ/pan/low-bit/timers/CSM; PCM, sound RAM and stem sums match");
 }

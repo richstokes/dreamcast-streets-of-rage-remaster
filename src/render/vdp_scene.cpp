@@ -115,17 +115,23 @@ void VdpScene::spriteLayers(VDPState &s){
             auto *dest=sprites[layer]+line*512;
             const auto *other=sprites[1-layer]+line*512;
             bool written=false;
-            for(int screenX=start;screenX<end;screenX++){
+            for(int screenX=start;screenX<end;){
                 const int px=flipX?w-1-(screenX-x):screenX-x;
+                const int run=std::min(end-screenX,flipX?(px&7)+1:8-(px&7));
                 const int address=(tile+(px/8)*cellsH+tileRow)*32+pixelRow*4;
-                if(address>VDPState::VRAM_SIZE-4)continue;
-                const unsigned byte=s.vram_[address+(px&7)/2];
-                const unsigned color=(px&1)?byte&15:byte>>4;
-                if(!color)continue;
-                if(dest[screenX]||other[screenX])s.status_|=0x20;
-                else {
-                    dest[screenX]=colors[palette*16+color];
-                    written=true;
+                if(address>VDPState::VRAM_SIZE-4){screenX+=run;continue;}
+                // Decode one packed tile row, then walk its nibbles. Tile
+                // addressing, facing and clipping are constant across this run.
+                uint32_t bits=(uint32_t(s.vram_[address])<<24)|(uint32_t(s.vram_[address+1])<<16)|
+                              (uint32_t(s.vram_[address+2])<<8)|s.vram_[address+3];
+                bits=flipX?bits>>((7-(px&7))*4):bits<<((px&7)*4);
+                if(!bits){screenX+=run;continue;}
+                for(int i=0;i<run;i++,screenX++){
+                    const unsigned color=flipX?bits&15:bits>>28;
+                    bits=flipX?bits>>4:bits<<4;
+                    if(!color)continue;
+                    if(dest[screenX]||other[screenX])s.status_|=0x20;
+                    else {dest[screenX]=colors[palette*16+color];written=true;}
                 }
             }
             if(written){spriteTop[layer]=std::min(spriteTop[layer],line);spriteBottom[layer]=std::max(spriteBottom[layer],line+1);}

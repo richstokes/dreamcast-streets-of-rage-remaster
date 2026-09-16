@@ -26,3 +26,6 @@ bool platform_audio_enabled();
 bool platform_audio_native_dac();
 
 bool platform_audio_split_dac();
+
+void platform_audio_report();
+bool platform_audio_profile();
