@@ -38,11 +38,27 @@ Same `phase-aligned-actions.json` replay, first 1,200 gameplay intervals:
 | Explicit link optimization flags | 20.625 ms | 28.5 ms | audio-link-o3-flycast.log |
 | Fused channel clock/output attempt | 21.961 ms | 29.5 ms | audio-fused-flycast.log |
 | Timer-safe blocks / packed sprite rows | 20.596 ms | 28.0 ms | audio-timer-flycast.log |
+| Indexed plane textures (below) | 17.626 ms | 23.0 ms | palette-flycast.log |
+| Burst DAC stepping / fixed FM algorithms | 17.134 ms | 21.5 ms | resume-switch-flycast.log |
+| Burst DAC / single generic FM algorithm | 17.287 ms | 22.0 ms | resume-compact-flycast.log |
 
 Logs are under ignored `build/logs/`. The large table and fused clock/output
 attempt were removed. Explicit `-O3` follows KOS's link flags, but its measured
 result was unchanged: flag order alone was not the remaining bottleneck.
 Synchronous-log and deferred-log worst frames are not directly comparable.
+
+Burst DAC stepping runs the recognized driver once per video frame instead of
+once per output sample; each YM write keeps the sample boundary of its original
+instruction start clock. Complete DAC program steps execute natively; partial
+steps retain their original cycle timing. Over the whole 1,653-interval replay
+it reduced missed refreshes from 56 to 29 and underruns from 142 to 99
+(against `audio-pointer-flycast.log`). Its full replay output matches the
+native-audio checkpoint byte-for-byte (PCM and every RAM snapshot).
+Replacing the eight specialized FM algorithms with the generic path was slower
+(40 missed refreshes, 118 underruns, busiest-frame FM output 5.30 → 5.70 ms) and
+was reverted. Repeated runs of the same image produced identical Flycast counters,
+so single A/B runs are meaningful here. `tools/bench-flycast.sh <name>` packages
+the replay, runs it in background Flycast and keeps `build/logs/<name>-flycast.log`.
 
 ## Correctness gates passed so far
 

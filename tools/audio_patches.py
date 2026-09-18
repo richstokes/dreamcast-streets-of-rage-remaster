@@ -133,7 +133,17 @@ void fm_engine_base<RegisterType>::output_single(output_data &result, uint32_t r
     m_sor_am_shift=(1u<<(m_regs.ch_lfo_am_sens(m_choffs)^3))-1;''')
         marker='template<class RegisterType>\nvoid fm_channel<RegisterType>::output_4op(output_data &output, uint32_t rshift, int32_t clipmax) const'
         wrapper=marker+''' {
-    output_4op_fixed<-1>(output,rshift,clipmax);
+    switch(m_sor_algorithm) {
+        case 0: output_4op_fixed<0>(output,rshift,clipmax);break;
+        case 1: output_4op_fixed<1>(output,rshift,clipmax);break;
+        case 2: output_4op_fixed<2>(output,rshift,clipmax);break;
+        case 3: output_4op_fixed<3>(output,rshift,clipmax);break;
+        case 4: output_4op_fixed<4>(output,rshift,clipmax);break;
+        case 5: output_4op_fixed<5>(output,rshift,clipmax);break;
+        case 6: output_4op_fixed<6>(output,rshift,clipmax);break;
+        case 7: output_4op_fixed<7>(output,rshift,clipmax);break;
+        default: output_4op_fixed<-1>(output,rshift,clipmax);break;
+    }
 }
 
 template<class RegisterType>
