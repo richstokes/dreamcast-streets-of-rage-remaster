@@ -41,5 +41,5 @@ private:
     SystemMemory mem_; VDPState state_; VDP port_; VDPTile tile_; Framebuffer fb_; VDPRenderer renderer_;
     Controllers pads_; NativeAudio audio_;
     uint8_t th_[2]{0x40,0x40}; uint8_t *rom_=nullptr; bool quit_=false; int irq_=0;
-    uint64_t cycles_=0; uint32_t last_=0,frames_=0,paceCount_=0;
+    uint64_t cycles_=0,frameCycles_=0; uint32_t last_=0,frames_=0,paceCount_=0;
 };

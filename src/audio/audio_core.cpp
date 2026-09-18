@@ -10,6 +10,10 @@
 #include <algorithm>
 #include <array>
 #include <stdexcept>
+#ifndef __DREAMCAST__
+#include <cstdio>
+#include <cstdlib>
+#endif
 
 
 struct NativeAudio::Impl:ymfm::ymfm_interface {
@@ -24,7 +28,21 @@ struct NativeAudio::Impl:ymfm::ymfm_interface {
     std::array<WriteEvent,2048> events{};
     std::array<ymfm::ym2612::output_data,890> block{};
     unsigned eventCount=0,eventSample=0,eventSamples=0;bool collecting=false,burst=false,driving=false;
+    // 68000 writes for the next block (sample offsets), and the merge scratch.
+    std::array<WriteEvent,1024> cpuEvents{};std::array<WriteEvent,512> cpuPsg{};
+    std::array<WriteEvent,3072> merged{};
+    unsigned cpuEventCount=0,cpuPsgCount=0,cpuOverflows=0;bool z80AddressOpen=false;
     uint64_t instructionClock=0;std::array<uint64_t,890> sampleTargets{};
+    // Host analysis only (SOR_YM_LOG): each chip write with the index of the
+    // first output sample it affects. 10-byte records: u64 sample, port, value;
+    // port 4 marks PSG writes.
+    uint64_t blockStart=0;bool perSample=false;std::FILE *ymLog=nullptr;
+    void logWrite(unsigned port,uint8_t value,int offset=-1){
+        if(!ymLog)return;
+        uint64_t at=offset>=0?samples+offset:collecting?blockStart+eventSample:samples-(perSample?1:0);
+        uint8_t record[10];for(int i=0;i<8;i++)record[i]=uint8_t(at>>(i*8));record[8]=uint8_t(port);record[9]=value;
+        std::fwrite(record,1,10,ymLog);
+    }
 
     uint32_t remainder=0;
     uint16_t tone[3]{1,1,1},counter[4]{1,1,1,16},noise=0x8000;
@@ -37,7 +55,13 @@ struct NativeAudio::Impl:ymfm::ymfm_interface {
     void setPolarity(unsigned c,bool value){
         if(polarity[c]!=value){polarity[c]=value;psgLevel+=(value?2:-2)*amplitude[volume[c]];}
     }
-    explicit Impl(NativeAudio &o):owner(o),fm(*this),dac(o.ram,this,read,write){fm.reset();resetCpu();}
+    explicit Impl(NativeAudio &o):owner(o),fm(*this),dac(o.ram,this,read,write){
+        fm.reset();resetCpu();
+#ifndef __DREAMCAST__
+        if(const char *path=std::getenv("SOR_YM_LOG"))ymLog=std::fopen(path,"wb");
+#endif
+    }
+    ~Impl(){if(ymLog)std::fclose(ymLog);}
     void ymfm_set_timer(uint32_t n,int32_t clocks)override{timer[n]=clocks<0?0:ymClock+clocks;}
     void clockTimers(){for(unsigned n=0;n<2;n++)if(timer[n]&&ymClock>=timer[n]){timer[n]=0;m_engine->engine_timer_expired(n);}}
     void resetCpu(){
@@ -111,6 +135,27 @@ struct NativeAudio::Impl:ymfm::ymfm_interface {
         else {while(ticks>=period){ticks-=period;edges++;}left=period-ticks;}
         return edges;
     }
+    // Merge 68000 writes into the Z80's collected writes by sample. Each CPU
+    // keeps the shared address latch from its address write to its data
+    // write (the 68000 holds BUSREQ and waits out the DAC driver's busy flag),
+    // so neither splits the other's pair; a held write moves to a later sample.
+    unsigned mergeEvents(unsigned n){
+        unsigned a=0,z=0,count=0,last=0;int owner=0; // 1: 68000, 2: Z80
+        while(a<cpuEventCount || z<eventCount){
+            bool takeCpu;
+            if(owner==1 && a<cpuEventCount)takeCpu=true;
+            else if(owner==2 && z<eventCount)takeCpu=false;
+            else if(a>=cpuEventCount)takeCpu=false;
+            else if(z>=eventCount)takeCpu=true;
+            else takeCpu=std::min<unsigned>(cpuEvents[a].sample,n-1)<=events[z].sample;
+            WriteEvent e=takeCpu?cpuEvents[a++]:events[z++];
+            e.sample=uint16_t(std::max<unsigned>(last,std::min<unsigned>(e.sample,n-1)));last=e.sample;
+            owner=(e.port&1)?0:(takeCpu?1:2);
+            merged[count++]=e;
+        }
+        cpuEventCount=0;
+        return count;
+    }
     int psgSample(){
         if((volume[0]&volume[1]&volume[2]&volume[3])==15){
             unsigned ticks=(psgRemainder+1008)/240;psgRemainder=(psgRemainder+1008)%240;
@@ -169,17 +214,34 @@ void NativeAudio::setBusRequest(bool b){
 }
 void NativeAudio::writeYM(unsigned p,uint8_t v){
     if(!impl)return;
-    ymWrites++;
+    ymWrites++;impl->logWrite(p,v);
     if(!(p&1)){impl->ymAddress[p>>1]=v;impl->ymBusAddress=((p&2)?0x100:0)|v;}
     else if(p==1&&impl->ymAddress[0]==0x2a)dacWrites++;
     if(p==1 && impl->ymBusAddress==0x27)impl->ymMode=v;
     if(impl->collecting){
         if(impl->eventCount==impl->events.size())throw std::runtime_error("Native sound event bound exceeded");
         impl->events[impl->eventCount++]={uint16_t(impl->eventSample),uint8_t(p),v};
-    }else impl->fm.write(p,v);
+    }else{impl->z80AddressOpen=!(p&1);impl->fm.write(p,v);}
+}
+void NativeAudio::writeYM68k(unsigned p,uint8_t v,uint32_t clocks){
+    if(!impl)return;
+    auto &s=*impl;
+    if(s.cpuEventCount==s.cpuEvents.size()){s.cpuOverflows++;writeYM(p,v);return;}
+    ymWrites++;s.logWrite(p,v,int(std::min<uint32_t>(clocks/1008,888)));
+    if(!(p&1)){s.ymAddress[p>>1]=v;s.ymBusAddress=((p&2)?0x100:0)|v;}
+    else if(p==1&&s.ymAddress[0]==0x2a)dacWrites++;
+    if(p==1 && s.ymBusAddress==0x27)s.ymMode=v;
+    s.cpuEvents[s.cpuEventCount++]={uint16_t(std::min<uint32_t>(clocks/1008,888)),uint8_t(p),v};
+}
+void NativeAudio::writePSG68k(uint8_t v,uint32_t clocks){
+    if(!impl)return;
+    auto &s=*impl;
+    if(s.cpuPsgCount==s.cpuPsg.size()){s.cpuOverflows++;writePSG(v);return;}
+    psgWrites++;s.logWrite(4,v,int(std::min<uint32_t>(clocks/1008,888)));
+    s.cpuPsg[s.cpuPsgCount++]={uint16_t(std::min<uint32_t>(clocks/1008,888)),0,v};
 }
 uint8_t NativeAudio::readYM(unsigned p){return impl?impl->fm.read(p):0;}
-void NativeAudio::writePSG(uint8_t v){if(impl){psgWrites++;impl->psgWrite(v);}}
+void NativeAudio::writePSG(uint8_t v){if(impl){psgWrites++;impl->logWrite(4,v);impl->psgWrite(v);}}
 unsigned NativeAudio::renderFrame(int16_t *out,uint64_t (*clock)(),int16_t *dacStereo){
     std::fill_n(profile,5,0);
     if(!impl)return 0;
@@ -195,7 +257,7 @@ unsigned NativeAudio::renderFrame(int16_t *out,uint64_t (*clock)(),int16_t *dacS
         batchFrames++;
         auto begin=clock?clock():0;
         impl->eventCount=0;impl->collecting=true;
-        impl->eventSample=0;impl->eventSamples=n;
+        impl->eventSample=0;impl->eventSamples=n;impl->blockStart=impl->samples;
         for(unsigned i=0;i<n;i++){
             impl->samples++;impl->zTarget+=67;impl->zFraction+=3;
             if(impl->zFraction>=15){impl->zFraction-=15;impl->zTarget++;}
@@ -207,18 +269,19 @@ unsigned NativeAudio::renderFrame(int16_t *out,uint64_t (*clock)(),int16_t *dacS
         impl->burst=true;impl->runZ80(impl->zTarget);impl->burst=false;
         for(unsigned i=0;i<n;i++){impl->ymClock+=144;impl->clockTimers();}
         impl->collecting=false;
+        const unsigned total=impl->mergeEvents(n);const auto &events=impl->merged;
         auto generated=clock?clock():0;
         unsigned at=0,event=0;
         while(at<n){
-            while(event<impl->eventCount && impl->events[event].sample==at){
-                const auto &e=impl->events[event++];impl->fm.write(e.port,e.value);
+            while(event<total && events[event].sample==at){
+                const auto &e=events[event++];impl->fm.write(e.port,e.value);
             }
             // Address-latch writes have no waveform effect. Apply them ahead
             // of the next data write so they do not split an otherwise constant span.
-            while(event<impl->eventCount && !(impl->events[event].port&1)){
-                const auto &e=impl->events[event++];impl->fm.write(e.port,e.value);
+            while(event<total && !(events[event].port&1)){
+                const auto &e=events[event++];impl->fm.write(e.port,e.value);
             }
-            unsigned end=event<impl->eventCount?impl->events[event].sample:n;
+            unsigned end=event<total?events[event].sample:n;
             impl->fm.sor_generate_span(impl->block.data()+at,end-at);
             if(dacStereo){
                 ymfm::ym2612::output_data component;impl->fm.dac_component(component);
@@ -228,7 +291,9 @@ unsigned NativeAudio::renderFrame(int16_t *out,uint64_t (*clock)(),int16_t *dacS
         }
 
         auto mixed=clock?clock():0;
+        unsigned psgEvent=0;
         for(unsigned i=0;i<n;i++){
+            while(psgEvent<impl->cpuPsgCount && std::min<unsigned>(impl->cpuPsg[psgEvent].sample,n-1)<=i)impl->psgWrite(impl->cpuPsg[psgEvent++].value);
             int psg=impl->psgSample();
             for(unsigned c=0;c<2;c++){
                 int combined=std::clamp<int32_t>(impl->block[i].data[c]+psg,-32768,32767);
@@ -237,19 +302,31 @@ unsigned NativeAudio::renderFrame(int16_t *out,uint64_t (*clock)(),int16_t *dacS
                 out[i*2+c]=combined-component;if(dacStereo)dacStereo[i*2+c]=component;
             }
         }
+        while(psgEvent<impl->cpuPsgCount)impl->psgWrite(impl->cpuPsg[psgEvent++].value);
+        impl->cpuPsgCount=0;
         if(clock){profile[0]=generated-begin;profile[1]=mixed-generated;profile[2]=clock()-mixed;fmWorkload=impl->fm.workload();profile[3]=impl->fm.profile_clocking;profile[4]=impl->fm.profile_output;}
         return n;
     }
     interleavedFrames++;
+    unsigned cpuEvent=0,psgEvent=0;
+    auto applyCpu=[&](unsigned upTo){
+        // Never inside the Z80's address/data pair; keep 68000 pairs together.
+        while(cpuEvent<impl->cpuEventCount && !impl->z80AddressOpen && std::min<unsigned>(impl->cpuEvents[cpuEvent].sample,n-1)<=upTo){
+            const auto &e=impl->cpuEvents[cpuEvent++];impl->fm.write(e.port,e.value);
+            if(!(e.port&1) && cpuEvent<impl->cpuEventCount){const auto &d=impl->cpuEvents[cpuEvent++];impl->fm.write(d.port,d.value);}
+        }
+    };
     for(unsigned i=0;i<n;i++){
         auto before=clock?clock():0;
         // 1008 / 15 = 67 + 3/15 Z80 clocks per sample, without wide division.
         impl->samples++;impl->zTarget+=67;impl->zFraction+=3;
         if(impl->zFraction>=15){impl->zFraction-=15;impl->zTarget++;}
-        impl->ymClock+=144;impl->runZ80(impl->zTarget);impl->clockTimers();
+        impl->ymClock+=144;impl->perSample=true;impl->runZ80(impl->zTarget);impl->perSample=false;impl->clockTimers();
+        applyCpu(i);
         auto afterZ80=clock?clock():0;
         ymfm::ym2612::output_data fm;impl->fm.generate(&fm);
         auto afterFM=clock?clock():0;
+        while(psgEvent<impl->cpuPsgCount && std::min<unsigned>(impl->cpuPsg[psgEvent].sample,n-1)<=i)impl->psgWrite(impl->cpuPsg[psgEvent++].value);
         int psg=impl->psgSample();
         if(clock){profile[0]+=afterZ80-before;profile[1]+=afterFM-afterZ80;profile[2]+=clock()-afterFM;}
         ymfm::ym2612::output_data dac;
@@ -264,5 +341,8 @@ unsigned NativeAudio::renderFrame(int16_t *out,uint64_t (*clock)(),int16_t *dacS
             if(dacStereo)dacStereo[i*2+c]=component;
         }
     }
+    impl->z80AddressOpen=false;applyCpu(n);impl->cpuEventCount=0;
+    while(psgEvent<impl->cpuPsgCount)impl->psgWrite(impl->cpuPsg[psgEvent++].value);
+    impl->cpuPsgCount=0;
     return n;
 }

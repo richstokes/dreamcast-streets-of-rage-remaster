@@ -1,0 +1,108 @@
+{
+ "date": "2026-09-19",
+ "scenario": "reference/scenarios/phase-aligned-actions.json",
+ "segment": 9,
+ "original": "Genesis Plus GX libretro (MAME YM2612), build/genesis-audio-actions",
+ "native": "headless, timestamped 68000 chip writes",
+ "sound_driver_state": {
+  "segment": 9,
+  "original_gate": 1384,
+  "native_gate": 1385,
+  "compared_frames": 1300,
+  "music_offset": -47,
+  "effect_offset": 1,
+  "blocks": {
+   "music FM0": {
+    "equal": 1300,
+    "active_frames": 1300,
+    "differing_bytes": {}
+   },
+   "music FM1": {
+    "equal": 1300,
+    "active_frames": 1300,
+    "differing_bytes": {}
+   },
+   "music FM2": {
+    "equal": 972,
+    "active_frames": 1300,
+    "differing_bytes": {
+     "0": 318,
+     "27": 46
+    }
+   },
+   "music FM3": {
+    "equal": 1237,
+    "active_frames": 1300,
+    "differing_bytes": {
+     "0": 63
+    }
+   },
+   "music FM4": {
+    "equal": 1300,
+    "active_frames": 1300,
+    "differing_bytes": {}
+   },
+   "music DAC": {
+    "equal": 1237,
+    "active_frames": 1300,
+    "differing_bytes": {
+     "0": 63
+    }
+   },
+   "music PSG0": {
+    "equal": 1300,
+    "active_frames": 1300,
+    "differing_bytes": {}
+   },
+   "music PSG1": {
+    "equal": 1300,
+    "active_frames": 1300,
+    "differing_bytes": {}
+   },
+   "music PSG2": {
+    "equal": 1300,
+    "active_frames": 0,
+    "differing_bytes": {}
+   },
+   "effect FM0": {
+    "equal": 1300,
+    "active_frames": 381,
+    "differing_bytes": {}
+   },
+   "effect FM1": {
+    "equal": 1300,
+    "active_frames": 19,
+    "differing_bytes": {}
+   },
+   "effect PSG0": {
+    "equal": 1300,
+    "active_frames": 0,
+    "differing_bytes": {}
+   },
+   "effect PSG1": {
+    "equal": 1300,
+    "active_frames": 0,
+    "differing_bytes": {}
+   }
+  }
+ },
+ "audio_music_aligned": {
+  "SPECTRAL": "SPECTRAL windows=21 lag_ms p5=-10 median=0 p95=0 band_correlation p5=0.788 median=0.963 min=0.745",
+  "ONSETS": "ONSETS windows=21 lag_ms p5=-10 median=0 p95=0 correlation p5=0.304 median=0.651 control(5 s misaligned) median=0.373 p95=0.481",
+  "BAND_LEVEL_DB": "BAND_LEVEL_DB 65Hz:-3.4 78Hz:+0.0 93Hz:-3.7 111Hz:-3.9 132Hz:-3.4 157Hz:-3.7 187Hz:-3.4 222Hz:-3.5 265Hz:-4.3 315Hz:-3.9 375Hz:-3.4 447Hz:-3.3 532Hz:-3.4 633Hz:-3.3 754Hz:-3.3 898Hz:-3.3 1069Hz:-3.3 1273Hz:-3.4 1516Hz:-3.3 1805Hz:-3.2 2149Hz:-2.9 2559Hz:-2.7 3047Hz:-2.8 3628Hz:-2.8 4320Hz:-2.2 5145Hz:-2.1 6126Hz:-1.7 7294Hz:-1.4 8685Hz:-0.8 10342Hz:-0.3 12314Hz:+0.8 14663Hz:+1.6",
+  "RMS_DB": "RMS_DB original=-21.6 native=-24.8",
+  "SUMMARY": "SUMMARY windows=42 silent=0 lag_ms p5=-7.96 median=-1.68 p95=10.48 correlation p5=0.172 median=0.453"
+ },
+ "audio_gameplay_aligned": {
+  "SPECTRAL": "SPECTRAL windows=21 lag_ms p5=-100 median=10 p95=20 band_correlation p5=0.881 median=0.894 min=0.751",
+  "ONSETS": "ONSETS windows=21 lag_ms p5=-100 median=10 p95=20 correlation p5=0.297 median=0.395 control(5 s misaligned) median=0.395 p95=0.479",
+  "BAND_LEVEL_DB": "BAND_LEVEL_DB 65Hz:-3.1 78Hz:+0.0 93Hz:-3.4 111Hz:-3.5 132Hz:-3.1 157Hz:-3.6 187Hz:-3.1 222Hz:-3.4 265Hz:-4.4 315Hz:-3.8 375Hz:-3.4 447Hz:-3.4 532Hz:-3.5 633Hz:-3.2 754Hz:-3.3 898Hz:-3.3 1069Hz:-3.2 1273Hz:-3.1 1516Hz:-3.1 1805Hz:-2.9 2149Hz:-2.5 2559Hz:-2.3 3047Hz:-2.3 3628Hz:-2.3 4320Hz:-1.8 5145Hz:-1.5 6126Hz:-1.0 7294Hz:-0.8 8685Hz:-0.2 10342Hz:+0.3 12314Hz:+1.4 14663Hz:+2.2",
+  "RMS_DB": "RMS_DB original=-21.6 native=-24.8",
+  "SUMMARY": "SUMMARY windows=42 silent=0 lag_ms p5=-99.02 median=-2.11 p95=67.21 correlation p5=0.100 median=0.141"
+ },
+ "previous_native_frame_boundary_writes": {
+  "spectral_band_correlation_median": 0.765,
+  "onset_correlation_median": 0.47,
+  "bass_65_130hz_db": -20
+ }
+}

@@ -65,8 +65,9 @@ void MegaDriveEnvironment::writeBus(void *ctx,uint32_t a,unsigned w,uint32_t v){
     }
     if(a>=0xa00000 && a<0xa02000){e.audio_.ram[a&8191]=w==1?v:v>>8;if(w==2)e.audio_.ram[(a+1)&8191]=v;return;}
     if(a==0xa10003 || a==0xa10005){e.th_[a==0xa10005]=v&64;return;}
-    if(a>=0xa04000&&a<=0xa04003){e.audio_.writeYM(a&3,v);return;}
-    if(a==0xc00011){e.audio_.writePSG(v);return;}
+    // Emulated 68000 time since the frame began places each write in the next block.
+    if(a>=0xa04000&&a<=0xa04003){e.audio_.writeYM68k(a&3,v,uint32_t(e.cycles_-e.frameCycles_));return;}
+    if(a==0xc00011){e.audio_.writePSG68k(v,uint32_t(e.cycles_-e.frameCycles_));return;}
     if(a==0xa11100){e.audio_.setBusRequest(v&0x100);return;}
     if(a==0xa11200){e.audio_.setReset(!(v&0x100));return;}
     if((a>=0xa10000&&a<0xa14004)||(a>=0xa04000&&a<=0xa04003)||a==0xc00011)return;
@@ -103,7 +104,7 @@ void MegaDriveEnvironment::waitForInterrupt(){
     if(audio_.enabled&&frames_%600==599)sor_log("DAC_NATIVE starts=%llu samples=%llu batch_frames=%llu interleaved_frames=%llu\n",audio_.nativeDacStarts,audio_.nativeDacSamples,audio_.batchFrames,audio_.interleavedFrames);
     if(audio_.enabled&&platform_audio_profile()&&frames_%600==599)sor_log("AUDIO_PARTS z80=%llu fm=%llu psg=%llu dynamic_ops=%lu ssg_ops=%lu live_ops=%lu fm_clock_us=%llu fm_output_us=%llu audible_ops=%lu\n",audio_.profile[0],audio_.profile[1],audio_.profile[2],(unsigned long)(audio_.fmWorkload&255),(unsigned long)((audio_.fmWorkload>>8)&255),(unsigned long)((audio_.fmWorkload>>16)&255),audio_.profile[3],audio_.profile[4],(unsigned long)(audio_.fmWorkload>>24));
     const auto presentStart=platform_time_us();
-    present(); pads_.poll(mem_.state.ram); frames_++; cycles_+=896040; irq_=6;
+    present(); pads_.poll(mem_.state.ram); frames_++; cycles_+=896040; frameCycles_=cycles_; irq_=6;
     platform_frame_parts(uint32_t(synthDone-audioStart),uint32_t(platform_time_us()-presentStart));
 }
 void MegaDriveEnvironment::paceInterrupt(){

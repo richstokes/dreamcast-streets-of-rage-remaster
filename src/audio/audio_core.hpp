@@ -14,6 +14,13 @@ public:
     void writeRAMFor68K(uint16_t a,uint8_t v){ram[a&8191]=v;}
     void writeYM(unsigned port,uint8_t value);uint8_t readYM(unsigned port);
     void writePSG(uint8_t value);
+    // 68000-side chip writes, stamped with master clocks since the current
+    // frame began. They take effect at that sample of the next rendered block
+    // (the driver's key-off, note setup and key-on are microseconds apart on
+    // hardware, and the chip clocks between them). writeYM/writePSG apply
+    // immediately and remain the Z80 path and the between-frame test path.
+    void writeYM68k(unsigned port,uint8_t value,uint32_t clocks);
+    void writePSG68k(uint8_t value,uint32_t clocks);
     unsigned renderFrame(int16_t *stereo,uint64_t (*clock)()=nullptr,int16_t *dacStereo=nullptr);
     uint32_t fmWorkload=0;
     uint64_t profile[5]{}; // At most 890 stereo frames.
