@@ -6,12 +6,14 @@
 #include <stdexcept>
 #include "vdp_scene.hpp"
 #include "pvr_tiles.hpp"
+#include "equal_bytes.hpp"
 namespace {
 std::unique_ptr<sor::VdpScene> scene;
 pvr_ptr_t tiles=nullptr,spriteTexture[2]{};
 pvr_poly_hdr_t tileHeaders[8192],spriteHeaders[2];
-uint8_t previousTiles[65536]{},valid[2048]{};
-uint16_t previousColors[64]{};
+alignas(32) uint8_t previousTiles[65536]{};
+uint8_t valid[2048]{};
+alignas(32) uint16_t previousColors[64]{};
 bool opaque[2048]{},planeTiles[2048]{};
 uint32_t frames=0;
 struct alignas(32) Packet {pvr_poly_hdr_t header;pvr_vertex_t vertices[4];};
@@ -59,11 +61,11 @@ bool dc_render_vdp(VDPState &state,VDPRenderer &renderer){
     const auto ready=timer_us_gettime64();
     bool opacityChanged=false;
     if(!same || !frames){
-        for(int p=0;p<4;p++)if(!frames || std::memcmp(previousColors+p*16,scene->colors+p*16,32)){
+        for(int p=0;p<4;p++)if(!frames || !sor::equal_bytes(previousColors+p*16,scene->colors+p*16,32)){
             for(int c=0;c<16;c++)pvr_set_pal_entry(p*16+c,c?scene->colors[p*16+c]:0);
             std::memcpy(previousColors+p*16,scene->colors+p*16,32);
         }
-        for(int t=0;t<2048;t++)if(std::memcmp(previousTiles+t*32,state.vram_+t*32,32)){
+        for(int t=0;t<2048;t++)if(!sor::equal_bytes(previousTiles+t*32,state.vram_+t*32,32)){
             valid[t]=0;std::memcpy(previousTiles+t*32,state.vram_+t*32,32);
             const bool wasOpaque=opaque[t];
             opaque[t]=false;for(int j=0;j<32;j++)opaque[t]|=state.vram_[t*32+j]!=0;

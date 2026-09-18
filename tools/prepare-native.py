@@ -48,6 +48,8 @@ if '--dreamcast' in sys.argv:
     if split not in ('0','1'):raise SystemExit('SOR_DAC_AICA must be 0 or 1')
     profile=os.environ.get('SOR_AUDIO_PROFILE','0')
     if profile not in ('0','1'):raise SystemExit('SOR_AUDIO_PROFILE must be 0 or 1')
+    pcprofile=os.environ.get('SOR_PC_PROFILE','0')
+    if pcprofile not in ('0','1'):raise SystemExit('SOR_PC_PROFILE must be 0 or 1')
     config=D/'sor_audio_config.hpp'
-    text='#pragma once\n#define SOR_ENABLE_EXPERIMENTAL_AUDIO '+audio+'\n#define SOR_ENABLE_NATIVE_DAC '+native+'\n#define SOR_ENABLE_AICA_DAC '+split+'\n#define SOR_ENABLE_AUDIO_PROFILE '+profile+'\n'
+    text='#pragma once\n#define SOR_ENABLE_EXPERIMENTAL_AUDIO '+audio+'\n#define SOR_ENABLE_NATIVE_DAC '+native+'\n#define SOR_ENABLE_AICA_DAC '+split+'\n#define SOR_ENABLE_AUDIO_PROFILE '+profile+'\n#define SOR_ENABLE_PC_PROFILE '+pcprofile+'\n'
     if not config.exists() or config.read_text()!=text:config.write_text(text)

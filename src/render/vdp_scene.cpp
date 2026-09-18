@@ -1,4 +1,5 @@
 #include "vdp_scene.hpp"
+#include "equal_bytes.hpp"
 #include <algorithm>
 #include <cstring>
 #include <stdexcept>
@@ -18,10 +19,10 @@ void window_span(const VDPState &s,int y,int &a,int &b){
 }
 uint16_t entry(const VDPState &s,int a){return (s.vram_[a&65535]<<8)|s.vram_[(a+1)&65535];}
 bool unchanged_region(const VDPState &a,const VDPState &b,int base,int length){
-    if(length>=65536)return !std::memcmp(a.vram_,b.vram_,65536);
+    if(length>=65536)return equal_bytes(a.vram_,b.vram_,65536);
     base&=65535;int first=std::min(length,65536-base);
-    return !std::memcmp(a.vram_+base,b.vram_+base,first)
-        && (first==length || !std::memcmp(a.vram_,b.vram_,length-first));
+    return equal_bytes(a.vram_+base,b.vram_+base,first)
+        && (first==length || equal_bytes(a.vram_,b.vram_,length-first));
 }
 bool same_geometry_regs(const VDPState &a,const VDPState &b){
     for(unsigned i:{1u,2u,3u,4u,11u,12u,13u,16u,17u,18u})if(a.regs_[i]!=b.regs_[i])return false;
@@ -37,10 +38,10 @@ uint16_t VdpScene::rgb1555(unsigned r,unsigned g,unsigned b){
 }
 bool VdpScene::buildCached(VDPState &s,VDPRenderer &){
     reused=cacheValid && same_render_regs(s,previous)
-        && !std::memcmp(s.vram_,previous.vram_,sizeof(s.vram_))
-        && !std::memcmp(s.cram_,previous.cram_,sizeof(s.cram_))
-        && !std::memcmp(s.vsram_,previous.vsram_,sizeof(s.vsram_))
-        && !std::memcmp(s.sat_,previous.sat_,sizeof(s.sat_));
+        && equal_bytes(s.vram_,previous.vram_,sizeof(s.vram_))
+        && equal_bytes(s.cram_,previous.cram_,sizeof(s.cram_))
+        && equal_bytes(s.vsram_,previous.vsram_,sizeof(s.vsram_))
+        && equal_bytes(s.sat_,previous.sat_,sizeof(s.sat_));
     if(reused){
         planesReused=true;
         s.status_|=spriteFlags;
@@ -49,7 +50,7 @@ bool VdpScene::buildCached(VDPState &s,VDPRenderer &){
     }
     int mapBytes=s.planeWidthCells()*s.planeHeightCells()*2;
     bool geometrySame=cacheValid && same_geometry_regs(s,previous)
-        && !std::memcmp(s.vsram_,previous.vsram_,sizeof(s.vsram_))
+        && equal_bytes(s.vsram_,previous.vsram_,sizeof(s.vsram_))
         && unchanged_region(s,previous,s.planeABase(),mapBytes)
         && unchanged_region(s,previous,s.planeBBase(),mapBytes)
         && unchanged_region(s,previous,s.windowBase(),(s.h40Mode()?64:32)*32*2)

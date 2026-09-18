@@ -23,7 +23,9 @@ public:
     NativeAudio &sound(){return audio_;}
     bool shouldQuit()const{return quit_;}
     int irqLevel()const{return irq_;} void clearInterrupt(int){irq_=0;}
-    void pace(); void waitForInterrupt(); void debugState();
+    // Called before every translated instruction; keep the common case inline.
+    void pace(){cycles_+=28;if(++paceCount_>=32000)paceInterrupt();}
+    void waitForInterrupt(); void debugState();
     void traceEnter(m_long a){last_=a;} m_long lastFunction()const{return last_;}
     void reportUnhandledDispatch(m_long);
     void confirmSpeculative(m_long){}
@@ -35,7 +37,7 @@ protected:
 private:
     static uint32_t readBus(void *,uint32_t,unsigned);
     static void writeBus(void *,uint32_t,unsigned,uint32_t);
-    void present();
+    void present(); void paceInterrupt();
     SystemMemory mem_; VDPState state_; VDP port_; VDPTile tile_; Framebuffer fb_; VDPRenderer renderer_;
     Controllers pads_; NativeAudio audio_;
     uint8_t th_[2]{0x40,0x40}; uint8_t *rom_=nullptr; bool quit_=false; int irq_=0;

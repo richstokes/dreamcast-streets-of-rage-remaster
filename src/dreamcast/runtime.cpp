@@ -106,10 +106,9 @@ void MegaDriveEnvironment::waitForInterrupt(){
     present(); pads_.poll(mem_.state.ram); frames_++; cycles_+=896040; irq_=6;
     platform_frame_parts(uint32_t(synthDone-audioStart),uint32_t(platform_time_us()-presentStart));
 }
-void MegaDriveEnvironment::pace(){
-    cycles_+=28;
+void MegaDriveEnvironment::paceInterrupt(){
     // Boot/polling paths outside the hand-written frame loop still require IRQ progress.
-    if(++paceCount_>=32000){paceCount_=0;if(!irq_ && cpuInterruptMask()<6)waitForInterrupt();}
+    paceCount_=0;if(!irq_ && cpuInterruptMask()<6)waitForInterrupt();
 }
 void MegaDriveEnvironment::reportUnhandledDispatch(m_long a){
     sor_log("SOR UNHANDLED %06lx caller=%06lx\n",(unsigned long)a,(unsigned long)last_);

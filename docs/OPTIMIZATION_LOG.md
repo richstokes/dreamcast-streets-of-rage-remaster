@@ -91,6 +91,7 @@ remaining (game logic) time and the mode word. Whole-replay results:
 | DMA fill decodes registers once | 26 | 7 | 18,900 | vdp-fill-flycast.log |
 | LTO for VDP state/port and bus glue | 19 | 5 | 12,834 | vdp-lto-flycast.log |
 | FM fast runs between envelope steps | 14 | 3 | 9,151 | fm-fast-flycast.log |
+| Word-wise renderer cache compares (PC profiler on) | 10 | 2 | 7,373 | pcprof-eq-flycast.log |
 
 - **Stream cushion.** KOS fills both 4,096-frame halves on start; starting at
   8,192 queued frames left ~700 frames of cushion, so ordinary jitter met refill
@@ -127,6 +128,18 @@ remaining (game logic) time and the mode word. Whole-replay results:
   7.3 → 6.2 ms. Envelope-run, fast-AM and fast-output mutants fail the FM test.
   A `SLOW` line means two VBlanks passed between frame starts; the queued PVR
   frame can still absorb that, so flips versus VBlanks is the refresh metric.
+
+- **PC profiler.** `SOR_PC_PROFILE=1` samples the interrupted PC at 10 kHz from
+  TMU1 (Flycast does not raise the watchdog interval interrupt) into gameplay and
+  other bins; `tools/pc-profile.py <log>` resolves them against `build/native/sor.elf`.
+  Its first gameplay profile: 27% idle, 8.5% `memcmp` (the scene cache compares
+  all VRAM, CRAM, VSRAM and SAT with the previous frame, and the texture cache
+  compares all 2,048 tiles), ~18% FM, ~7.5% PSG, 3.5% DAC driver.
+- **Cache compares.** `sor::equal_bytes` compares aligned words (falling back to
+  `memcmp`); it cut that cost to 3.4% and raised gameplay idle time to 33%. The
+  gameplay window now shows **1,659 flips over 1,659 VBlanks**, with the profiler
+  interrupt running. Scene tests and GPU-scene validation of all 2,865 replay
+  frames pass. `pace()` now inlines its per-instruction counter update.
 
 Remaining slow intervals: one per screen transition (the ~1.2-frame DMA wait
 spans one paced interrupt, plus 13–16 ms texture uploads), bulk Nemesis uploads

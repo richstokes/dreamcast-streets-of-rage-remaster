@@ -4,6 +4,7 @@
 #include <stdexcept>
 #include "platform.hpp"
 #include "replay.hpp"
+#include "pc_profile.hpp"
 void dc_renderer_init();
 void dc_renderer_shutdown();
 bool dc_render_vdp(VDPState &,VDPRenderer &);
@@ -34,6 +35,7 @@ void platform_video_init(){
     pvr_poly_cxt_t c; pvr_poly_cxt_txr(&c,PVR_LIST_OP_POLY,PVR_TXRFMT_RGB565|PVR_TXRFMT_NONTWIDDLED,512,256,texture,PVR_FILTER_NONE);
     pvr_poly_compile(&header,&c);
     dc_renderer_init();
+    pc_profile_start();
 }
 void platform_video_shutdown(){dc_renderer_shutdown();pvr_mem_free(texture);}
 void platform_video_present(const Framebuffer &fb,int w,int h){
@@ -90,8 +92,8 @@ void platform_observe_frame(uint32_t frame,const sor_memory &memory,const Frameb
             sor_log("FRAME_STATS n=%lu mean_us=%llu p50_us_le=%u p95_us_le=%u p99_us_le=%u worst_us=%llu vblanks=%lu flips=%lu\n",(unsigned long)samples,(unsigned long long)(sum/samples),percentile(50),percentile(95),percentile(99),(unsigned long long)worst,(unsigned long)(stats.vbl_count-startStats.vbl_count),(unsigned long)(stats.frame_count-startStats.frame_count));
         }
     }
-    previous=now;wasPlaying=playing;
-    if(finished){reported=true;sor_log("BENCHMARK replay complete; subsequent serial drain is outside the measured window\n");platform_audio_report();sor_flush_log();}
+    previous=now;wasPlaying=playing;pc_profile_phase(playing);
+    if(finished){reported=true;sor_log("BENCHMARK replay complete; subsequent serial drain is outside the measured window\n");platform_audio_report();pc_profile_report();sor_flush_log();}
 }
 
 extern "C" {
