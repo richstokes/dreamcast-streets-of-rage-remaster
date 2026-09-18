@@ -219,7 +219,7 @@ unsigned NativeAudio::renderFrame(int16_t *out,uint64_t (*clock)(),int16_t *dacS
                 const auto &e=impl->events[event++];impl->fm.write(e.port,e.value);
             }
             unsigned end=event<impl->eventCount?impl->events[event].sample:n;
-            impl->fm.generate(impl->block.data()+at,end-at);
+            impl->fm.sor_generate_span(impl->block.data()+at,end-at);
             if(dacStereo){
                 ymfm::ym2612::output_data component;impl->fm.dac_component(component);
                 for(unsigned i=at;i<end;i++)for(unsigned c=0;c<2;c++)dacStereo[i*2+c]=component.data[c];

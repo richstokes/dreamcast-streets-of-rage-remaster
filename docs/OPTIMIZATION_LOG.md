@@ -41,6 +41,8 @@ Same `phase-aligned-actions.json` replay, first 1,200 gameplay intervals:
 | Indexed plane textures (below) | 17.626 ms | 23.0 ms | palette-flycast.log |
 | Burst DAC stepping / fixed FM algorithms | 17.134 ms | 21.5 ms | resume-switch-flycast.log |
 | Burst DAC / single generic FM algorithm | 17.287 ms | 22.0 ms | resume-compact-flycast.log |
+| Channel-major FM spans, calls out of line | 17.320 ms | 22.5 ms | span-flycast.log |
+| Channel-major FM spans, inlined step/output | 16.864 ms | 20.5 ms | span-inline-flycast.log |
 
 Logs are under ignored `build/logs/`. The large table and fused clock/output
 attempt were removed. Explicit `-O3` follows KOS's link flags, but its measured
@@ -59,6 +61,19 @@ Replacing the eight specialized FM algorithms with the generic path was slower
 was reverted. Repeated runs of the same image produced identical Flycast counters,
 so single A/B runs are meaningful here. `tools/bench-flycast.sh <name>` packages
 the replay, runs it in background Flycast and keeps `build/logs/<name>-flycast.log`.
+
+Channel-major FM spans (`src/audio/ymfm_sor_span.ipp`): between register writes
+and periodic prepares, channels share only the envelope counter and LFO. The
+span renderer records per-sample LFO values, then runs each channel across the
+whole span with its operators hot; prepare samples keep the original path.
+The phase-only operator step and the algorithm output are forced inline, so one
+channel's loop fits the SH-4 instruction cache. Without that inlining the span
+was slower (42 missed refreshes); with it, over the whole replay: 10 missed
+refreshes (was 29), 51 underruns (was 99), busiest profiled frame synthesis
+10.6 → 7.1 ms. `tools/test-ymfm-output.sh` now renders the staged build through
+random span splits against pinned per-sample ymfm, including LFO AM/PM, DAC
+toggles, SSG-EG and 4096-sample prepares (205,765 samples); stale-LFO and
+silent-channel-offset mutants fail it. Full replay PCM and RAM remain byte-exact.
 
 ## Correctness gates passed so far
 

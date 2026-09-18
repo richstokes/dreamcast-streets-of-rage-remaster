@@ -1,8 +1,12 @@
 """Small, checked adaptations of the pinned BSD-licensed ymfm source."""
+from pathlib import Path
 def replace_once(text, old, new):
     if text.count(old) != 1:
         raise RuntimeError('Pinned ymfm source changed; review single-channel patch')
     return text.replace(old, new)
+
+
+SPAN=Path(__file__).resolve().parents[1]/'src/audio/ymfm_sor_span.ipp'
 
 
 def patch(name, text):
@@ -10,7 +14,11 @@ def patch(name, text):
         text=replace_once(text,'namespace ymfm\n{','namespace ymfm\n{\nconst int16_t *sor_power_at(uint32_t attenuation);')
         text=replace_once(text,'int32_t compute_volume(uint32_t phase, uint32_t am_offset) const;', 'inline __attribute__((always_inline)) int32_t compute_volume(uint32_t phase, uint32_t am_offset) const;')
         old='\tvoid output(output_data &output, uint32_t rshift, int32_t clipmax, uint32_t chanmask) const;'
-        text=replace_once(text, old, old+'\n\tvoid output_single(output_data &output, uint32_t rshift, int32_t clipmax, uint32_t chnum) const;')
+        text=replace_once(text, old, old+'\n\tvoid output_single(output_data &output, uint32_t rshift, int32_t clipmax, uint32_t chnum) const;'
+            '\n\tstatic constexpr uint32_t SOR_SPAN_MAX = 1024;'
+            '\n\tbool sor_prepare_due() const { return m_modified_channels != 0 || m_prepare_count >= 4096; }'
+            '\n\tuint32_t sor_span_limit() const { return 4096 - m_prepare_count; }'
+            '\n\tuint32_t sor_render_span(int32_t *__restrict acc, uint32_t n, uint32_t output_channels);')
         text=replace_once(text, '\tuint32_t m_phase;                      // current phase value (10.10 format)',
             '\tuint32_t m_phase;                      // current phase value (10.10 format)\n\tconst int16_t *m_sor_power=nullptr;\n'
             '\tuint32_t m_sor_attenuation = 0, m_sor_env_mask = 0;\n\tbool m_sor_am = false, m_sor_ssg = false, m_sor_env_stable = false;\n'
@@ -32,7 +40,8 @@ def patch(name, text):
         text=replace_once(text,'\tuint32_t phase() const { return m_phase >> 10; }',
             '\tuint32_t phase() const { return m_phase >> 10; }\n'
             '\tbool sor_quiet() const { return ((m_env_state==EG_RELEASE && m_env_attenuation>=EG_QUIET) || (m_sor_env_stable && m_sor_attenuation>=832)) && !RegisterType::EG_HAS_REVERB && !m_sor_ssg && !m_ssg_inverted && m_cache.phase_step!=opdata_cache::PHASE_STEP_DYNAMIC; }\n'
-            '\tvoid sor_advance_quiet(uint32_t n, uint32_t first_env, uint32_t last_env);\n\tbool sor_silent() const { return m_env_attenuation>EG_QUIET || m_sor_attenuation>=832; }')
+            '\tvoid sor_advance_quiet(uint32_t n, uint32_t first_env, uint32_t last_env);\n\tbool sor_silent() const { return m_env_attenuation>EG_QUIET || m_sor_attenuation>=832; }\n'
+            '\ttemplate<bool Envelope> inline __attribute__((always_inline)) void sor_span_step(uint32_t env_counter, int32_t lfo_raw_pm);')
         text=replace_once(text,'\t// return a reference to our registers\n\tRegisterType &regs() const { return m_regs; }\n\n\t// simple getters for debugging\n\tfm_operator',
             '''\tbool sor_quiet() const { for(auto op:m_op) if(op && !op->sor_quiet()) return false; return true; }
     void sor_mark_zero_output(bool active) {m_sor_silent_active=active;}
@@ -58,7 +67,9 @@ def patch(name, text):
         text=replace_once(text,'fm_operator<RegisterType> *debug_operator(uint32_t index) const { return m_operator[index].get(); }',
             'fm_operator<RegisterType> *debug_operator(uint32_t index) const { const_cast<fm_engine_base *>(this)->sor_flush_quiet(); return m_operator[index].get(); }')
         old='\tvoid output_4op(output_data &output, uint32_t rshift, int32_t clipmax) const;'
-        text=replace_once(text,old,old+'\n\ttemplate<int Algorithm> void output_4op_fixed(output_data &output, uint32_t rshift, int32_t clipmax) const;')
+        text=replace_once(text,old,old+'\n\ttemplate<int Algorithm> inline __attribute__((always_inline)) void output_4op_fixed(output_data &output, uint32_t rshift, int32_t clipmax, uint32_t am_offset) const;'
+            '\n\ttemplate<int Algorithm> void sor_render_span(int32_t *__restrict acc, uint32_t n, uint32_t env, const int8_t *pm, const uint8_t *am, bool output_enabled);'
+            '\n\tuint8_t sor_algorithm() const { return m_sor_algorithm; }')
         text=replace_once(text,'\tmutable int16_t m_feedback_in;',
             '\tbool m_sor_silent_active=false;\n\tuint8_t m_sor_algorithm=0, m_sor_feedback=0, m_sor_pan=0, m_sor_am_shift=7;\n\tmutable int16_t m_feedback_in;')
         for output in range(4):
@@ -133,28 +144,30 @@ void fm_engine_base<RegisterType>::output_single(output_data &result, uint32_t r
     m_sor_am_shift=(1u<<(m_regs.ch_lfo_am_sens(m_choffs)^3))-1;''')
         marker='template<class RegisterType>\nvoid fm_channel<RegisterType>::output_4op(output_data &output, uint32_t rshift, int32_t clipmax) const'
         wrapper=marker+''' {
+    // AM amount is the same across all operators; compute it once
+    uint32_t am_offset = m_sor_am_shift==7?0:m_regs.lfo_am_offset(m_choffs);
     switch(m_sor_algorithm) {
-        case 0: output_4op_fixed<0>(output,rshift,clipmax);break;
-        case 1: output_4op_fixed<1>(output,rshift,clipmax);break;
-        case 2: output_4op_fixed<2>(output,rshift,clipmax);break;
-        case 3: output_4op_fixed<3>(output,rshift,clipmax);break;
-        case 4: output_4op_fixed<4>(output,rshift,clipmax);break;
-        case 5: output_4op_fixed<5>(output,rshift,clipmax);break;
-        case 6: output_4op_fixed<6>(output,rshift,clipmax);break;
-        case 7: output_4op_fixed<7>(output,rshift,clipmax);break;
-        default: output_4op_fixed<-1>(output,rshift,clipmax);break;
+        case 0: output_4op_fixed<0>(output,rshift,clipmax,am_offset);break;
+        case 1: output_4op_fixed<1>(output,rshift,clipmax,am_offset);break;
+        case 2: output_4op_fixed<2>(output,rshift,clipmax,am_offset);break;
+        case 3: output_4op_fixed<3>(output,rshift,clipmax,am_offset);break;
+        case 4: output_4op_fixed<4>(output,rshift,clipmax,am_offset);break;
+        case 5: output_4op_fixed<5>(output,rshift,clipmax,am_offset);break;
+        case 6: output_4op_fixed<6>(output,rshift,clipmax,am_offset);break;
+        case 7: output_4op_fixed<7>(output,rshift,clipmax,am_offset);break;
+        default: output_4op_fixed<-1>(output,rshift,clipmax,am_offset);break;
     }
 }
 
 template<class RegisterType>
 template<int Algorithm>
-void fm_channel<RegisterType>::output_4op_fixed(output_data &output, uint32_t rshift, int32_t clipmax) const'''
+void fm_channel<RegisterType>::output_4op_fixed(output_data &output, uint32_t rshift, int32_t clipmax, uint32_t am_offset) const'''
         text=replace_once(text,marker,wrapper)
         a=text.index('void fm_channel<RegisterType>::output_4op_fixed(')
         b=text.index('//  output_rhythm_ch6',a)
         part=text[a:b].replace('m_regs.ch_feedback(m_choffs)','m_sor_feedback').replace('m_regs.ch_output_any(m_choffs)','m_sor_pan')
         part=part.replace('s_algorithm_ops[m_regs.ch_algorithm(m_choffs)]','s_algorithm_ops[Algorithm < 0 ? m_sor_algorithm : Algorithm]')
-        part=part.replace('m_regs.lfo_am_offset(m_choffs)', 'm_sor_am_shift==7?0:m_regs.lfo_am_offset(m_choffs)')
+        part=replace_once(part,'\t// AM amount is the same across all operators; compute it once\n\tuint32_t am_offset = m_regs.lfo_am_offset(m_choffs);\n','')
         text=text[:a]+part+text[b:]
         text=replace_once(text,'void fm_engine_base<RegisterType>::reset()\n{',
             'void fm_engine_base<RegisterType>::reset()\n{\n    m_sor_quiet_mask=0; for(auto &n:m_sor_quiet_ticks)n=0;')
@@ -218,14 +231,19 @@ void fm_operator<RegisterType>::sor_advance_quiet(uint32_t n, uint32_t first_env
         # Keep this small hot operator calculation inline on SH-4. Arithmetic is unchanged.
         text=replace_once(text, 'int32_t fm_operator<RegisterType>::compute_volume(uint32_t phase, uint32_t am_offset) const',
             'inline __attribute__((always_inline)) int32_t fm_operator<RegisterType>::compute_volume(uint32_t phase, uint32_t am_offset) const')
+        end=text.rindex('\n}')
+        text=text[:end]+'\n'+SPAN.read_text()+text[end:]
         return text
     if name == 'ymfm_opn.h':
+        text=replace_once(text,'\tuint32_t lfo_am_offset(uint32_t choffs) const;',
+            '\tuint32_t lfo_am_offset(uint32_t choffs) const;\n\tuint8_t sor_lfo_am() const { return m_lfo_am; }')
         marker='class ym2612'
         offset=text.index(marker)
         end=text.index("\n};",offset)
         tail=text[offset:end]
         old='void generate(output_data *output, uint32_t numsamples = 1);'
         tail=replace_once(tail,old,old+'\n\tvoid dac_component(output_data &output);\n'
+            '\tvoid sor_generate_span(output_data *output, uint32_t numsamples);\n'
             '\tuint64_t (*profile_clock)()=nullptr; uint64_t profile_clocking=0,profile_output=0;\n'
             '\tuint32_t workload() { uint32_t result=0; for(unsigned i=0;i<fm_engine::OPERATORS;i++) {'
             'auto op=m_fm.debug_operator(i); result+=(op->debug_cache().phase_step==opdata_cache::PHASE_STEP_DYNAMIC); '
@@ -246,7 +264,39 @@ void ym2612::dac_component(output_data &output)
 }
 
 """
-        text=replace_once(text,marker,component+marker)
+        span="""// SoR port: generate() for a span without register writes. Channels render
+// channel-major; prepare samples take the original per-sample path.
+void ym2612::sor_generate_span(output_data *output, uint32_t numsamples)
+{
+    int32_t acc[fm_engine::SOR_SPAN_MAX * 2];
+    while (numsamples != 0)
+    {
+        if (m_fm.sor_prepare_due())
+        {
+            generate(output++, 1);
+            numsamples--;
+            continue;
+        }
+        uint32_t count = std::min(std::min(numsamples, m_fm.sor_span_limit()), fm_engine::SOR_SPAN_MAX);
+        std::fill_n(acc, count * 2, 0);
+        int32_t base[2] = {0, 0};
+        uint32_t constant = m_fm.sor_render_span(acc, count, m_dac_enable ? 5 : 6);
+        base[0] = base[1] = int32_t(constant) * dac_discontinuity(0);
+        if (m_dac_enable)
+        {
+            int32_t dacval = dac_discontinuity(int16_t(m_dac_data << 7) >> 7);
+            base[0] += m_fm.regs().ch_output_0(0x102) ? dacval : dac_discontinuity(0);
+            base[1] += m_fm.regs().ch_output_1(0x102) ? dacval : dac_discontinuity(0);
+        }
+        for (uint32_t i = 0; i < count; i++, output++)
+            for (int c = 0; c < 2; c++)
+                output->data[c] = ((acc[i * 2 + c] + base[c]) * 128) * 64 / (6 * 65);
+        numsamples -= count;
+    }
+}
+
+"""
+        text=replace_once(text,marker,component+span+marker)
         text=replace_once(text, 'm_fm.output(temp.clear(), 5, 256, 1 << chan);',
                             'm_fm.output_single(temp.clear(), 5, 256, chan);')
         a=text.index('void ym2612::generate(');b=text.index('\n}',a)+2
