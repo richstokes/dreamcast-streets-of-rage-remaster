@@ -10,6 +10,8 @@ log="$root/build/logs/$name-flycast.log"
 SOR_AUDIO=${SOR_AUDIO:-1} SOR_AUDIO_PROFILE=${SOR_AUDIO_PROFILE:-1} \
 SOR_REPLAY=${SOR_REPLAY:-"$root/reference/scenarios/phase-aligned-actions.json"} \
     "$root/tools/package.sh" "$rom" > "$root/build/logs/$name-package.log" 2>&1
+# Keep the matching ELF so tools/pc-profile.py resolves this run's samples.
+cp "$root/build/native/sor.elf" "$root/build/logs/$name.elf"
 "$root/tools/run-flycast.sh" "$root/dist/sor.cdi"
 # The replay drains its deferred diagnostics once the measured window ends.
 deadline=$(( $(date +%s) + ${BENCH_TIMEOUT:-240} ))

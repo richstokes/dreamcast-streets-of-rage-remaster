@@ -146,6 +146,31 @@ spans one paced interrupt, plus 13–16 ms texture uploads), bulk Nemesis upload
 through the data port (frames 212, 931, 932), and title/gameplay frames where
 DAC-heavy synthesis (~12 ms) plus presentation (~8–10 ms) exceed 16.7 ms.
 
+## Release-configuration qualification and stream latency (2026-09-18)
+
+With audio on and both profilers off (`SOR_AUDIO_PROFILE=0`): the action replay
+shows 1,659 flips over 1,659 gameplay VBlanks and the two-player encounter 941
+over 941 (`qualify-audio`, `qualify-two-player` logs).
+
+The AICA stream was rebuilt for latency (`src/dreamcast/audio_kos.cpp`):
+
+- A feeder thread polls KOS every 2 ms, so sound RAM holds a 2,048-frame double
+  buffer (was 8,192). KOS skips refills under half its buffer and rounds to 512
+  frames; a 1,024-frame buffer under-filled (stale replay, ring overflow).
+- Game and feeder share a single-producer/single-consumer ring (the old shared
+  `queued` counter was modified from both sides).
+- Clock matching: Flycast's display runs at 59.81 Hz overall, and gameplay and
+  menu phases drift in opposite directions against the AICA clock, so a fixed
+  rate cannot match. Each 1,024-frame refill consumes up to 4 frames more or
+  fewer (nearest neighbour, <0.4%) in proportion to the ring's distance from its
+  3,584-frame cushion. Playback requests 53,274 Hz (AICA step 53,273.1 Hz).
+- On a shortfall the stream plays silence until the cushion is restored: one gap
+  per production stall. Stall deficits measured from `SLOW` lines: most screen
+  transitions need ≤1,926 frames; two bulk-decompression loads need 4,108 and
+  4,460. Only those two underrun, while the screen is blank (~96 ms each).
+- Synthesis-to-DAC delay is now ~98 ms (ring mean ~3,670 frames plus 1,024–2,048
+  in sound RAM), from ~155 ms. `AICA_UNDERRUN` lines give each underrun's frame.
+
 ## Correctness gates passed so far
 
 - Full action replay: 2,546,780 PCM stereo frames and 2,866 RAM snapshots match the
