@@ -3,19 +3,23 @@
 Current audio update: [native DAC decoding and AICA evaluation](NATIVE_DAC.md).
 The playback loop now has a validated native path; interpreter setup/fallback remains.
 
-**Experimental, disabled by default on Dreamcast.** The audio path is functional,
-including the original sound sequencer, FM, PSG, and the ROM's sampled drum/voice
-driver. It currently misses frame deadlines and starves the AICA stream. It is
-not a completed or fidelity-certified original-audio implementation.
+**Enabled by default on Dreamcast (2026-09-19).** The original sound sequencer,
+FM, PSG and the ROM's sampled drum/voice driver run at 60 Hz in Flycast: the
+action replay shows 1,659 flips over 1,659 gameplay VBlanks and the two-player
+encounter 941 over 941, with audio on and profiling off. Stream underruns occur
+only during the two bulk-decompression screen loads (display blanked). Timing is
+verified against the original ROM in Genesis Plus GX (below). Physical-console
+performance, full soundtrack/SFX coverage and listening QA remain unverified.
+`SOR_AUDIO=0` builds the silent configuration.
 
 ## Try it
 
 ```sh
-SOR_AUDIO=1 ./build-and-run.sh
+./build-and-run.sh
 ```
 
-This rebuilds and launches the embedded-ROM ELF with experimental audio enabled.
-Use plain `./build-and-run.sh` to rebuild the normal 60 Hz, silent checkpoint.
+This rebuilds and launches the embedded-ROM ELF with original audio.
+`SOR_AUDIO=0 ./build-and-run.sh` rebuilds the silent configuration.
 The flag is recorded in a generated header tracked by Make dependencies, so
 switching configurations does not require a clean build. GUI launch is best-effort
 background as usual. The sound option itself is **not** a gameplay speed control.
@@ -23,7 +27,7 @@ background as usual. The sound option itself is **not** a gameplay speed control
 For a reproducible disc replay:
 
 ```sh
-SOR_AUDIO=1 SOR_REPLAY="$PWD/reference/scenarios/phase-aligned-actions.json" \
+SOR_REPLAY="$PWD/reference/scenarios/phase-aligned-actions.json" \
   ./tools/package.sh "$SOR_ROM"
 ./tools/run-flycast.sh dist/sor.cdi
 ```
@@ -72,6 +76,35 @@ reference WAV rate comes from libretro AV timing; native WAV rate comes from the
 sound core. Native headless runs enable synthesis by default; set `SOR_AUDIO=0`
 to reproduce the earlier silent WRAM traces. `--audio-wav` explicitly enables it.
 
+## Sound timing against the original ROM
+
+`reference/results/audio-timing-2026-09-19.json` compares the action replay with
+Genesis Plus GX (MAME YM2612 core) after replay gate 9:
+
+- **68000 driver state** (`tools/compare-sound-state.py`): all four effect channels
+  match on all 1,300 compared frames at the gameplay alignment. Music started 47
+  frames earlier relative to gameplay in the native run (screen transitions differ;
+  see the cadence item in TODO.md); aligned at its own start, all nine music
+  channels match except channel flag bits that effects also write.
+- **Audio** (`tools/compare-audio.sh`, music-aligned): note/effect onsets align
+  within one 10 ms analysis hop in every window; log-band spectral correlation
+  0.963 (median). Native output is a uniform ~3.4 dB quieter below 2 kHz and has
+  less high-frequency rolloff; that is the cores' gain/filter convention, not
+  missing content.
+- **68000 write timing.** The driver keys each channel off and on again for a new
+  note. Applying all 68000 writes at one sample hid those key-offs from ymfm, so
+  sustained parts never retriggered and faded (bass 20 dB low). 68000 writes are
+  now placed by emulated time within the frame, and never split the Z80's
+  address/data pair. `tools/ym-render.cpp` replays a host `SOR_YM_LOG` write log
+  through ymfm or Nuked OPN2 for such investigations.
+
+## Playback stream
+
+A 2 ms feeder thread fills a 2,048-frame AICA double buffer from a
+single-producer/single-consumer ring with a 3,584-frame cushion. Refills consume
+up to 0.4% more or fewer frames to follow the display/AICA clock ratio. Delay
+from synthesis to output is about 98 ms. Details: OPTIMIZATION_LOG.md.
+
 ## Verified so far
 
 - Sanitized tests cover disabled mode, deterministic stereo, rational sample
@@ -88,7 +121,10 @@ to reproduce the earlier silent WRAM traces. `--audio-wav` explicitly enables it
   This establishes cross-platform synthesis at those checkpoints, not equality
   with the original console's complete waveform or with AICA output after streaming.
 
-## Performance and next work
+## Performance history
+
+The figures in this section predate the 2026-09 optimization work
+(OPTIMIZATION_LOG.md) and describe why audio was once opt-in.
 
 The optimization pass in AUDIO_OPTIMIZATION.md lowers the first 1,200 gameplay
 intervals from 39.220 to 29.218 ms mean (25.5%). p95 falls from 47.0 to 37.5 ms.

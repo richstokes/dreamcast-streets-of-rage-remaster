@@ -31,8 +31,11 @@ and relevant commit/capture paths in the progress log.
 - [ ] Resolve reference lockstep timeouts and obtain repeatable comparison traces.
 - [ ] Establish and verify native simulation/interrupt cadence against Genesis.
 - [ ] Verify movement and combat in the first section, including two-player play.
-- [ ] Replace measured rendering bottlenecks and remeasure target performance.
-- [ ] Integrate original audio and verify sound timing.
+- [x] Replace measured rendering bottlenecks and remeasure target performance.
+  (2026-09-19, Flycast: 1,659/1,659 and 941/941 gameplay flips/VBlanks with audio; OPTIMIZATION_LOG.md.)
+- [x] Integrate original audio and verify sound timing.
+  (Default on; effect channels match original driver state every frame, onsets within 10 ms;
+  reference/results/audio-timing-2026-09-19.json. Music start offset follows the cadence item.)
 - [ ] Pass the first-section fidelity gate before starting enhanced presentation.
 
 ## 1. Input audit and architecture
@@ -195,7 +198,8 @@ transitions, original audio and one-/two-player coverage; simply reaching it is 
 - [ ] Measure frame-time distributions and worst-case scenes, not just averages or apparent speed.
 - [ ] Measure main RAM, stack, heap, VRAM and sound-RAM peaks separately.
 - [ ] Measure texture-upload and asset-loading stalls.
-- [ ] Measure audio underruns and sound synchronization.
+- [x] Measure audio underruns and sound synchronization.
+  (Serial AICA/AICA_UNDERRUN counters, stream delay ~98 ms; AUDIO.md, OPTIMIZATION_LOG.md.)
 - [ ] Stress two-player scenes with many enemies and effects.
 - [ ] Test stability across repeated stage loads and complete playthroughs.
 - [ ] Achieve stable 60 Hz NTSC presentation while preserving original simulation behavior.

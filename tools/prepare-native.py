@@ -40,7 +40,7 @@ for directory,pattern in [('include/MegaDriveEnvironment/system/sound/mame_ymfm'
 copy(M/'include/MegaDriveEnvironment/system/z80/suzukiplan/z80.hpp',D/'sor_z80.hpp')
 
 if '--dreamcast' in sys.argv:
-    audio=os.environ.get('SOR_AUDIO','0')
+    audio=os.environ.get('SOR_AUDIO','1')
     if audio not in ('0','1'):raise SystemExit('SOR_AUDIO must be 0 or 1')
     native=os.environ.get('SOR_DAC_NATIVE','1')
     if native not in ('0','1'):raise SystemExit('SOR_DAC_NATIVE must be 0 or 1')

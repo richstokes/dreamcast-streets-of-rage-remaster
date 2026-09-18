@@ -1,8 +1,25 @@
 # Progress
 
+## 2026-09-19 — original audio on by default, 60 Hz in Flycast
+
+- Release configuration (audio on, profiling off): action replay 1,659 flips /
+  1,659 gameplay VBlanks; two-player encounter 941 / 941. Hardware unverified.
+- Sound timing verified against the original ROM (AUDIO.md): effect channels
+  match the 68000 driver state every frame; onsets within 10 ms; a 68000 write
+  timing bug that stopped notes retriggering is fixed.
+- Stream: feeder thread, clock matching, ~98 ms delay (was ~155 ms); underruns
+  only during two blanked bulk loads.
+- Performance work since 2026-09-15 (OPTIMIZATION_LOG.md): channel-major FM with
+  envelope steps in the fast loop, forced-blank VDP DMA timing (a fidelity fix,
+  verified against the original), word-wise render-cache compares, VDP LTO.
+- New tools: `bench-flycast.sh`, `pc-profile.py` (`SOR_PC_PROFILE=1`),
+  `compare-audio.sh`, `compare-sound-state.py`, `ym-render.cpp`.
+- Next: simulation/interrupt cadence (transition frame counts differ from the
+  original, which also offsets music start), then behaviour comparisons.
+
 ## 2026-09-15 — native checkpoint, not a completed game
 
-### Active: original audio at 60 Hz
+### Previous: original audio at 60 Hz
 
 - Optimization continues; the target is not met. Retained audio/renderer changes
   measure 20.596 ms mean over the first 1,200 gameplay intervals, with underruns.
