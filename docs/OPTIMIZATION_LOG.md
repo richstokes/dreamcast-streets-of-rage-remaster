@@ -75,6 +75,52 @@ random span splits against pinned per-sample ymfm, including LFO AM/PM, DAC
 toggles, SSG-EG and 4096-sample prepares (205,765 samples); stale-LFO and
 silent-channel-offset mutants fail it. Full replay PCM and RAM remain byte-exact.
 
+## Missed refreshes outside the gameplay window
+
+`FRAME_STATS` measures gameplay only. The AICA report now also records frames
+produced and consumed, and VBlanks since the stream started; `SLOW` lines log
+every interval spanning more than one VBlank, with synthesis, presentation and
+remaining (game logic) time and the mode word. Whole-replay results:
+
+| Change | Missed VBlanks | Underruns | Silence inserted | Log |
+| --- | ---: | ---: | ---: | --- |
+| Span renderer (stream started with ~700 frames of cushion) | 106 | 51 | — | span-inline-flycast.log |
+| 2,048-frame stream cushion; refill it on shortfall | 106 | 30 | 89,229 | stream-diag-flycast.log |
+| Forced-blank VDP DMA rates | 38 | 8 | 22,647 | vdp-blank-dma-flycast.log |
+| Division-free HV counters | 32 | 8 | 23,501 | vdp-counters-flycast.log |
+| DMA fill decodes registers once | 26 | 7 | 18,900 | vdp-fill-flycast.log |
+| LTO for VDP state/port and bus glue | 19 | 5 | 12,834 | vdp-lto-flycast.log |
+
+- **Stream cushion.** KOS fills both 4,096-frame halves on start; starting at
+  8,192 queued frames left ~700 frames of cushion, so ordinary jitter met refill
+  requests short even in idle menus. Every later request then ran short too. The
+  stream now starts with 2,048 more frames and, on a shortfall, leads with enough
+  silence to restore that cushion (one gap instead of repeated ones).
+- **Consumption matches production.** KOS's firmware plays 53,267 Hz as ~53,230 Hz;
+  consumed frames match elapsed time, produced frames match submits × 889.
+  All remaining silence corresponds to missed VBlanks.
+- **Forced-blank DMA (fidelity fix).** `reset_vdp_and_graphics_state` ($7FB8)
+  clears VRAM with a 64 KiB DMA fill while register 1 blanks the display, then
+  spins on the DMA-busy bit (`loc_7FE4`). The pinned VDP model always used
+  active-display rates, so the fill lasted ~15 frames of emulated time and each
+  transition stalled for 8 paced frames. `tools/vdp_patches.py` applies Genesis
+  Plus GX's blanking counts (68K 166/204, fill 165/203, copy 83/102 per H32/H40
+  line) when the display is disabled at DMA start. Against Genesis Plus GX, the
+  action (1,481) and two-player (761) observations and every per-region report
+  are unchanged; both gates are reached at the same frames. Native transitions
+  were already shorter than the original's (decompression is native), and the
+  gates absorb that. Pre-gate music position and palette-fade counters differ
+  from the previous native baseline, as expected from the shorter stall.
+- **HV counters** were recomputed with three 64-bit divisions (software on SH-4)
+  per status read. A cached frame base gives the same counters with 32-bit
+  arithmetic. The DMA fill decoded the increment and SAT base per byte. Both
+  changes leave replay PCM and RAM byte-identical.
+
+Remaining slow intervals: one per screen transition (the ~1.2-frame DMA wait
+spans one paced interrupt, plus 13–16 ms texture uploads), bulk Nemesis uploads
+through the data port (frames 212, 931, 932), and title/gameplay frames where
+DAC-heavy synthesis (~12 ms) plus presentation (~8–10 ms) exceed 16.7 ms.
+
 ## Correctness gates passed so far
 
 - Full action replay: 2,546,780 PCM stereo frames and 2,866 RAM snapshots match the

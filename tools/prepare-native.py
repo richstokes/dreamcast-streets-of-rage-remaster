@@ -18,10 +18,15 @@ for f in ['CPU68K.hpp','SoRCheats.hpp','SoRCheats.cpp','SoRControls.cpp','SoRMan
     copy(S/f,D/f)
 for f in (S/'generated').glob('SoR*'): copy(f,D/f.name)
 copy(M/'include/MegaDriveEnvironment/data_types.hpp',D/'data_types.hpp')
+sys.path.insert(0,str(R/'tools'))
+from vdp_patches import patch as patch_vdp
 for n in ['VDPState','VDPPort','VDPRenderer','VDPTile']:
-    source=M/f'include/MegaDriveEnvironment/system/graphics/{n}.hpp'
-    copy(source,D/f'{n}.hpp')
-    copy(M/f'src/system/graphics/{n}.cpp',D/f'{n}.cpp')
+    source=M/f'include/MegaDriveEnvironment/system/graphics/{n}.hpp';target=D/f'{n}.hpp'
+    text=patch_vdp(source.name,source.read_text())
+    if not target.exists() or target.read_text()!=text:target.write_text(text)
+    source=M/f'src/system/graphics/{n}.cpp';target=D/f'{n}.cpp'
+    text=patch_vdp(source.name,source.read_text())
+    if not target.exists() or target.read_text()!=text:target.write_text(text)
 
 # Sound-only dependencies retain their upstream license headers.
 from audio_patches import patch as patch_audio

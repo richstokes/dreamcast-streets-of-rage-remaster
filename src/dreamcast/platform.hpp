@@ -17,6 +17,8 @@ uint64_t platform_time_us();
 PlatformMemoryStats platform_memory_stats();
 // Called before presentation/input sampling at each synchronous VBlank wait.
 void platform_observe_frame(uint32_t,const sor_memory &,const Framebuffer &);
+// Durations of the preceding frame's synthesis and presentation, for slow-frame logs.
+void platform_frame_parts(uint32_t synth_us,uint32_t present_us);
 
 void platform_audio_init(unsigned sampleRate);
 void platform_audio_submit(const int16_t *,unsigned frames,const int16_t *dac=nullptr);

@@ -52,7 +52,24 @@ void platform_video_present(const Framebuffer &fb,int w,int h){
 }
 uint64_t platform_time_us(){return timer_us_gettime64();}
 PlatformMemoryStats platform_memory_stats(){auto m=mallinfo();return {uint32_t(m.uordblks),uint32_t(pvr_mem_available())};}
-void platform_observe_frame(uint32_t,const sor_memory &memory,const Framebuffer &){
+static uint32_t lastSynthUs=0,lastPresentUs=0,slowFrames=0;
+void platform_frame_parts(uint32_t synth,uint32_t present){lastSynthUs=synth;lastPresentUs=present;}
+void platform_observe_frame(uint32_t frame,const sor_memory &memory,const Framebuffer &){
+    // Log every interval that spans more than one VBlank, including menus.
+    static uint32_t lastVblanks=0;
+    {
+        pvr_stats_t now{};pvr_get_stats(&now);
+        uint32_t missed=now.vbl_count-lastVblanks;
+        static uint64_t lastUs=0;auto us=timer_us_gettime64();
+        if(lastVblanks && missed>1 && slowFrames<400){
+            slowFrames++;
+            uint32_t elapsed=uint32_t(us-lastUs);
+            sor_log("SLOW frame=%lu vblanks=%lu interval_us=%lu synth_us=%lu present_us=%lu other_us=%ld mode=%02x%02x\n",
+                (unsigned long)frame,(unsigned long)missed,(unsigned long)elapsed,(unsigned long)lastSynthUs,(unsigned long)lastPresentUs,
+                long(elapsed)-long(lastSynthUs)-long(lastPresentUs),memory.ram[0xff00],memory.ram[0xff01]);
+        }
+        lastVblanks=now.vbl_count;lastUs=us;
+    }
     static uint64_t previous=0,sum=0,worst=0;
     static uint32_t histogram[256]{},samples=0;
     static bool wasPlaying=false,reported=false;

@@ -11,6 +11,10 @@ OBJS := $(SOURCES:.cpp=.o) $(ROOT)/build/native/memory.o $(ROOT)/build/native/sa
 AUDIO_OBJS := ../audio/audio_core.o ../audio/dac_driver.o $(wildcard $(ROOT)/build/native/upstream/ymfm_*.cpp)
 AUDIO_OBJS := $(AUDIO_OBJS:.cpp=.o)
 $(AUDIO_OBJS): KOS_CPPFLAGS += -O3 -flto -DNDEBUG
+# VDP port traffic (status polls, data-port uploads) calls small VDPState
+# accessors from another file on every access; let LTO inline them.
+VDP_OBJS := $(ROOT)/build/native/upstream/VDPState.o $(ROOT)/build/native/upstream/VDPPort.o runtime.o
+$(VDP_OBJS): KOS_CPPFLAGS += -O3 -flto
 KOS_CPPFLAGS += -std=gnu++23 -g -Icompat -I../render -I../audio -I$(ROOT)/include -I$(ROOT)/build/native/upstream -ffunction-sections -fdata-sections -MMD -MP
 KOS_CFLAGS += -g -I$(ROOT)/include -ffunction-sections -fdata-sections -MMD -MP
 KOS_LDFLAGS += -Wl,--gc-sections,-Map,$(ROOT)/build/native/sor.map

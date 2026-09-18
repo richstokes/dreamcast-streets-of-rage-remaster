@@ -43,6 +43,7 @@ void platform_video_present(const Framebuffer &fb,int width,int height){
 void platform_poll_controllers(PlayersControlState &){throw std::runtime_error("Headless replay exhausted or missing");}
 uint64_t platform_time_us(){return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();}
 PlatformMemoryStats platform_memory_stats(){return {};}
+void platform_frame_parts(uint32_t,uint32_t){}
 void platform_observe_frame(uint32_t frame,const sor_memory &memory,const Framebuffer &fb){
     if(memory.faults) throw std::runtime_error("Unmapped device access in headless simulation");
     if(fwrite(memory.ram,1,sizeof(memory.ram),trace)!=sizeof(memory.ram)) throw std::runtime_error("Trace write failed");
