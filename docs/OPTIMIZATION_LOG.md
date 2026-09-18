@@ -90,6 +90,7 @@ remaining (game logic) time and the mode word. Whole-replay results:
 | Division-free HV counters | 32 | 8 | 23,501 | vdp-counters-flycast.log |
 | DMA fill decodes registers once | 26 | 7 | 18,900 | vdp-fill-flycast.log |
 | LTO for VDP state/port and bus glue | 19 | 5 | 12,834 | vdp-lto-flycast.log |
+| FM fast runs between envelope steps | 14 | 3 | 9,151 | fm-fast-flycast.log |
 
 - **Stream cushion.** KOS fills both 4,096-frame halves on start; starting at
   8,192 queued frames left ~700 frames of cushion, so ordinary jitter met refill
@@ -115,6 +116,17 @@ remaining (game logic) time and the mode word. Whole-replay results:
   per status read. A cached frame base gives the same counters with 32-bit
   arithmetic. The DMA fill decoded the increment and SAT base per byte. Both
   changes leave replay PCM and RAM byte-identical.
+
+- **FM fast runs.** Within a channel span, an operator's attenuation and power
+  table only change at envelope steps, which fall on predictable counter
+  values ((T & mask) == 0). `sor_fast_run()` finds the next sample where any
+  operator needs a full clock; until then, phases, steps and power tables stay
+  in locals and output follows `output_4op_fixed` exactly. SSG-EG, inverted and
+  LFO-PM operators always take the full path. The gameplay window now shows
+  1,659 flips over 1,660 VBlanks (was 10 missed); busiest profiled frame FM
+  7.3 → 6.2 ms. Envelope-run, fast-AM and fast-output mutants fail the FM test.
+  A `SLOW` line means two VBlanks passed between frame starts; the queued PVR
+  frame can still absorb that, so flips versus VBlanks is the refresh metric.
 
 Remaining slow intervals: one per screen transition (the ~1.2-frame DMA wait
 spans one paced interrupt, plus 13–16 ms texture uploads), bulk Nemesis uploads

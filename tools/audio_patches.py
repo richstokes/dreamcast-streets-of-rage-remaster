@@ -12,6 +12,8 @@ SPAN=Path(__file__).resolve().parents[1]/'src/audio/ymfm_sor_span.ipp'
 def patch(name, text):
     if name == 'ymfm_fm.h':
         text=replace_once(text,'namespace ymfm\n{','namespace ymfm\n{\nconst int16_t *sor_power_at(uint32_t attenuation);')
+        # The span renderer's fast path reads operator state directly.
+        text=replace_once(text,'\tstatic constexpr uint32_t EG_QUIET = 0x380;','\tstatic constexpr uint32_t EG_QUIET = 0x380;\n\ttemplate<class> friend class fm_channel;')
         text=replace_once(text,'int32_t compute_volume(uint32_t phase, uint32_t am_offset) const;', 'inline __attribute__((always_inline)) int32_t compute_volume(uint32_t phase, uint32_t am_offset) const;')
         old='\tvoid output(output_data &output, uint32_t rshift, int32_t clipmax, uint32_t chanmask) const;'
         text=replace_once(text, old, old+'\n\tvoid output_single(output_data &output, uint32_t rshift, int32_t clipmax, uint32_t chnum) const;'
@@ -69,6 +71,8 @@ def patch(name, text):
         old='\tvoid output_4op(output_data &output, uint32_t rshift, int32_t clipmax) const;'
         text=replace_once(text,old,old+'\n\ttemplate<int Algorithm> inline __attribute__((always_inline)) void output_4op_fixed(output_data &output, uint32_t rshift, int32_t clipmax, uint32_t am_offset) const;'
             '\n\ttemplate<int Algorithm> void sor_render_span(int32_t *__restrict acc, uint32_t n, uint32_t env, const int8_t *pm, const uint8_t *am, bool output_enabled);'
+            '\n\tuint32_t sor_fast_run(uint32_t env, uint32_t limit) const;'
+            '\n\ttemplate<int Algorithm, bool AM> void sor_render_fast(int32_t *__restrict acc, uint32_t n, const uint8_t *am);'
             '\n\tuint8_t sor_algorithm() const { return m_sor_algorithm; }')
         text=replace_once(text,'\tmutable int16_t m_feedback_in;',
             '\tbool m_sor_silent_active=false;\n\tuint8_t m_sor_algorithm=0, m_sor_feedback=0, m_sor_pan=0, m_sor_am_shift=7;\n\tmutable int16_t m_feedback_in;')
