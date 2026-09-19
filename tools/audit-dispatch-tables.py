@@ -3,10 +3,11 @@
 
 SoR dispatches object and reaction states through word tables: a `lea table,a1`
 handed to a shared dispatcher that indexes it by an object field (relative
-tables at $25A4, $12B3C and $12B4C; absolute ones at $B186 and $15848). The
-recompiler finds most targets from the disassembly, but a target it misses
-fails at run time ("Untranslated dispatch"); two-player friendly fire reached
-the player reaction $2502 this way.
+tables at $25A4, $12B3C and $12B4C; absolute ones at $B186 and $15848), and
+inline `move.w table(pc,dn),dn; jmp table(pc,dn)` pairs. The recompiler finds
+most targets from the disassembly, but a target it misses fails at run time
+("Untranslated dispatch"): two-player friendly fire reached the player reaction
+$2502 this way, and a two-player continue the player-mask table at $109A8.
 
 Table lengths are not recorded, so each table is read until an entry is odd,
 out of range or inside an instruction the disassembler decoded. The list can
@@ -76,6 +77,22 @@ def main():
             else: target = ABSOLUTE[dispatcher] + v
             if target % 2 or not 0x200 <= target < len(rom) or target in interior: break
             if target not in entries: missing.setdefault(target, []).append((table, i, dispatcher))
+    # PC-relative jump tables: `move.w table(pc,dn),dn; jmp table(pc,dn)`. The
+    # index is used for both, so the word at move-base + dn jumps to jmp-base +
+    # word; the two bases may differ when indices start above 0 (the
+    # player-mask table at $109A8 uses 2, 4, 6). A table ends where the code of
+    # its lowest target begins; entries that cannot be targets are skipped.
+    for j in range(4, len(rom) - 4, 2):
+        if w(j) != 0x4EFB or (w(j - 4) & 0xF03F) != 0x303B: continue
+        base = j + 2 + s8(w(j + 2) & 0xFF); table = j - 2 + s8(w(j - 2) & 0xFF)
+        tables[(table, 0x4EFB)] = j
+        end = table + 128
+        for at in range(table, len(rom) - 2, 2):
+            if at >= end: break
+            target = base + s16(w(at))
+            if target % 2 or target <= at or target - at > 0x800 or target in interior: continue
+            end = min(end, target)
+            if target not in entries: missing.setdefault(target, []).append((table, (at - table) // 2, j))
     print('%d tables; %d targets without a translated entry' % (len(tables), len(missing)))
     for target, uses in sorted(missing.items()):
         print('%06X %-9s %s' % (target, 'decoded' if target in d.instructions else 'data?',

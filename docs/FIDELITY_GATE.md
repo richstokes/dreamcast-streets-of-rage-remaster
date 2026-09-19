@@ -5,14 +5,15 @@ behave like the original ROM through the first section. This page states the
 gate's criteria, the evidence for each and what remains. Evaluation 2026-09-19,
 commit `d3f5c04` and later; original = the ROM in Genesis Plus GX.
 
-**Status: met in emulation except picking up the bat; physical hardware
-untested.** Everything from power-on to the start of Round 1, and Round 1 play
-for 9,976 frames, matches the original exactly. From shared machine states
-(state-synchronised comparison, below) the rest of Round 1 matches too, in
-eleven windows and 38,500 frames: wave 3, throws, weapons and food, the boss,
-the stage clear into Round 2, continuing, game over and two-player friendly
-fire. Both Flycast benchmarks run at every VBlank with no audio underrun. One
-audio timing difference remains (a skipped drum hit, below).
+**Status: met in emulation; physical hardware untested.** Everything from
+power-on to the start of Round 1, and Round 1 play for 9,976 frames, matches the
+original exactly. From shared machine states (state-synchronised comparison,
+below) the rest of Round 1 matches too, in fourteen windows and 48,835 frames:
+wave 3, throws, every Round 1 weapon and food, the boss, the stage clear into
+Round 2, continuing and game over, and two-player play (joining, friendly fire,
+a continue while the other player plays on). Both Flycast benchmarks run at
+every VBlank with no audio underrun. One audio timing difference remains (a
+skipped drum hit, below).
 
 ## Criteria and evidence
 
@@ -24,8 +25,8 @@ audio timing difference remains (a skipped drum hit, below).
 | Grabs and throws | 16 grabs from power-on and 53 synced; 13 throws synced (4 from the front, state `$62`; 9 from behind after a vault, `$70`), none in any recorded replay | Met |
 | Police special | Used twice from power-on and once synced; control lock and stock equal | Met |
 | Player damage, death and respawn | 34 health drops and a death with respawn from power-on; synced: 81 health drops and 7 deaths | Met |
-| Two-player play (join, interaction, shared progression) | Encounter replay: all 761 frames and object bytes. Synced, 3,926 frames of two-player play: 12 friendly-fire hits, player 2 grabbing player 1, 25 grabs and 7 throws by both players | Met (shared continues not isolated) |
-| Weapons and pickups | Synced: knife (`$08`) picked up twice and thrown, bottle (`$09`) picked up, food eaten three times; the bat (`$0A`) is not picked up in any window | Partly met |
+| Two-player play (join, interaction, shared progression) | Encounter replay: all 761 frames and object bytes. Synced: 3,926 frames of two-player play (12 friendly-fire hits, player 2 grabbing player 1, 7 throws by both), player 2 joining a one-player game with Start, and player 2 continuing while player 1 plays on | Met |
+| Weapons and pickups | Synced: every Round 1 weapon — the bat (`$0A`, dropped by the enemy carrying it) picked up twice and used, the knife (`$08`) picked up and thrown, the bottle (`$09`) — and food eaten three times | Met |
 | Round 1 boss | Synced: Antonio (`$56`) and his boomerang (`$96`) for 4,000 frames, all game RAM equal | Met |
 | Round completion | Synced: Antonio knocked out, stage clear (modes `$18`/`$1A`), Round 2 intro and its first wave | Met |
 | Continue and game over | Synced: high-score name entry, the continue prompt, a continue taken, and one declined through game over, the top-10 screen and back to the Sega logo and intro | Met |
@@ -82,17 +83,21 @@ accumulated before it (`tools/state-sync.py`, REFERENCE.md).
 | `round1-bot` 16,900 | last death, name entry, continue taken | 3,000 | equal |
 | `round1-bot-gameover` 16,900 | name entry, continue declined, game over, top 10, logo, intro | 3,000 | equal (33 unsettled, during loads) |
 | `two-player-bot` 2,000 | two players, friendly fire, grabs and throws | 5,000 | equal but one sound-driver byte for 14 frames from 3,926 |
+| `round1-bot-join` 2,900 | player 2 joins with Start, throws, friendly fire | 3,000 | equal |
+| `round1-bot-bat` 14,050 | the bat dropped, picked up twice and used; the knife | 4,335 | equal |
+| `two-player-bot-continue` 23,900 | player 2 out of lives, continues while player 1 plays | 3,000 | equal |
 
-No recorded replay survives to the boss, so the `round1-bot*` windows come from
+No recorded replay survives to the boss, so the bot windows come from
 `tools/bot-play.py`: a scripted policy plays the original (throws, pickups and
 the continue prompt are options) and, until a set frame, RAM writes keep the
 player standing and hold ordinary enemies at one hit point. The writes stop
 before each export, so every compared frame is the game playing the recorded
-inputs on its own. The two-player run uses no writes: player 2 attacks player 1
-for 200 frames in every 900. The bot's inputs are saved as ordinary scenarios
-(`reference/scenarios/round1-bot*.json`, `two-player-bot.json`).
+inputs on its own. The two-player and join runs use no writes (player 2 attacks
+player 1 for 200 frames in every 900); the two-player continue run keeps only
+player 1 standing, until 23,800. The bot's inputs are saved as ordinary scenarios
+(`reference/scenarios/round1-bot*.json`, `two-player-bot*.json`).
 
-The windows found three differences in the port:
+The windows found these differences in the port:
 
 - **Z80 driver loader** (`$1061C`): the ROM decompresses the driver into work
   RAM at `$FF7000` before copying it to the Z80; the port decoded it in host
@@ -102,6 +107,10 @@ The windows found three differences in the port:
   port stopped. `tools/audit-dispatch-tables.py` lists every state-table target
   without an entry; the 47 that are decoded code are now seeded
   (`tools/generate.py`), and the remaining four are data past a table's end.
+  The two-player continue then reached `$109DC`, a player-mask jump table
+  (`jmp table(pc,d0)` at `$109A8`, 1 = player 1, 2 = player 2, 3 = both) whose
+  "both" entry the disassembly never reached. The audit now reads such inline
+  tables as well, and 13 more targets are seeded.
 - **A skipped drum hit** (two-player window, original frame 5,925): the 68000's
   sound driver sends a drum command only if Z80 RAM `$1FF6` shows the previous
   sample finished. The port's Z80 finished that 29-frame sample 66,000 master
@@ -118,5 +127,4 @@ The windows found three differences in the port:
   (the skipped drum above), exact per-path costs for the remaining hand-written
   routines, DIV and register-shift timing, and YM2612 busy from the Z80's own
   writes. These extend exact windows from power-on and remove the drum skip.
-- **Coverage**: the bat, and continues shared between two players.
 - **Hardware**: a run on a physical console, including frame time and audio.

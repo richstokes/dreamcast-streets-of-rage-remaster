@@ -6,7 +6,8 @@ counts, from the gate over the given number of frames: object types present,
 enemy hits and knockouts, player grabs and throws (front $62, from behind $70),
 weapons picked up and let go, food eaten (health gained), police specials
 used, player health drops, hits between the two players with no enemy near,
-continue prompts (player type $0F), continues taken and game overs (mode $0C).
+continue prompts (player type $0F), continues taken, game overs (mode $0C) and
+player 2 joining a game in progress.
 Usage: tools/behaviour-coverage.py (fixed replay set, plus the
 state-synchronised windows of tools/state-sync.py, from their sync frame over
 the frames that matched).
@@ -23,7 +24,7 @@ def analyse(name,path,gate,length):
     modes=collections.Counter(); waves=set(); lives_lost=0
     grabs=0; grabframes=0; weaponframes=0; weapons=set(); special=0; lives=[]; player_hits=0
     throws=collections.Counter(); pickups=collections.Counter(); released=0; food=0; friendly=0
-    prompts=0; continues=0; game_overs=0
+    prompts=0; continues=0; game_overs=0; joins=0
     prev=None
     for rel in range(length):
         r=R(gate+rel)
@@ -49,6 +50,7 @@ def analyse(name,path,gate,length):
                     if h0 and not h1: deaths[t]+=1
             if r[0xFF21]<prev[0xFF21]: special+=1
             if w(r,0xFF00)==0x0C and w(prev,0xFF00)!=0x0C: game_overs+=1
+            if r[0xB880]==0x01 and prev[0xB880]==0x00: joins+=1
             for p in players:
                 if r[p]==0x0F and prev[p]!=0x0F: prompts+=1
                 if r[p]==0x01 and prev[p]==0x0F: continues+=1
@@ -69,14 +71,15 @@ def analyse(name,path,gate,length):
         prev=r
     return dict(frames=length,modes=dict(modes),waves=sorted(waves),object_types={hex(k):v for k,v in sorted(types.items())},grab_starts=grabs,grab_frames=grabframes,
                 weapon_frames=weaponframes,weapons=sorted(hex(x) for x in weapons),police_specials_used=special,lives_lost=lives_lost,throws=dict(throws),weapon_pickups=dict(pickups),weapons_let_go=released,
-                food_eaten=food,friendly_hits=friendly,continue_prompts=prompts,continues=continues,game_overs=game_overs,player_health_drops=player_hits,enemy_hits={hex(k):v for k,v in hits.items()},enemy_knockouts={hex(k):v for k,v in deaths.items()})
+                food_eaten=food,friendly_hits=friendly,continue_prompts=prompts,continues=continues,game_overs=game_overs,joins=joins,player_health_drops=player_hits,enemy_hits={hex(k):v for k,v in hits.items()},enemy_knockouts={hex(k):v for k,v in deaths.items()})
 out={}
 for name,path,gate,length in (('actions','build/genesis-phase-actions',1384,1481),('two-player','build/genesis-phase-two',1398,761),
                               ('round1-combat','build/genesis-round1',1384,3115),('round1-full','build/genesis-round1-full',1384,9976)):
     out[name]=analyse(name,path,gate,length)
 for d,original in (('sync-17300','genesis-round1-full'),('sync-19200','genesis-round1-full'),('sync-22100','genesis-round1-full'),
                    ('sync-boss','bot-round1'),('sync-clear','bot-clear'),('sync-continue','bot-round1'),
-                   ('sync-gameover','bot-gameover'),('sync-throws','bot-throws'),('sync-items','bot-items'),('sync-2p','bot-2p')):
+                   ('sync-gameover','bot-gameover'),('sync-throws','bot-throws'),('sync-items','bot-items'),('sync-2p','bot-2p'),
+                   ('sync-bat','bot-bat'),('sync-2p-continue','bot-2p-continue'),('sync-join','bot-join')):
     r=json.load(open('build/%s/result.json'%d))
     length=r['compared_frames'] if r['first_difference'] is None else r['first_difference']
     out[d]=analyse(d,'build/'+original,r['sync_frame'],length)

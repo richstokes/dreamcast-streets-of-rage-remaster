@@ -163,6 +163,10 @@ def main():
     ap.add_argument('--pickups', action='store_true', help='collect weapons and food when no enemy is near')
     ap.add_argument('--players', type=int, choices=(1, 2), default=1,
                     help='2: drive player 2 with the same policy (the prologue must start a two-player game)')
+    ap.add_argument('--join', type=int, metavar='FRAME', help='one-player game: player 2 presses Start from FRAME '
+                    'until the game lets them in, then plays with the same policy')
+    ap.add_argument('--aid-players', type=int, choices=(1, 2), default=2,
+                    help='1: keep only player 1 alive (player 2 can run out of lives and continue)')
     ap.add_argument('--spar', metavar='PERIOD:LENGTH', help='two players: for LENGTH frames of every PERIOD, '
                     'player 2 attacks player 1 (friendly fire)')
     ap.add_argument('--verbose', action='store_true', help='report mode, wave, lives and camera as they change')
@@ -186,7 +190,7 @@ def main():
         segments.append({k: v for k, v in segment.items() if k != 'capture'})
         if gate: break
     options = dict(answer=a.answer, throws=a.throws, pickups=a.pickups)
-    bots = [Bot(PLAYER, **options)] + ([Bot(PLAYER2, rival=PLAYER, **options)] if a.players == 2 else [])
+    bots = [Bot(PLAYER, **options)] + ([Bot(PLAYER2, rival=PLAYER, **options)] if a.players == 2 or a.join else [])
     spar = tuple(int(v) for v in a.spar.split(':')) if a.spar else None
     camera, held, reported = None, 0, None
     for frame in range(a.frames):
@@ -198,7 +202,7 @@ def main():
             # leaves the level pipeline waiting for a death that never happens.
             if 0 < word(ram, HEALTH) < a.health: g.poke(HEALTH, a.health, 2)
             if ram[LIVES] < 3: g.poke(LIVES, 3, 1)
-            if a.players == 2:
+            if a.players == 2 and a.aid_players == 2:
                 if 0 < word(ram, PLAYER2 + 50) < a.health: g.poke(PLAYER2 + 50, a.health, 2)
                 if ram[LIVES2] < 3: g.poke(LIVES2, 3, 1)
             if a.weaken:
@@ -208,6 +212,9 @@ def main():
         lure = held > a.stuck and held % (a.stuck * 2) < a.stuck // 2
         sparring = bool(spar) and frame % spar[0] < spar[1]
         pressed = [bot.buttons(ram, frame, lure, spar=sparring) for bot in bots] + [[]]
+        if a.join and ram[PLAYER2] != 0x01:
+            # Not in play yet: idle, then pulse Start (odd period, see prompt()).
+            pressed[1] = ['START'] if g.frame >= a.join and frame % 15 < 2 else []
         if segments and 'wait' not in segments[-1] and [segments[-1].get(k, []) for k in ('p1', 'p2')] == pressed[:2]:
             segments[-1]['frames'] += 1
         else: segments.append(dict(frames=1, **{k: b for k, b in zip(('p1', 'p2'), pressed) if b}))
@@ -236,7 +243,7 @@ def main():
             scenario_sha256=hashlib.sha256(a.out.read_bytes()).hexdigest(),
             rom_sha256=hashlib.sha256(Path(a.rom).read_bytes()).hexdigest(), frames=g.frame, ram_first_frame=1,
             aids_until=a.aids_until, weaken=a.weaken, player_health=a.health, players=a.players, throws=a.throws,
-            pickups=a.pickups, spar=a.spar, answer=a.answer), indent=2) + '\n')
+            pickups=a.pickups, spar=a.spar, answer=a.answer, aid_players=a.aid_players, join=a.join), indent=2) + '\n')
     g.close()
 
 

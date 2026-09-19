@@ -28,10 +28,13 @@ and relevant commit/capture paths in the progress log.
 
 ## Next milestone: faithful original-mode gameplay section
 
-- [ ] Resolve reference lockstep timeouts and obtain repeatable comparison traces.
-- [ ] Establish and verify native simulation/interrupt cadence against Genesis.
+- [x] Obtain repeatable comparison traces. (Genesis Plus GX runs the original
+  deterministically, docs/REFERENCE.md; the PC build's lockstep timeouts no longer
+  matter since it is not the reference, and are not pursued.)
+- [x] Establish and verify native simulation/interrupt cadence against Genesis.
   (2026-09-19: frame-exact from power-on through menus and loads; decompressor time
-  exact per decode; Round 1 slowdown reproduced except one frame at 9,976 — docs/CADENCE.md.)
+  exact per decode; Round 1 slowdown reproduced except one frame at 9,976 — docs/CADENCE.md.
+  Remaining refinements are tracked in the timing items below.)
 - [x] Verify movement and combat in the first section, including two-player play.
   (2026-09-19: Round 1 play matches the original for 9,976 gameplay frames from power-on;
   state-synced windows cover wave 3, 13 throws, the boss, the stage clear, and two-player
@@ -46,19 +49,20 @@ and relevant commit/capture paths in the progress log.
   (Default on; effect channels match original driver state every frame, onsets within 10 ms;
   reference/results/audio-timing-2026-09-19.json. Music start offset follows the cadence item.)
 - [ ] Pass the first-section fidelity gate before starting enhanced presentation.
-  (2026-09-19, docs/FIDELITY_GATE.md: every criterion met in emulation except picking up
-  the bat; one drum hit skipped in the two-player window (Z80 phase, below); physical
-  hardware untested.)
+  (2026-09-19, docs/FIDELITY_GATE.md: every criterion met in emulation, 14 synced windows;
+  one drum hit skipped in the two-player window (Z80 phase, below); physical hardware
+  untested.)
 - [x] Add Round 1 scenarios (or bot runs) for throws, friendly fire, other weapons,
   eating food, continuing and game over. (2026-09-19: tools/bot-play.py --throws --pickups
   --players 2 --spar --continue; reference/scenarios/round1-bot-*.json, two-player-bot.json.)
-- [ ] Cover the bat (`$0A`) and continues shared between two players.
+- [x] Cover the bat (`$0A`), joining a game in progress and one player continuing while
+  the other plays. (2026-09-19: round1-bot-bat, round1-bot-join, two-player-bot-continue.)
 - [ ] Exact Z80/68000 bus interleaving for the sound driver's acquire loop: the port's
   Z80 drifts a few hundred clocks from the original's, the retries quantise that into
   whole 847-clock steps, and one drum command is skipped in the two-player window
   (original frame 5,925; docs/FIDELITY_GATE.md).
 - [x] State-synchronised comparisons for later Round 1 content (boss, completion).
-  (2026-09-19: tools/state-sync.py, tools/bot-play.py; eleven windows, 38,500 frames,
+  (2026-09-19: tools/state-sync.py, tools/bot-play.py; fourteen windows, 48,835 frames,
   reference/results/state-sync-2026-09-19.json.)
 - [ ] Remaining timing: exact costs for profile-costed hand-written routines, DIV and
   register-shift timing, YM2612 busy from the Z80's writes (docs/CADENCE.md).

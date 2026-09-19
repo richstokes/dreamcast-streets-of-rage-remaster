@@ -1,7 +1,7 @@
 {
  "date": "2026-09-19",
  "tool": "tools/state-sync.py",
- "note": "Both backends start from the original machine state exported at sync_frame (Genesis Plus GX profiling core) and play the same inputs. Bot runs (tools/bot-play.py) stop their RAM-write aids before the sync frame: round1-bot and round1-bot-gameover at 11000, round1-bot-clear at 14800, round1-bot-throws at 3500, round1-bot-items at 15800; two-player-bot uses none. Host-owned RAM (incremental Nemesis state, code table, stack below the main loop frame) is excluded from game_ram; unsettled frames are captures where both sides are mid-update or mid-load (mailbox 0).",
+ "note": "Both backends start from the original machine state exported at sync_frame (Genesis Plus GX profiling core) and play the same inputs. Bot runs (tools/bot-play.py) stop their RAM-write aids before the sync frame: round1-bot and round1-bot-gameover at 11000, round1-bot-clear at 14800, round1-bot-throws at 3500, round1-bot-items at 15800, round1-bot-bat at 14000, two-player-bot-continue at 23800 (player 1 only); two-player-bot and round1-bot-join use none. Host-owned RAM (incremental Nemesis state, code table, stack below the main loop frame) is excluded from game_ram; unsettled frames are captures where both sides are mid-update or mid-load (mailbox 0).",
  "windows": [
   {
    "scenario": "reference/scenarios/round1-full.json",
@@ -232,6 +232,45 @@
    },
    "name": "sync-2p",
    "content": "two-player-bot: two players, friendly fire, player 2 grabbing player 1, throws by both; one sound-driver byte differs (a skipped drum hit)"
+  },
+  {
+   "scenario": "reference/scenarios/round1-bot-join.json",
+   "sync_frame": 2900,
+   "native_sync_frame": 1317,
+   "compared_frames": 3000,
+   "identical_ram_frames": 566,
+   "identical_game_ram_frames": 3000,
+   "unsettled_differences": [],
+   "first_difference": null,
+   "first_difference_by_field": {},
+   "name": "sync-join",
+   "content": "round1-bot-join: player 2 joins a one-player game with Start, throws, friendly fire"
+  },
+  {
+   "scenario": "reference/scenarios/round1-bot-bat.json",
+   "sync_frame": 14050,
+   "native_sync_frame": 1317,
+   "compared_frames": 4335,
+   "identical_ram_frames": 879,
+   "identical_game_ram_frames": 4335,
+   "unsettled_differences": [],
+   "first_difference": null,
+   "first_difference_by_field": {},
+   "name": "sync-bat",
+   "content": "round1-bot-bat: the bat dropped by its carrier, picked up twice and used; the knife"
+  },
+  {
+   "scenario": "reference/scenarios/two-player-bot-continue.json",
+   "sync_frame": 23900,
+   "native_sync_frame": 1264,
+   "compared_frames": 3000,
+   "identical_ram_frames": 2995,
+   "identical_game_ram_frames": 3000,
+   "unsettled_differences": [],
+   "first_difference": null,
+   "first_difference_by_field": {},
+   "name": "sync-2p-continue",
+   "content": "two-player-bot-continue: player 2 out of lives, continues while player 1 plays"
   }
  ]
 }

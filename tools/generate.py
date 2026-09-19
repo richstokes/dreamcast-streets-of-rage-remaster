@@ -13,8 +13,13 @@ P=ROOT/'research/StreetsOfRageProject'
 # State-table targets the disassembly-seeded pass does not emit as entries
 # (tools/audit-dispatch-tables.py). Two-player friendly fire reached reaction
 # $2502 and stopped with "Untranslated dispatch". All are decoded instruction
-# starts; any past a table's real end is an unused but harmless entry.
+# starts; any past a table's real end is an unused but harmless entry. The
+# second group are inline `jmp table(pc,dn)` targets; $109DC/$109EA (the
+# player-mask table at $109A8, reached by a two-player continue) are code the
+# disassembly never reached.
 DISPATCH_TABLE_SEEDS={int(x,16) for x in '''
+002D54 002D5E 002FE2 003D04 005526 00AA20 00BAEC 00BAF8 00BB06 01206C 013658
+0109DC 0109EA
 000536 000828 0008E8 00227C 0024E6 002502 0025FE 004EBA 007204 00AA58
 00BBB0 00BBCE 00BC0A 00BC28 00BC78 00BC96 00C1AC 00C3C4 00C648 00C710
 00C786 00C800 00C876 00C8CC 00C904 00D14C 00D18A 00D24C 00D5F8 00F8C4

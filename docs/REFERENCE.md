@@ -28,9 +28,9 @@ only. Adding every valid label changes function partitioning: an initial attempt
 broke the manual call to `enqueue_object_render_bucket(0xAE96u)`, leaving actors
 invisible. Narrowing the repair restores that entry and visible actors in Flycast.
 
-Result: 25,614 decoded instructions, 874 function partitions, 53 manual entries;
-24,504 translated instructions, zero stubbed instructions, 30 translation units
-(with the 47 state-table seeds of 2026-09-19, `tools/audit-dispatch-tables.py`).
+Result: 25,649 decoded instructions, 883 function partitions, 53 manual entries;
+24,539 translated instructions, zero stubbed instructions, 30 translation units
+(with the 60 state-table seeds of 2026-09-19, `tools/audit-dispatch-tables.py`).
 These are generation counts, **not runtime coverage or fidelity percentages**.
 
 ## Runs and limits
@@ -73,10 +73,10 @@ comparison tool only, never linked into the Dreamcast executable.
 | Area | Required scenarios | Current evidence |
 | --- | --- | --- |
 | Movement | Four directions, diagonal, plane bounds, jump arcs | Phase-anchored directions, diagonals and jump actions match all object state; Round 1 play matches for 9,976 frames; plane bounds not exhausted |
-| Combat | Combo presses/holds, back attack, jump kick, all grabs/throws, police | Phase-anchored attack/jump/special inputs compared; state-synced front and back throws, knife, bottle and food (FIDELITY_GATE.md); the bat not picked up |
+| Combat | Combo presses/holds, back attack, jump kick, all grabs/throws, police | Phase-anchored attack/jump/special inputs compared; state-synced front and back throws, the bat, knife, bottle and food (FIDELITY_GATE.md) |
 | Enemy logic | Every family, damage, invulnerability, knockdown, recovery | Round 1: every family and Antonio match (9,976 frames from power-on, state-synced windows after); later rounds not compared |
 | Campaign | Scroll triggers/waves, transitions, all bosses, all endings | Boot, menus and loads frame-exact; Round 1 from power-on until 9,976, then state-synced through wave 3, the boss, the stage clear into Round 2, continue and game over (FIDELITY_GATE.md); later rounds and endings not compared |
-| Two-player | Join, friendly fire, grabs/assists, lives/continues, scoring | 761 encounter frames match including all object bytes; state-synced friendly fire, player-on-player grabs and throws (2026-09-19); shared continues not covered |
+| Two-player | Join, friendly fire, grabs/assists, lives/continues, scoring | 761 encounter frames match including all object bytes; state-synced joining with Start, friendly fire, player-on-player grabs and throws, and one player continuing while the other plays (2026-09-19) |
 | Randomness/cadence | Same reset/input stream, seeds and per-tick actor state | Native repeatability verified; cadence frame-exact through boot and loads, gameplay slowdown near-exact (CADENCE.md) |
 
 Record verified, inferred and inaccurate behavior separately. Never substitute
@@ -161,7 +161,9 @@ build/tools-venv/bin/python3 tools/state-sync.py "$SOR_ROM" \
   weapons and food when no enemy is near), `--continue yes|no` (enter initials,
   then answer the continue prompt), `--players 2` with `--spar PERIOD:LENGTH`
   (player 2 attacks player 1 for LENGTH frames of every PERIOD; start from a
-  two-player prologue such as `phase-aligned-two-player.json`). Buttons for
+  two-player prologue such as `phase-aligned-two-player.json`), `--aid-players 1`
+  (aids keep only player 1 standing), `--join FRAME` (in a one-player game,
+  player 2 presses Start from FRAME and then plays). Buttons for
   menus are pulsed at an odd period: the press flag lasts one VBlank and the
   game reads it every second one.
 

@@ -1,5 +1,21 @@
 # Progress
 
+## 2026-09-19 — fidelity gate met in emulation
+
+- Three more state-synced windows match the original in all game RAM: the bat
+  (dropped by the enemy carrying it, picked up twice and used), player 2 joining
+  a one-player game with Start, and player 2 running out of lives and continuing
+  while player 1 plays on. Fourteen windows, 48,835 frames.
+- The two-player continue reached another untranslated target: the player-mask
+  jump table at `$109A8` (`jmp table(pc,d0)`), whose "both players" entry the
+  disassembly never reached. The table audit now reads inline PC-relative
+  tables too; 13 more targets are seeded (60 in all).
+- New bot options: `--join FRAME`, `--aid-players 1`.
+- Housekeeping: the PC-reference lockstep item is retired (Genesis Plus GX is the
+  reference) and the cadence item closed; remaining timing work stays on TODO.md.
+- Fidelity gate: every criterion met in emulation. Open: one skipped drum hit
+  (Z80/68000 bus phase) and a physical-hardware run.
+
 ## 2026-09-19 — fidelity gate behaviour checks; no audio underruns in Flycast
 
 - The scripted player (`tools/bot-play.py`) now throws, picks up weapons and
