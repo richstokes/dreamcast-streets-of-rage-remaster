@@ -25,5 +25,8 @@ int main(){
  b[12]=0;b.push_back(0);assert(!load(b));b.pop_back();b.pop_back();assert(!load(b));
  std::vector<unsigned char>old={'S','R','P','1'};word(old,1,4);word(old,1,4);word(old,8,2);word(old,0,2);
  assert(load(old));assert(replay_poll(p,ram)&&p.player1.right&&replay_finished());
+ old[12]=0;old[13]=3; // Native CHEATS and BACK occupy previously unused u16 bits.
+ assert(load(old));assert(replay_poll(p,ram)&&p.player1.mode&&p.player1.x);
+ old[13]=4;assert(!load(old)); // Unknown native buttons remain invalid.
  puts("Replay: SRP1 compatibility, two pads, gate boundaries, timeout and invalid input pass");
 }

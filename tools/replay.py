@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 import json,struct,sys
 from pathlib import Path
-BUTTONS={'UP':1,'DOWN':2,'LEFT':4,'RIGHT':8,'B':16,'C':32,'A':64,'START':128}
+BUTTONS={'UP':1,'DOWN':2,'LEFT':4,'RIGHT':8,'B':16,'C':32,'A':64,'START':128,
+         'CHEATS':256,'BACK':512} # Native menu only: L+R and Dreamcast B.
 s=json.loads(Path(sys.argv[1]).read_text())['segments']
 if not 1<=len(s)<=4096: raise SystemExit('1..4096 segments required')
 version=2 if any('wait' in v for v in s) else 1

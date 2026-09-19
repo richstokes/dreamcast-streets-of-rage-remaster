@@ -3,6 +3,7 @@
 #include "MegaDriveEnvironment.hpp"
 #include "Logger.hpp"
 #include "replay.hpp"
+#include "cheats.hpp"
 #include <cstdlib>
 #include <cstring>
 #include <stdexcept>
@@ -20,6 +21,7 @@ void Controllers::poll(const uint8_t *ram){
     static bool powerOnFrame=true;
     if(powerOnFrame){powerOnFrame=false;PlayersControlState unused{};replay_poll(unused,ram);}
     if(!replay_poll(current,ram)) platform_poll_controllers(current);
+    sor::cheats::poll(current,ram);
 }
 MegaDriveEnvironment::MegaDriveEnvironment(VDP::Synchronization,VDP::Scaling,VDP::SpriteLimit,uint16_t)
     :port_(state_),tile_(state_),renderer_(state_,tile_,fb_),audio_(platform_audio_enabled(),platform_audio_native_dac()){

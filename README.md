@@ -96,6 +96,24 @@ Start menus/pause; same mapping on port B. **Dreamcast B** on port A toggles
 PowerVR/software rendering for comparison. It does not reset gameplay. Input
 behavior still needs full verification.
 
+Press **L + R on port A** to open the **Cheats** menu, including during play.
+The game pauses while the menu is open. Use D-pad up/down to select, left/right
+or **A** to change, and **B / Start / L + R** to return.
+
+- **Start round:** any of the eight rounds, from its beginning.
+- **Starting lives:** 1–9 for each player. Round and lives apply to the next new game.
+- **Infinite lives**, **infinite health**, and **infinite specials:** apply to both
+  players when you resume. Falls still cost a life; police support remains unavailable
+  in Round 8, as in the original game.
+- **Restore defaults:** Round 1, three lives, extra cheats off.
+
+Cheat settings last for the current session and are not written to the VMU.
+All extras default to off. Outside this menu, Dreamcast B still switches renderers.
+For feature checks, run `./tools/test-cheats.sh` and, after building the headless
+runner, `python3 tools/test-cheats-gameplay.py /absolute/path/to/your-ROM.md`.
+These checks cover all eight starts and two-player cheats; they do not establish
+full-game fidelity.
+
 ## Verification and tracking
 
 - [Architecture and retail memory budgets](docs/ARCHITECTURE.md)

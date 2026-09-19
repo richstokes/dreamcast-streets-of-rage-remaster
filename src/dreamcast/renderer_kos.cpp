@@ -7,11 +7,14 @@
 #include "vdp_scene.hpp"
 #include "pvr_tiles.hpp"
 #include "equal_bytes.hpp"
+#include "cheats.hpp"
 #include "title_caption.hpp"
 namespace {
 std::unique_ptr<sor::VdpScene> scene;
 pvr_ptr_t tiles=nullptr,spriteTexture[2]{};
 pvr_poly_hdr_t tileHeaders[8192],spriteHeaders[2];
+pvr_ptr_t cheatHintTexture=nullptr;
+pvr_poly_hdr_t cheatHintHeader;
 pvr_ptr_t titleTextures[sor::TitleCaption::regions.size()]{};
 pvr_poly_hdr_t titleHeaders[sor::TitleCaption::regions.size()];
 uint16_t titleTextureKey=0;
@@ -49,6 +52,14 @@ void dc_renderer_init(){
     if(!tiles||!spriteTexture[0]||!spriteTexture[1])throw std::runtime_error("PowerVR texture budget exhausted");
     for(int i=0;i<8192;i++)header(tileHeaders[i],static_cast<uint8_t*>(tiles)+(i%2048)*32,8,8,false,i/2048);
     for(int p=0;p<2;p++)header(spriteHeaders[p],spriteTexture[p],512,256,true);
+    cheatHintTexture=pvr_mem_malloc(256*16*2);
+    if(!cheatHintTexture)throw std::runtime_error("Cheats hint texture allocation failed");
+    alignas(32) uint16_t hintPixels[256*16]{};
+    sor::cheats::drawHint(hintPixels,[](void *context,int x,int y,unsigned r,unsigned g,unsigned b){
+        static_cast<uint16_t*>(context)[(y-196)*256+x-32]=sor::VdpScene::rgb1555(r,g,b);
+    });
+    pvr_txr_load(hintPixels,cheatHintTexture,sizeof(hintPixels));
+    header(cheatHintHeader,cheatHintTexture,256,16,true);
     for(size_t i=0;i<sor::TitleCaption::regions.size();i++){
         const auto &r=sor::TitleCaption::regions[i];
         titleTextures[i]=pvr_mem_malloc(r.textureWidth*r.textureHeight*2);
@@ -60,6 +71,7 @@ void dc_renderer_init(){
 void dc_renderer_shutdown(){
     if(tiles)pvr_mem_free(tiles);
     for(auto p:spriteTexture)if(p)pvr_mem_free(p);
+    if(cheatHintTexture)pvr_mem_free(cheatHintTexture);
     for(auto p:titleTextures)if(p)pvr_mem_free(p);
     scene.reset();
 }
@@ -132,6 +144,12 @@ bool dc_render_vdp(VDPState &state,VDPRenderer &renderer,const sor::TitleCaption
     auto bg=scene->background;pvr_set_bg_color(((bg>>10)&31)/31.f,((bg>>5)&31)/31.f,(bg&31)/31.f);
     pvr_scene_begin();pvr_list_begin(PVR_LIST_PT_POLY);
     pvr_prim(packets,packetCount*sizeof(Packet));
+    if(sor::cheats::hintVisible()){
+        alignas(32) Packet hint;
+        const float sx=640.f/scene->width,sy=480.f/scene->height;
+        quad(hint,cheatHintHeader,32*sx,196*sy,256*sx,16*sy,7,0,0,1,1);
+        pvr_prim(&hint,sizeof(hint));
+    }
     if(title.brightness){
         const float sx=640.f/scene->width,sy=480.f/scene->height;
         for(size_t i=0;i<sor::TitleCaption::regions.size();i++){

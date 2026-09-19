@@ -5,6 +5,7 @@
 #include "platform.hpp"
 #include "replay.hpp"
 #include "pc_profile.hpp"
+#include "cheats.hpp"
 void dc_renderer_init();
 void dc_renderer_shutdown();
 bool dc_render_vdp(VDPState &,VDPRenderer &,const sor::TitleCaption &);
@@ -20,12 +21,14 @@ void platform_poll_controllers(PlayersControlState &current){
         *out[i]={}; auto dev=maple_enum_dev(i,0);
         if(!dev || !(dev->info.functions&MAPLE_FUNC_CONTROLLER))continue;
         auto s=static_cast<cont_state_t*>(maple_dev_status(dev)); if(!s)continue;
-        if(i==0){bool toggle=s->buttons&CONT_B;if(toggle&&!previousToggle){useGpu=!useGpu;sor_log("Renderer: %s\n",useGpu?"PowerVR":"software comparison");}previousToggle=toggle;}
+        if(i==0){bool toggle=s->buttons&CONT_B;if(toggle&&!previousToggle&&!sor::cheats::menu.visible()){useGpu=!useGpu;sor_log("Renderer: %s\n",useGpu?"PowerVR":"software comparison");}previousToggle=toggle;}
         auto &p=*out[i]; p.connected=true;
         p.up=s->buttons&CONT_DPAD_UP; p.down=s->buttons&CONT_DPAD_DOWN;
         p.left=s->buttons&CONT_DPAD_LEFT; p.right=s->buttons&CONT_DPAD_RIGHT;
         p.a=s->buttons&CONT_Y; p.b=s->buttons&CONT_X; p.c=s->buttons&CONT_A;
         p.start=s->buttons&CONT_START;
+        p.x=s->buttons&CONT_B;
+        p.mode=s->ltrig>=128 && s->rtrig>=128;
     }
 }
 
@@ -44,6 +47,9 @@ void platform_video_present(const Framebuffer &fb,int w,int h){
         auto p=b+y*Framebuffer::PITCH+x*3;
         pixels[y*512+x]=colorLut[(p[2]<<6)|(p[1]<<3)|p[0]];
     }
+    if(sor::cheats::hintVisible())sor::cheats::drawHint(nullptr,[](void *,int x,int y,unsigned r,unsigned g,unsigned b){
+        pixels[y*512+x]=colorLut[(r<<6)|(g<<3)|b];
+    });
     pvr_wait_ready(); pvr_txr_load(pixels,texture,sizeof(pixels));
     pvr_scene_begin();pvr_list_begin(PVR_LIST_OP_POLY);pvr_prim(&header,sizeof(header));
     pvr_vertex_t v{};v.z=1;v.argb=0xffffffff;
@@ -52,6 +58,7 @@ void platform_video_present(const Framebuffer &fb,int w,int h){
     pvr_list_finish();pvr_scene_finish();
 
 }
+void platform_cheat_menu_present(const Framebuffer &fb){platform_video_present(fb,320,224);}
 uint64_t platform_time_us(){return timer_us_gettime64();}
 PlatformMemoryStats platform_memory_stats(){auto m=mallinfo();return {uint32_t(m.uordblks),uint32_t(pvr_mem_available())};}
 static uint32_t lastSynthUs=0,lastPresentUs=0,slowFrames=0;
