@@ -70,6 +70,16 @@ ELF embeds the ROM for direct boot; it needs no CDI. Full debug symbols remain i
 `dist/sor-test.debug.elf`. Both files contain your game data and stay out of git.
 Repeated runs replace this project's previous emulator instance.
 
+To regenerate the latest game code and build a self-booting CDI image, run:
+
+```sh
+./build-cdi.sh
+```
+
+This writes `dist/sor.cdi` without launching Flycast. It uses the same default ROM
+as `build-and-run.sh`; pass a ROM path as the first argument or set `SOR_ROM` to
+use another location. It also writes `dist/sor.elf` and `dist/SHA256SUMS`.
+
 For the reproducible reference build and CD/GDEMU image:
 
 Use the exact ROM specified above. See [reference notes](docs/REFERENCE.md) for
