@@ -22,13 +22,11 @@ public:
     void writeYM68k(unsigned port,uint8_t value,uint32_t clocks);
     void writePSG68k(uint8_t value,uint32_t clocks);
     unsigned renderFrame(int16_t *stereo,uint64_t (*clock)()=nullptr,int16_t *dacStereo=nullptr);
-    // The Z80 runs in frame batches after the 68000. For the 68000's view of
-    // the DAC driver's busy flag ($1FFD bit 7) during a frame, a shadow of the
-    // driver advances from the frame's start with 68000 time, stalled while
-    // the 68000 holds the Z80 bus. clocks: master clocks since the frame began.
-    void beginFrame68k();
-    void busRequest68k(bool held,uint32_t clocks);
-    uint8_t dacBusy68k(uint32_t clocks);
+    // Advance the Z80 to the 68000's time (master clocks since the frame
+    // began) before the 68000 touches the Z80 bus, its RAM or the bus/reset
+    // lines: while the 68000 holds the bus the Z80 is stopped, as on hardware.
+    // The driver's YM writes keep their sample positions within the block.
+    void sync68k(uint32_t clocks);
     uint32_t fmWorkload=0;
     uint64_t profile[5]{}; // At most 890 stereo frames.
     uint64_t nativeDacSamples=0,nativeDacStarts=0;
@@ -36,5 +34,6 @@ public:
     uint64_t ymWrites=0,psgWrites=0,dacWrites=0,z80Faults=0;
     static constexpr unsigned sampleRate=53693175/7/144;
 private:
+    unsigned renderBlock(int16_t *stereo,uint64_t (*clock)(),int16_t *dacStereo);
     struct Impl;std::unique_ptr<Impl> impl;
 };

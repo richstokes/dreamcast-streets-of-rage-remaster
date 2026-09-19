@@ -106,9 +106,10 @@ Genesis Plus GX (MAME YM2612 core) after replay gate 9:
   through ymfm or Nuked OPN2 for such investigations.
 - **Sound-bus timing.** Before each YM2612 access the 68000 driver requests the
   Z80 bus and retries while the Z80 DAC driver flags a sample write (`$A01FFD`
-  bit 7). A shadow of the native DAC driver predicts that flag during the frame
-  (the real Z80 runs in frame batches), so the 68000 spends the original's time
-  there (CADENCE.md). The shadow never feeds audio output.
+  bit 7). The Z80 follows the 68000 through each frame: it runs ahead to the
+  68000's time whenever the 68000 touches its bus or RAM and stops while the bus
+  is held, collecting its YM writes at their sample positions for the frame's
+  batched synthesis (CADENCE.md).
 
 ## Playback stream
 

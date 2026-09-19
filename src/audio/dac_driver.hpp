@@ -11,11 +11,6 @@ public:
     int advance(int clocks);
     int eventOffset=0; // Instruction start within the current advance call.
     bool active()const{return active_;}
-    // A copy that runs on its own Z80 RAM image and discards YM writes, for
-    // predicting the driver's busy flag ahead of the batched Z80.
-    NativeDacDriver shadow(uint8_t *ram)const{
-        NativeDacDriver s=*this;s.ram_=ram;s.write_=[](void*,uint16_t,uint8_t){};return s;
-    }
     void cancel(){active_=false;}
     uint64_t samples=0;
     static bool recognizes(const uint8_t *ram);

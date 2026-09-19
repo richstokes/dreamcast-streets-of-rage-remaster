@@ -49,10 +49,10 @@ play matches for 10,045 gameplay frames, where one slowdown frame is missed**
   sound queue from Genesis Plus GX profiles (mean per call). A decode the port
   adds (the top-10 re-seed) costs no time.
 - **Sound bus**: the YM2612 busy flag lasts 32 YM clocks after a data write. The
-  Z80 DAC driver's busy flag (`$A01FFD` bit 7) comes from a shadow of the native
-  driver that advances with 68000 time from the frame's start and stalls while
-  the 68000 holds the bus, so the acquire retries while a drum sample is being
-  written, as on hardware (up to ~5k cycles per frame).
+  Z80 runs ahead to the 68000's time whenever the 68000 touches the Z80 bus, its
+  RAM or the bus/reset lines (catch-up), and stays stopped while the 68000 holds
+  the bus, so commands reach the driver on time and the acquire retries while a
+  drum sample is being written, as on hardware (up to ~5k cycles per frame).
 
 ## Decoder time
 
@@ -115,8 +115,8 @@ delay, the power-on position, and a one-frame input offset in the native replay.
 - A gameplay update whose total is within a fraction of a percent of its budget
   can finish on the other side of a VBlank. Remaining approximations: DIV and
   register-count shifts use typical times; hand-written routines costed from
-  profiles charge means; a DAC sample that starts during a frame is not seen by
-  the shadow driver until the next; 68000 bus accesses happen at the end of each
+  profiles charge means; Z80 reads of the 68000 bus (drum samples) cost neither
+  side the wait states Genesis Plus GX gives them; 68000 bus accesses happen at the end of each
   charged instruction rather than mid-instruction; interrupts are taken at the
   next charged instruction of translated code.
 - SoR counts VBlanks that upload graphics (`$FFFB08`) and some objects copy it,

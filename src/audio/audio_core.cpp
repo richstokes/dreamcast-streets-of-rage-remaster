@@ -33,11 +33,25 @@ struct NativeAudio::Impl:ymfm::ymfm_interface {
     std::array<WriteEvent,3072> merged{};
     unsigned cpuEventCount=0,cpuPsgCount=0,cpuOverflows=0;bool z80AddressOpen=false;
     uint64_t instructionClock=0;std::array<uint64_t,890> sampleTargets{};
-    NativeDacDriver shadow;uint8_t shadowRam[8192]{};
-    uint32_t shadowZ=0,shadowStall=0,heldAt=0;bool shadowValid=false,held=false;
-    void advanceShadow(uint32_t clocks){
-        const uint32_t target=clocks/15>shadowStall?clocks/15-shadowStall:0;
-        if(shadowZ<target)shadowZ+=shadow.advance(int(target-shadowZ));
+    // Catch-up frame: the next block's Z80 events are collected while the
+    // 68000 runs, the Z80 advancing to the 68000's time whenever it touches
+    // the Z80 bus, so bus requests stall it and commands arrive on time.
+    bool catchUp=false,open=false;unsigned openSamples=0;uint64_t frameZ=0;   // catch-up starts with the first sync
+    unsigned nextSamples(){remainder+=896040;const unsigned n=remainder/1008;remainder%=1008;return n;}
+    bool batchable()const{return owner.nativeDac && driverKnown && !(ymMode&0x80);}
+    void beginBlock(unsigned n){
+        eventCount=0;collecting=true;eventSample=0;eventSamples=n;blockStart=samples;frameZ=zTarget;
+        for(unsigned i=0;i<n;i++){
+            samples++;zTarget+=67;zFraction+=3;
+            if(zFraction>=15){zFraction-=15;zTarget++;}
+            sampleTargets[i]=zTarget;
+        }
+    }
+    void sync(uint32_t clocks){
+        catchUp=true;
+        if(!open)return;
+        const uint64_t target=std::min<uint64_t>(frameZ+clocks/15,zTarget);
+        burst=true;runZ80(target);burst=false;
     }
     // Host analysis only (SOR_YM_LOG): each chip write with the index of the
     // first output sample it affects. 10-byte records: u64 sample, port, value;
@@ -61,7 +75,7 @@ struct NativeAudio::Impl:ymfm::ymfm_interface {
     void setPolarity(unsigned c,bool value){
         if(polarity[c]!=value){polarity[c]=value;psgLevel+=(value?2:-2)*amplitude[volume[c]];}
     }
-    explicit Impl(NativeAudio &o):owner(o),fm(*this),dac(o.ram,this,read,write),shadow(dac.shadow(shadowRam)){
+    explicit Impl(NativeAudio &o):owner(o),fm(*this),dac(o.ram,this,read,write){
         fm.reset();resetCpu();
 #ifndef __DREAMCAST__
         if(const char *path=std::getenv("SOR_YM_LOG"))ymLog=std::fopen(path,"wb");
@@ -219,28 +233,9 @@ void NativeAudio::setBusRequest(bool b){
     impl->bus=b;
     // Native callers retry BUSREQ immediately; permit the DAC driver to finish
     // its short critical section rather than deadlocking on a frozen busy flag.
-    if(!b&&!impl->reset)for(int i=0;i<128&&(ram[0x1ffd]&128);i++)impl->ztime+=impl->runSound(16);
+    if(!b&&!impl->reset&&!impl->open)for(int i=0;i<128&&(ram[0x1ffd]&128);i++)impl->ztime+=impl->runSound(16);
 }
-void NativeAudio::beginFrame68k(){
-    if(!impl)return;
-    auto &s=*impl;
-    s.shadowValid=nativeDac&&s.driverKnown&&!s.reset&&s.dac.active();
-    s.shadowZ=s.shadowStall=s.heldAt=0;
-    if(s.shadowValid){std::copy_n(ram,8192,s.shadowRam);s.shadow=s.dac.shadow(s.shadowRam);}
-}
-void NativeAudio::busRequest68k(bool b,uint32_t clocks){
-    if(!impl||!impl->shadowValid||b==impl->held)return;
-    auto &s=*impl;
-    if(b){s.advanceShadow(clocks);s.heldAt=clocks;}
-    else s.shadowStall+=(clocks-s.heldAt)/15;
-    s.held=b;
-}
-uint8_t NativeAudio::dacBusy68k(uint32_t clocks){
-    if(!impl||!impl->shadowValid)return ram[0x1ffd];
-    auto &s=*impl;
-    if(!s.held)s.advanceShadow(clocks);
-    return s.shadow.active()?s.shadowRam[0x1ffd]:0;
-}
+void NativeAudio::sync68k(uint32_t clocks){if(impl)impl->sync(clocks);}
 void NativeAudio::writeYM(unsigned p,uint8_t v){
     if(!impl)return;
     ymWrites++;impl->logWrite(p,v);
@@ -272,26 +267,28 @@ void NativeAudio::writePSG68k(uint8_t v,uint32_t clocks){
 uint8_t NativeAudio::readYM(unsigned p){return impl?impl->fm.read(p):0;}
 void NativeAudio::writePSG(uint8_t v){if(impl){psgWrites++;impl->logWrite(4,v);impl->psgWrite(v);}}
 unsigned NativeAudio::renderFrame(int16_t *out,uint64_t (*clock)(),int16_t *dacStereo){
+    const unsigned n=renderBlock(out,clock,dacStereo);
+    // Open the next frame's block so the Z80 can follow the 68000 through it.
+    if(impl && impl->catchUp && impl->batchable()){impl->openSamples=impl->nextSamples();impl->beginBlock(impl->openSamples);impl->open=true;}
+    return n;
+}
+unsigned NativeAudio::renderBlock(int16_t *out,uint64_t (*clock)(),int16_t *dacStereo){
     std::fill_n(profile,5,0);
     if(!impl)return 0;
     impl->fm.profile_clock=clock;impl->fm.profile_clocking=impl->fm.profile_output=0;
-    impl->remainder+=896040;unsigned n=impl->remainder/1008;impl->remainder%=1008;
+    // A catch-up block was opened when the previous frame was rendered.
+    const bool open=impl->open;impl->open=false;
+    const unsigned n=open?impl->openSamples:impl->nextSamples();
     // The hash-verified SoR DAC program writes the YM bus and reads RAM/ROM;
     // its busy-bit polls see the same always-ready interface in both paths,
     // and it does not write PSG. With CSM disabled, timer expirations affect
     // status only. Advance their exact sample clocks while collecting, then collect
     // those writes first, then render constant-register spans in one hot loop.
     // Unknown drivers and timer users retain the interleaved reference path.
-    if(nativeDac && impl->driverKnown && !(impl->ymMode&0x80)){
+    if(open || impl->batchable()){
         batchFrames++;
         auto begin=clock?clock():0;
-        impl->eventCount=0;impl->collecting=true;
-        impl->eventSample=0;impl->eventSamples=n;impl->blockStart=impl->samples;
-        for(unsigned i=0;i<n;i++){
-            impl->samples++;impl->zTarget+=67;impl->zFraction+=3;
-            if(impl->zFraction>=15){impl->zFraction-=15;impl->zTarget++;}
-            impl->sampleTargets[i]=impl->zTarget;
-        }
+        if(!open)impl->beginBlock(n);
         // The locked driver only polls YM busy (always ready in this model).
         // No gameplay thread writes the mailbox during synthesis. Retain each
         // write's original sample boundary using its instruction start clock.

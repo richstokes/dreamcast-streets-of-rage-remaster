@@ -44,7 +44,7 @@ void MegaDriveEnvironment::loadROM(const std::string &path){
 uint32_t MegaDriveEnvironment::readBus(void *ctx,uint32_t a,unsigned w){
     auto &e=*static_cast<MegaDriveEnvironment*>(ctx);
     if(w==4)return (readBus(ctx,a,2)<<16)|readBus(ctx,a+2,2);
-    if(a>=0xa00000 && a<0xa10000)e.cycles_+=7; // Z80-bus access latency: one 68000 cycle (Genesis Plus GX)
+    if(a>=0xa00000 && a<0xa10000){e.cycles_+=7;e.audio_.sync68k(uint32_t(e.cycles_-e.frameCycles_));} // Z80-bus access latency: one 68000 cycle (Genesis Plus GX)
     if(a>=0xc00000 && a<0xc00010){
         uint32_t v=(a&0xc)==4?e.port_.readControlPort():((a&0xc)==8?e.port_.readHVCounter():e.port_.readDataPort());
         if((a&0xc)==8&&getenv("SOR_HV_DEBUG")){static int n=0;if(n++<60)sor_log("HVREAD frame=%lu value=%04x last=%06lx frame_clock=%llu\n",(unsigned long)e.frames_,v,(unsigned long)e.last_,(unsigned long long)(e.cycles_-e.frameCycles_));}
@@ -52,7 +52,6 @@ uint32_t MegaDriveEnvironment::readBus(void *ctx,uint32_t a,unsigned w){
     }
     if(a>=0xa00000 && a<0xa02000){
         auto i=a&8191; if(i==0x1ffd&&!e.audio_.enabled)return 0;
-        if(i==0x1ffd&&w==1)return e.audio_.dacBusy68k(uint32_t(e.cycles_-e.frameCycles_));
         return w==1?e.audio_.ram[i]:(e.audio_.ram[i]<<8)|e.audio_.ram[(i+1)&8191];
     }
     if(a==0xa10003 || a==0xa10005){
@@ -78,7 +77,8 @@ uint32_t MegaDriveEnvironment::readBus(void *ctx,uint32_t a,unsigned w){
 void MegaDriveEnvironment::writeBus(void *ctx,uint32_t a,unsigned w,uint32_t v){
     auto &e=*static_cast<MegaDriveEnvironment*>(ctx);
     if(w==4){e.longWrite_=true;writeBus(ctx,a,2,v>>16);writeBus(ctx,a+2,2,v&65535);e.longWrite_=false;return;}
-    if(a>=0xa00000 && a<0xa10000)e.cycles_+=7; // Z80-bus access latency: one 68000 cycle (Genesis Plus GX)
+    if(a>=0xa00000 && a<0xa10000){e.cycles_+=7;e.audio_.sync68k(uint32_t(e.cycles_-e.frameCycles_));} // Z80-bus access latency: one 68000 cycle (Genesis Plus GX)
+    if(a>=0xa11100 && a<0xa11202)e.audio_.sync68k(uint32_t(e.cycles_-e.frameCycles_));
     if(a>=0xc00000 && a<0xc00008){
         if(w==1)v=(v&255)*257;
         if(a&4){
@@ -98,7 +98,7 @@ void MegaDriveEnvironment::writeBus(void *ctx,uint32_t a,unsigned w,uint32_t v){
         e.audio_.writeYM68k(a&3,v,uint32_t(e.cycles_-e.frameCycles_));return;
     }
     if(a==0xc00011){e.audio_.writePSG68k(v,uint32_t(e.cycles_-e.frameCycles_));return;}
-    if(a==0xa11100){e.audio_.busRequest68k(v&0x100,uint32_t(e.cycles_-e.frameCycles_));e.audio_.setBusRequest(v&0x100);return;}
+    if(a==0xa11100){e.audio_.setBusRequest(v&0x100);return;}
     if(a==0xa11200){e.audio_.setReset(!(v&0x100));return;}
     if((a>=0xa10000&&a<0xa14004)||(a>=0xa04000&&a<=0xa04003)||a==0xc00011)return;
     e.mem_.state.faults++;e.mem_.state.last_fault_address=a;
@@ -148,7 +148,7 @@ void MegaDriveEnvironment::frameBoundary(){
     alignas(32) int16_t samples[890*2],dacSamples[890*2];
     int16_t *dac=platform_audio_split_dac()?dacSamples:nullptr;
     const auto audioStart=platform_time_us();
-    unsigned count=audio_.renderFrame(samples,platform_audio_profile()&&frames_%600==599?platform_time_us:nullptr,dac);audio_.beginFrame68k();const auto synthDone=platform_time_us();if(count)platform_audio_submit(samples,count,dac);
+    unsigned count=audio_.renderFrame(samples,platform_audio_profile()&&frames_%600==599?platform_time_us:nullptr,dac);const auto synthDone=platform_time_us();if(count)platform_audio_submit(samples,count,dac);
     if(audio_.enabled&&frames_%600==599)sor_log("AUDIO frame=%lu synth_us=%llu stream_us=%llu ym=%llu psg=%llu dac=%llu z80_faults=%llu\n",(unsigned long)frames_,(unsigned long long)(synthDone-audioStart),(unsigned long long)(platform_time_us()-synthDone),(unsigned long long)audio_.ymWrites,(unsigned long long)audio_.psgWrites,(unsigned long long)audio_.dacWrites,(unsigned long long)audio_.z80Faults);
     if(audio_.enabled&&frames_%600==599){
         uint32_t digest=2166136261u;
