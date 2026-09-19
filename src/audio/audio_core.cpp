@@ -72,10 +72,6 @@ struct NativeAudio::Impl:ymfm::ymfm_interface {
     uint16_t ymBusAddress=0;uint8_t ymMode=0;
     uint8_t ymAddress[2]{};unsigned psgRemainder=0;
     static constexpr int amplitude[]={2800,2224,1767,1403,1115,886,704,559,444,353,280,222,177,140,111,0};
-    int psgLevel=0;
-    void setPolarity(unsigned c,bool value){
-        if(polarity[c]!=value){polarity[c]=value;psgLevel+=(value?2:-2)*amplitude[volume[c]];}
-    }
     explicit Impl(NativeAudio &o):owner(o),fm(*this),dac(o.ram,this,read,write){
         fm.reset();resetCpu();
 #ifndef __DREAMCAST__
@@ -147,11 +143,7 @@ struct NativeAudio::Impl:ymfm::ymfm_interface {
     void psgWrite(uint8_t v){
         if(v&128)latch=(v>>4)&7;
         unsigned ch=latch>>1;
-        if(latch&1){
-            int sign=polarity[ch]?1:-1;
-            psgLevel-=sign*amplitude[volume[ch]];volume[ch]=v&15;
-            psgLevel+=sign*amplitude[volume[ch]];
-        }
+        if(latch&1)volume[ch]=v&15;
         else if(ch==3){noiseControl=v&7;noise=0x8000;}
         else if(v&128)tone[ch]=(tone[ch]&0x3f0)|(v&15);
         else tone[ch]=(tone[ch]&15)|((v&63)<<4);
@@ -187,6 +179,32 @@ struct NativeAudio::Impl:ymfm::ymfm_interface {
         cpuEventCount=0;
         return count;
     }
+    bool psgMuted()const{return (volume[0]&volume[1]&volume[2]&volume[3])==15;}
+    // Advance a fully muted PSG by `samples` output samples at once: the same
+    // divider edges and noise shifts as that many psgSample() calls, which
+    // return silence. Division here happens once per span, not per sample.
+    void psgSkip(unsigned samples){
+        const unsigned total=psgRemainder+samples*1008,ticks=total/240;
+        psgRemainder=total-ticks*240;
+        const auto advance=[ticks](uint16_t &left,unsigned period){
+            if(ticks<left){left=uint16_t(left-ticks);return 0u;}
+            const unsigned rest=ticks-left;left=uint16_t(period-rest%period);
+            return 1+rest/period;
+        };
+        unsigned tone2Edges=0;const bool wasTone2=polarity[2];
+        for(unsigned c=0;c<3;c++){
+            const unsigned edges=advance(counter[c],std::max<unsigned>(1,tone[c]));
+            if(c==2)tone2Edges=edges;
+            polarity[c]^=bool(edges&1);
+        }
+        unsigned shifts;
+        if((noiseControl&3)==3)shifts=(tone2Edges+!wasTone2)/2;
+        else {
+            const unsigned edges=advance(counter[3],16u<<(noiseControl&3));
+            shifts=(edges+!noiseClock)/2;noiseClock^=bool(edges&1);
+        }
+        while(shifts--){bool feedback=(noiseControl&4)?((noise^(noise>>3))&1):(noise&1);noise=(noise>>1)|(unsigned(feedback)<<15);polarity[3]=noise&1;}
+    }
     int psgSample(){
         if((volume[0]&volume[1]&volume[2]&volume[3])==15){
             unsigned ticks=(psgRemainder+1008)/240;psgRemainder=(psgRemainder+1008)%240;
@@ -205,33 +223,75 @@ struct NativeAudio::Impl:ymfm::ymfm_interface {
             while(shifts--){bool feedback=(noiseControl&4)?((noise^(noise>>3))&1):(noise&1);noise=(noise>>1)|(unsigned(feedback)<<15);polarity[3]=noise&1;}
             return 0;
         }
-        // Jump between audible divider edges; all counters still advance in
-        // their original 240-master-clock domain, including muted oscillators.
-        int sum=0;unsigned remaining=1008;
-        while(remaining){
-            // Next divider edge (plain comparisons: an initializer-list std::min
-            // compiles to an out-of-line min_element call on SH-4).
-            unsigned edge=counter[0]<counter[1]?counter[0]:counter[1];
-            if(counter[2]<edge)edge=counter[2];
-            if((noiseControl&3)!=3 && counter[3]<edge)edge=counter[3];
-            unsigned span=std::min(remaining,edge*240-psgRemainder);
-            sum+=psgLevel*int(span);remaining-=span;psgRemainder+=span;
-            unsigned ticks=psgRemainder/240;psgRemainder%=240;
-            bool tone2Rise=false;
-            for(unsigned c=0;c<3;c++){
-                counter[c]-=ticks;
-                if(!counter[c]){counter[c]=std::max<unsigned>(1,tone[c]);setPolarity(c,!polarity[c]);if(c==2)tone2Rise=polarity[c];}
+        // Each channel's output is +amplitude while high and -amplitude while
+        // low; the sample is the mean over its 1008 master clocks. Sum each
+        // channel over the sample on its own (the sum is linear, so this equals
+        // walking all edges in time order). Divider edges fall on 240-clock
+        // ticks; muted oscillators keep running, and tone 2's rising edges
+        // clock the noise register when noise follows tone 2.
+        const unsigned start=psgRemainder,total=start+1008,ticks=total/240;
+        psgRemainder=total-ticks*240;
+        const bool tone2Clocks=(noiseControl&3)==3,noiseAudible=volume[3]!=15;
+        int sum=0;unsigned rise[4],rises=0,tone2Edges=0;const bool wasTone2=polarity[2];
+        for(unsigned c=0;c<3;c++){
+            const unsigned period=std::max<unsigned>(1,tone[c]);
+            const int amp=amplitude[volume[c]];
+            // A muted tone only advances, unless its rising edges clock audible noise.
+            if(!amp && !(c==2 && tone2Clocks && noiseAudible)){
+                const unsigned edges=dividerAdvance(counter[c],period,ticks);
+                polarity[c]^=bool(edges&1);if(c==2)tone2Edges=edges;
+                continue;
             }
-            bool shiftNoise=tone2Rise;
-            if((noiseControl&3)!=3){
-                counter[3]-=ticks;shiftNoise=false;
-                if(!counter[3]){counter[3]=16u<<(noiseControl&3);noiseClock=!noiseClock;shiftNoise=noiseClock;}
+            bool high=polarity[c];int level=high?amp:-amp;
+            unsigned k=counter[c],pos=start;
+            if(!amp){
+                // Muted tone 2 clocking audible noise: its rising edges only.
+                for(;k<=ticks;k+=period){high=!high;tone2Edges++;if(high)rise[rises++]=k;}
+                polarity[c]=high;counter[c]=uint16_t(k-ticks);
+                continue;
             }
-            if(shiftNoise){
-                bool feedback=(noiseControl&4)?((noise^(noise>>3))&1):(noise&1);
-                noise=(noise>>1)|(unsigned(feedback)<<15);setPolarity(3,noise&1);
+            for(;k<=ticks;k+=period){
+                const unsigned at=k*240;
+                sum+=level*int(at-pos);pos=at;high=!high;level=-level;
+                if(c==2){tone2Edges++;if(high)rise[rises++]=k;}
             }
+            sum+=level*int(total-pos);polarity[c]=high;counter[c]=uint16_t(k-ticks);
         }
+        // Noise register: locals only (lambdas here were left out of line on
+        // SH-4, sending every shift's state through memory).
+        const bool white=noiseControl&4;
+        unsigned lfsr=noise;
+        if(!noiseAudible){
+            // Muted noise: only the number of shifts matters.
+            unsigned shifts;
+            if(tone2Clocks)shifts=(tone2Edges+!wasTone2)/2;
+            else {
+                const unsigned edges=dividerAdvance(counter[3],16u<<(noiseControl&3),ticks);
+                shifts=(edges+!noiseClock)/2;noiseClock^=bool(edges&1);
+            }
+            if(shifts){
+                while(shifts--){const unsigned feedback=white?((lfsr^(lfsr>>3))&1):(lfsr&1);lfsr=(lfsr>>1)|(feedback<<15);}
+                noise=uint16_t(lfsr);polarity[3]=lfsr&1;
+            }
+            return sum/1008;
+        }
+        const int amp=amplitude[volume[3]];
+        int level=polarity[3]?amp:-amp;unsigned pos=start;
+        unsigned clocks[6],shifts=0;
+        if(tone2Clocks){for(unsigned i=0;i<rises;i++)clocks[shifts++]=rise[i]*240;}
+        else {
+            const unsigned period=16u<<(noiseControl&3);
+            unsigned k=counter[3];
+            for(;k<=ticks;k+=period){noiseClock=!noiseClock;if(noiseClock)clocks[shifts++]=k*240;}
+            counter[3]=uint16_t(k-ticks);
+        }
+        for(unsigned i=0;i<shifts;i++){
+            sum+=level*int(clocks[i]-pos);pos=clocks[i];
+            const unsigned feedback=white?((lfsr^(lfsr>>3))&1):(lfsr&1);
+            lfsr=(lfsr>>1)|(feedback<<15);level=(lfsr&1)?amp:-amp;
+        }
+        if(shifts){noise=uint16_t(lfsr);polarity[3]=lfsr&1;}
+        sum+=level*int(total-pos);
         return sum/1008;
     }
 };
@@ -361,15 +421,24 @@ unsigned NativeAudio::renderBlock(int16_t *out,uint64_t (*clock)(),int16_t *dacS
 
         auto mixed=clock?clock():0;
         unsigned psgEvent=0;
-        for(unsigned i=0;i<n;i++){
-            while(psgEvent<impl->cpuPsgCount && std::min<unsigned>(impl->cpuPsg[psgEvent].sample,n-1)<=i)impl->psgWrite(impl->cpuPsg[psgEvent++].value);
-            int psg=impl->psgSample();
+        const auto mix=[&](unsigned i,int psg){
             for(unsigned c=0;c<2;c++){
                 int combined=std::clamp<int32_t>(impl->block[i].data[c]+psg,-32768,32767);
                 int component=dacStereo?dacStereo[i*2+c]:0;
                 if(combined-component < -32768 || combined-component > 32767)component=0;
                 out[i*2+c]=combined-component;if(dacStereo)dacStereo[i*2+c]=component;
             }
+        };
+        for(unsigned i=0;i<n;){
+            while(psgEvent<impl->cpuPsgCount && std::min<unsigned>(impl->cpuPsg[psgEvent].sample,n-1)<=i)impl->psgWrite(impl->cpuPsg[psgEvent++].value);
+            if(impl->psgMuted()){
+                // Silent until the next PSG write: advance its state in one step.
+                const unsigned end=psgEvent<impl->cpuPsgCount?std::min<unsigned>(impl->cpuPsg[psgEvent].sample,n-1):n;
+                impl->psgSkip(end-i);
+                for(;i<end;i++)mix(i,0);
+                continue;
+            }
+            mix(i,impl->psgSample());i++;
         }
         while(psgEvent<impl->cpuPsgCount)impl->psgWrite(impl->cpuPsg[psgEvent++].value);
         impl->cpuPsgCount=0;

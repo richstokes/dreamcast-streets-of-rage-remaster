@@ -14,8 +14,16 @@ def patch(name, text):
         return replace_once(text, '    uint64_t dmaEndCycle_ = 0;',
                             '    uint64_t dmaEndCycle_ = 0;\n'
                             '    // SoR port: start of the frame containing the last counter update.\n'
-                            '    uint64_t sorFrameBase_ = 0;\n    int sorFrameCycles_ = 0;')
+                            '    uint64_t sorFrameBase_ = 0;\n    int sorFrameCycles_ = 0;\n'
+                            '    // SoR port: VRAM change tracking for the renderer caches. Every VRAM\n'
+                            '    // write bumps the generation and marks its 32-byte tile; the renderer\n'
+                            '    // clears tile marks as it checks them.\n'
+                            '    uint32_t vramGeneration_ = 0;\n    m_byte tileDirty_[VRAM_SIZE / 32]{};\n'
+                            '    void markVRAM(unsigned addr) { ++vramGeneration_; tileDirty_[(addr & 0xFFFF) >> 5] = 1; }\n'
+                            '    void markAllVRAM() { ++vramGeneration_; std::memset(tileDirty_, 1, sizeof(tileDirty_)); }')
     if name == 'VDPState.cpp':
+        text = replace_once(text, '    std::memset(vram_, 0, sizeof(vram_));\n',
+                            '    std::memset(vram_, 0, sizeof(vram_));\n    markAllVRAM();\n')
         # Status and HV reads recompute counters with three 64-bit divisions,
         # which SH-4 performs in software (~1,400 cycles per status poll).
         # Cache the containing frame's start; the counters are unchanged.
@@ -104,4 +112,16 @@ void VDPPort::executeDMACopy() {''')
                    + std::max<uint64_t>(1, (static_cast<uint64_t>(count) * VDPState::MASTER_CYCLES_PER_LINE)
                                                / static_cast<uint64_t>(slotsPerLine));''' % active,
                             '''    s.dmaEndCycle_ = currentMasterCycles() + dmaDuration(uint64_t(count), %s, %s);''' % (blank, active))
+    # VRAM change tracking (VDPState::markVRAM): word writes (also 68K DMA),
+    # fill and VRAM copy.
+    text = replace_once(text, '''    s.vram_[addr & 0xFFFE] = (value >> 8) & 0xFF;
+    s.vram_[addr | 0x0001] = value & 0xFF;''', '''    s.vram_[addr & 0xFFFE] = (value >> 8) & 0xFF;
+    s.vram_[addr | 0x0001] = value & 0xFF;
+    s.markVRAM(addr);''')
+    text = replace_once(text, '''    s.vram_[s.address_ | 0x0001] = fillWord & 0xFF;''', '''    s.vram_[s.address_ | 0x0001] = fillWord & 0xFF;
+    s.markVRAM(s.address_);''')
+    text = replace_once(text, '''        s.vram_[target]  = fillByte;''', '''        s.vram_[target]  = fillByte;
+        s.markVRAM(unsigned(target));''')
+    text = replace_once(text, '''        s.vram_[s.address_ ^ 1] = s.vram_[srcAddr ^ 1];''', '''        s.vram_[s.address_ ^ 1] = s.vram_[srcAddr ^ 1];
+        s.markVRAM(s.address_);''')
     return text

@@ -5,6 +5,7 @@
 #include "platform.hpp"
 #include "replay.hpp"
 #include "pc_profile.hpp"
+#include "sor_audio_config.hpp"
 #include "cheats.hpp"
 void dc_renderer_init();
 void dc_renderer_shutdown();
@@ -99,7 +100,8 @@ void platform_observe_frame(uint32_t frame,const sor_memory &memory,const Frameb
             sor_log("FRAME_STATS n=%lu mean_us=%llu p50_us_le=%u p95_us_le=%u p99_us_le=%u worst_us=%llu vblanks=%lu flips=%lu\n",(unsigned long)samples,(unsigned long long)(sum/samples),percentile(50),percentile(95),percentile(99),(unsigned long long)worst,(unsigned long)(stats.vbl_count-startStats.vbl_count),(unsigned long)(stats.frame_count-startStats.frame_count));
         }
     }
-    previous=now;wasPlaying=playing;pc_profile_phase(playing);
+    previous=now;wasPlaying=playing;
+    pc_profile_phase(playing && (!SOR_PC_PROFILE_LAST || (samples>=SOR_PC_PROFILE_FIRST && samples<=SOR_PC_PROFILE_LAST)));
     if(finished){reported=true;sor_log("BENCHMARK replay complete; subsequent serial drain is outside the measured window\n");platform_audio_report();pc_profile_report();sor_flush_log();}
 }
 

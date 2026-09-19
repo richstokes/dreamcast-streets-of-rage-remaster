@@ -32,27 +32,33 @@ and relevant commit/capture paths in the progress log.
 - [ ] Establish and verify native simulation/interrupt cadence against Genesis.
   (2026-09-19: frame-exact from power-on through menus and loads; decompressor time
   exact per decode; Round 1 slowdown reproduced except one frame at 9,976 — docs/CADENCE.md.)
-- [ ] Verify movement and combat in the first section, including two-player play.
-  (2026-09-19: Round 1 play matches the original for 9,976 gameplay frames — waves 0–1,
-  three enemy families, police special, a death — Round 1 combat for 3,115 frames and the
-  two-player encounter for all 761, with all object bytes. State-synced: wave 3, the boss,
-  the stage clear and the continue prompt match in all game RAM (docs/FIDELITY_GATE.md).
-  Throws and friendly fire remain. reference/results/behaviour-round1-2026-09-19.json.)
-- [ ] Reduce stage-start synthesis peaks (10–14 ms/frame at Round 1 start; one 77 ms
-  stream underrun in the benchmark after the cadence changes, AUDIO.md).
+- [x] Verify movement and combat in the first section, including two-player play.
+  (2026-09-19: Round 1 play matches the original for 9,976 gameplay frames from power-on;
+  state-synced windows cover wave 3, 13 throws, the boss, the stage clear, and two-player
+  play with 12 friendly-fire hits, all game RAM equal (docs/FIDELITY_GATE.md,
+  reference/results/state-sync-2026-09-19.json).)
+- [x] Remove the benchmark stream underruns (the "stage start" peak was the police
+  special). (2026-09-19, Flycast: 1,611/1,611 and 893/893 gameplay flips/VBlanks, no
+  underrun in either run; per-channel PSG and VRAM write tracking, OPTIMIZATION_LOG.md.)
 - [x] Replace measured rendering bottlenecks and remeasure target performance.
-  (2026-09-19, Flycast: 1,659/1,659 and 941/941 gameplay flips/VBlanks with audio; OPTIMIZATION_LOG.md.)
+  (2026-09-19, Flycast: 1,611/1,611 and 893/893 gameplay flips/VBlanks with audio; OPTIMIZATION_LOG.md.)
 - [x] Integrate original audio and verify sound timing.
   (Default on; effect channels match original driver state every frame, onsets within 10 ms;
   reference/results/audio-timing-2026-09-19.json. Music start offset follows the cadence item.)
 - [ ] Pass the first-section fidelity gate before starting enhanced presentation.
-  (2026-09-19 evaluation, docs/FIDELITY_GATE.md: boot to Round 1 frame-exact, Round 1 play
-  exact for 9,976 frames; state-synced boss and round completion met; throws, friendly
-  fire, other weapons, continuing and game over remain.)
-- [ ] Add Round 1 scenarios (or bot runs) for throws, friendly fire, other weapons,
-  eating food, continuing and game over.
+  (2026-09-19, docs/FIDELITY_GATE.md: every criterion met in emulation except picking up
+  the bat; one drum hit skipped in the two-player window (Z80 phase, below); physical
+  hardware untested.)
+- [x] Add Round 1 scenarios (or bot runs) for throws, friendly fire, other weapons,
+  eating food, continuing and game over. (2026-09-19: tools/bot-play.py --throws --pickups
+  --players 2 --spar --continue; reference/scenarios/round1-bot-*.json, two-player-bot.json.)
+- [ ] Cover the bat (`$0A`) and continues shared between two players.
+- [ ] Exact Z80/68000 bus interleaving for the sound driver's acquire loop: the port's
+  Z80 drifts a few hundred clocks from the original's, the retries quantise that into
+  whole 847-clock steps, and one drum command is skipped in the two-player window
+  (original frame 5,925; docs/FIDELITY_GATE.md).
 - [x] State-synchronised comparisons for later Round 1 content (boss, completion).
-  (2026-09-19: tools/state-sync.py, tools/bot-play.py; six windows equal in all game RAM,
+  (2026-09-19: tools/state-sync.py, tools/bot-play.py; eleven windows, 38,500 frames,
   reference/results/state-sync-2026-09-19.json.)
 - [ ] Remaining timing: exact costs for profile-costed hand-written routines, DIV and
   register-shift timing, YM2612 busy from the Z80's writes (docs/CADENCE.md).

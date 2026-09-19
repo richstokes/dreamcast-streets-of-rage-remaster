@@ -1,7 +1,7 @@
 {
  "date": "2026-09-19",
  "tool": "tools/state-sync.py",
- "note": "Both backends start from the original machine state exported at sync_frame (Genesis Plus GX profiling core) and play the same inputs from there. sync-boss, sync-clear and sync-gameover come from tools/bot-play.py runs whose RAM-write aids (player health, ordinary enemies at 1 HP) stop before the sync frame (aids_until 11000 for round1-bot.json, 14800 for round1-bot-clear.json). Host-owned RAM (incremental Nemesis state, code table, stack below the main loop frame) is excluded from game_ram; unsettled frames are captures where both sides are mid-update or mid-load (mailbox 0).",
+ "note": "Both backends start from the original machine state exported at sync_frame (Genesis Plus GX profiling core) and play the same inputs. Bot runs (tools/bot-play.py) stop their RAM-write aids before the sync frame: round1-bot and round1-bot-gameover at 11000, round1-bot-clear at 14800, round1-bot-throws at 3500, round1-bot-items at 15800; two-player-bot uses none. Host-owned RAM (incremental Nemesis state, code table, stack below the main loop frame) is excluded from game_ram; unsettled frames are captures where both sides are mid-update or mid-load (mailbox 0).",
  "windows": [
   {
    "scenario": "reference/scenarios/round1-full.json",
@@ -30,7 +30,7 @@
     "grab_mode_target": 1031
    },
    "name": "sync-9000",
-   "content": "Round 1 wave 2 (relative frame 9,000); diverges at the known near-tie"
+   "content": "round1-full: wave 2 (relative frame 9,000); diverges at the known near-tie"
   },
   {
    "scenario": "reference/scenarios/round1-full.json",
@@ -46,7 +46,7 @@
    "first_difference": null,
    "first_difference_by_field": {},
    "name": "sync-17300",
-   "content": "Round 1 wave 3: Garcia $20, Nora $26"
+   "content": "round1-full: wave 3, Garcia $20 and Nora $26, food eaten"
   },
   {
    "scenario": "reference/scenarios/round1-full.json",
@@ -61,7 +61,7 @@
    "first_difference": null,
    "first_difference_by_field": {},
    "name": "sync-19200",
-   "content": "Round 1 wave 3: knife $08 held, food $47"
+   "content": "round1-full: wave 3, knife $08 picked up and let go, food eaten, a throw from behind"
   },
   {
    "scenario": "reference/scenarios/round1-full.json",
@@ -74,7 +74,7 @@
    "first_difference": null,
    "first_difference_by_field": {},
    "name": "sync-22100",
-   "content": "Round 1 wave 3, last death, continue object $0F"
+   "content": "round1-full: wave 3, last death, continue prompt $0F"
   },
   {
    "scenario": "reference/scenarios/round1-bot.json",
@@ -87,7 +87,7 @@
    "first_difference": null,
    "first_difference_by_field": {},
    "name": "sync-boss",
-   "content": "Round 1 boss: Antonio $56 and boomerang $96, two player deaths"
+   "content": "round1-bot: Antonio $56 and boomerang $96, two player deaths"
   },
   {
    "scenario": "reference/scenarios/round1-bot-clear.json",
@@ -130,20 +130,108 @@
    "first_difference": null,
    "first_difference_by_field": {},
    "name": "sync-clear",
-   "content": "Antonio knocked out, stage clear, Round 2 intro and first wave"
+   "content": "round1-bot-clear: Antonio knocked out, stage clear, Round 2 intro and first wave"
   },
   {
    "scenario": "reference/scenarios/round1-bot.json",
    "sync_frame": 16900,
    "native_sync_frame": 1317,
    "compared_frames": 3000,
-   "identical_ram_frames": 2994,
+   "identical_ram_frames": 2953,
    "identical_game_ram_frames": 3000,
    "unsettled_differences": [],
    "first_difference": null,
    "first_difference_by_field": {},
+   "name": "sync-continue",
+   "content": "round1-bot: last death, high-score name entry, continue taken"
+  },
+  {
+   "scenario": "reference/scenarios/round1-bot-gameover.json",
+   "sync_frame": 16900,
+   "native_sync_frame": 1317,
+   "compared_frames": 3000,
+   "identical_ram_frames": 1007,
+   "identical_game_ram_frames": 2967,
+   "unsettled_differences": [
+    452,
+    1645,
+    1646,
+    1647,
+    1648,
+    1649,
+    1651,
+    1862,
+    1864,
+    1865,
+    1866,
+    1867,
+    1868,
+    1869,
+    1870,
+    1871,
+    1872,
+    1873,
+    1874,
+    1875,
+    1876,
+    1877,
+    1879,
+    1880,
+    1881,
+    1882,
+    1883,
+    1884,
+    1885,
+    1886,
+    1887,
+    1888,
+    1889
+   ],
+   "first_difference": null,
+   "first_difference_by_field": {},
    "name": "sync-gameover",
-   "content": "last death against Antonio, continue object $0F"
+   "content": "round1-bot-gameover: last death, name entry, continue declined, game over, top 10, back to the Sega logo and intro"
+  },
+  {
+   "scenario": "reference/scenarios/round1-bot-throws.json",
+   "sync_frame": 3600,
+   "native_sync_frame": 1317,
+   "compared_frames": 4000,
+   "identical_ram_frames": 1153,
+   "identical_game_ram_frames": 4000,
+   "unsettled_differences": [],
+   "first_difference": null,
+   "first_difference_by_field": {},
+   "name": "sync-throws",
+   "content": "round1-bot-throws: front throw, bottle $09 picked up"
+  },
+  {
+   "scenario": "reference/scenarios/round1-bot-items.json",
+   "sync_frame": 15900,
+   "native_sync_frame": 1317,
+   "compared_frames": 4500,
+   "identical_ram_frames": 2360,
+   "identical_game_ram_frames": 4500,
+   "unsettled_differences": [],
+   "first_difference": null,
+   "first_difference_by_field": {},
+   "name": "sync-items",
+   "content": "round1-bot-items: knife picked up and thrown, food eaten, front and back throws"
+  },
+  {
+   "scenario": "reference/scenarios/two-player-bot.json",
+   "sync_frame": 2000,
+   "native_sync_frame": 1329,
+   "compared_frames": 5000,
+   "identical_ram_frames": 1215,
+   "identical_game_ram_frames": 4986,
+   "unsettled_differences": [],
+   "first_difference": 3926,
+   "first_difference_by_field": {
+    "game_ram": 3926
+   },
+   "name": "sync-2p",
+   "content": "two-player-bot: two players, friendly fire, player 2 grabbing player 1, throws by both; one sound-driver byte differs (a skipped drum hit)"
   }
  ]
 }

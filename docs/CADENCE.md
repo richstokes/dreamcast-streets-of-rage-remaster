@@ -136,7 +136,10 @@ delay, the power-on position, and a one-frame input offset in the native replay.
   can finish on the other side of a VBlank. Remaining approximations: DIV and
   register-count shifts use typical times; hand-written routines costed from
   profiles charge means; the YM2612 busy flag ignores the Z80's own writes;
-  a DAC sample's Z80 stalls are charged in 1,500-cycle steps.
+  a DAC sample's Z80 stalls are charged in 1,500-cycle steps. The Z80 runs a few
+  hundred clocks off the original's phase; the sound driver's bus-acquire
+  retries quantise that into whole 847-clock steps, and in one two-player window
+  a drum command is skipped (FIDELITY_GATE.md).
 - SoR counts VBlanks that upload graphics (`$FFFB08`) and some objects copy it,
   so one missed or extra slowdown frame changes behaviour later. The Round 1
   comparison is therefore exact until the first slowdown the model misses.

@@ -1,7 +1,43 @@
 # Active 60 Hz optimization work
 
-The target remains uninterrupted 60 Hz with original audio. It has **not** been
-reached. Physical Dreamcast performance is unverified.
+The target is uninterrupted 60 Hz with original audio. In Flycast both
+benchmarks now reach it (2026-09-19, below); physical Dreamcast performance is
+unverified.
+
+## 2026-09-19 — police-special peak: PSG and VRAM tracking
+
+The last stream underrun (action replay, "Round 1 start" in earlier notes) came
+from the police special, and the two-player encounter had two more. A profiler
+window over those frames (`SOR_PC_PROFILE_FRAMES=FIRST:LAST`, gameplay frames)
+showed the CPU saturated and PSG generation at 11.6% of it: the special's noise is
+clocked by tone 2 at period 1, so the time-ordered edge loop stepped four or five
+edges per sample through all channels, calling `setPolarity` for each.
+
+- PSG output is summed per channel (linear, so identical to the time-ordered
+  walk); muted tones only advance their dividers unless tone 2 clocks audible
+  noise, when only its rising edges are recorded; the noise register runs in
+  locals; and a fully muted PSG is advanced to its next write in one step.
+- VDPState counts VRAM writes and marks each written 32-byte tile (write, fill,
+  copy, reset, state load). The scene cache compares that generation instead of
+  64 KiB of VRAM, and the renderer re-checks only marked tiles.
+
+Output: every AUDIO_PCM digest and both full-replay audio captures unchanged;
+2,863 + 2,157 GPU scenes validated against the software renderer.
+
+| Build | Action VBlanks / flips | Underruns | Ring min | Two-player VBlanks / flips | Underruns | Ring min |
+| --- | --- | ---: | ---: | --- | ---: | ---: |
+| Before | 1,616 / 1,611 | 1 | 46 | 902 / 893 | 2 | 79 |
+| Per-channel PSG | 1,615 / 1,611 | 1 | 31 | — | — | — |
+| + muted tones advance only | 1,613 / 1,611 | 1 | 211 | — | — | — |
+| + muted-span skip | 1,613 / 1,611 | 0 | 150 | — | — | — |
+| + tone-2 rising edges only | 1,612 / 1,611 | 0 | 834 | 894 / 893 | 1 | 406 |
+| + noise in locals | 1,612 / 1,611 | 0 | 829 | 894 / 893 | 0 | 107 |
+| + VRAM write tracking | **1,611 / 1,611** | **0** | 1,222 | **893 / 893** | **0** | 1,058 |
+
+The mixing pass (PSG included) at frame 2,399 went from 2.91 to 1.66 ms; with the
+PSG silent from 1.06 ms to 0.09 ms. Forcing ymfm's `clamp`/`bitfield` inline
+changed nothing measurable and was dropped. Logs: `build/logs/{baseline-0919b,
+psg-*,noise-*,vram-*}-flycast.log`.
 
 ## Current changes under validation
 

@@ -1,5 +1,28 @@
 # Progress
 
+## 2026-09-19 — fidelity gate behaviour checks; no audio underruns in Flycast
+
+- The scripted player (`tools/bot-play.py`) now throws, picks up weapons and
+  food, enters high-score initials, answers the continue prompt either way, and
+  drives player 2, including deliberate friendly fire. Five new state-synced
+  windows match the original in all game RAM: throws and a bottle, the knife
+  thrown and food eaten, a continue taken, a continue declined through game
+  over back to the Sega logo, and two-player play with 12 friendly-fire hits.
+  Eleven windows, 38,500 frames (`reference/results/state-sync-2026-09-19.json`).
+- Found by the two-player window: friendly fire reached player reaction `$2502`,
+  which the recompiler had not emitted, and the port stopped. The state-table
+  audit (`tools/audit-dispatch-tables.py`) seeds all 47 missing decoded targets.
+- Also found there: one drum command skipped (original frame 5,925); the port's
+  Z80 finished a 29-frame sample 0.25% later and missed the 68000's check. Exact
+  Z80/68000 bus interleaving is on TODO.md.
+- The "Round 1 start" underrun was the police special. PSG generation is now per
+  channel, muted stretches are skipped in one step, and the renderer tracks VRAM
+  writes instead of comparing 64 KiB twice a frame. Flycast: 1,611/1,611 and
+  893/893 gameplay flips/VBlanks, no underrun in either benchmark (was 1,616 and
+  902 VBlanks, 3 underruns); audio bit-identical (OPTIMIZATION_LOG.md).
+- Fidelity gate: every criterion met in emulation except picking up the bat;
+  physical hardware untested.
+
 ## 2026-09-19 — state-synchronised comparisons: the rest of Round 1
 
 - New comparison technique (FIDELITY_GATE.md, REFERENCE.md): the original's

@@ -99,7 +99,9 @@ bool dc_render_vdp(VDPState &state,VDPRenderer &renderer,const sor::TitleCaption
             for(int c=0;c<16;c++)pvr_set_pal_entry(p*16+c,c?scene->colors[p*16+c]:0);
             std::memcpy(previousColors+p*16,scene->colors+p*16,32);
         }
-        for(int t=0;t<2048;t++)if(!sor::equal_bytes(previousTiles+t*32,state.vram_+t*32,32)){
+        // Only tiles written since they were last checked can differ.
+        for(int t=0;t<2048;t++)if((!frames || state.tileDirty_[t]) && (state.tileDirty_[t]=0,
+                                  !sor::equal_bytes(previousTiles+t*32,state.vram_+t*32,32))){
             valid[t]=0;std::memcpy(previousTiles+t*32,state.vram_+t*32,32);
             const bool wasOpaque=opaque[t];
             opaque[t]=false;for(int j=0;j<32;j++)opaque[t]|=state.vram_[t*32+j]!=0;

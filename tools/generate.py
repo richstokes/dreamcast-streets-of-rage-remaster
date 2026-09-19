@@ -10,6 +10,18 @@ from rom import inspect
 ROOT=Path(__file__).resolve().parents[1]
 P=ROOT/'research/StreetsOfRageProject'
 
+# State-table targets the disassembly-seeded pass does not emit as entries
+# (tools/audit-dispatch-tables.py). Two-player friendly fire reached reaction
+# $2502 and stopped with "Untranslated dispatch". All are decoded instruction
+# starts; any past a table's real end is an unused but harmless entry.
+DISPATCH_TABLE_SEEDS={int(x,16) for x in '''
+000536 000828 0008E8 00227C 0024E6 002502 0025FE 004EBA 007204 00AA58
+00BBB0 00BBCE 00BC0A 00BC28 00BC78 00BC96 00C1AC 00C3C4 00C648 00C710
+00C786 00C800 00C876 00C8CC 00C904 00D14C 00D18A 00D24C 00D5F8 00F8C4
+00F914 01317C 0132B2 0132C4 013356 0133AA 0133EC 01342A 013448 014296
+0142B2 014348 01460E 014712 014BFE 015176 015A96
+'''.split()}
+
 def verify_sprite_entry(directory):
     """Reject partitions that silently ignore the manual SAT-building entry."""
     functions={}
@@ -49,7 +61,7 @@ def main():
     bad.add(0x14bdc)
     out=ROOT/'build'; out.mkdir(exist_ok=True)
     repaired=out/'repaired-aux.txt'
-    repaired.write_text(''.join(f'{v:06X}\n' for v in sorted((aux-bad)|{v for v in seeds if 0x143D0<=v<0x158C4})))
+    repaired.write_text(''.join(f'{v:06X}\n' for v in sorted((aux-bad)|{v for v in seeds if 0x143D0<=v<0x158C4}|DISPATCH_TABLE_SEEDS)))
     (out/'generation-audit.json').write_text(json.dumps(dict(rom=identity,
         removed_upstream_seeds=[f'{x:06X}' for x in sorted(bad)],assembly_seeds=len(seeds)),indent=2)+'\n')
     ca=P/'StreetsOfRageRecompilation/code-analysis'

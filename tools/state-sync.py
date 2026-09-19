@@ -121,7 +121,10 @@ def main():
         if masked(g) == masked(n): equal_game_ram += 1; continue
         if not g[MAILBOX] and not n[MAILBOX]:
             # Both captured while an update or a load runs: how far each got by
-            # the VBlank is timing within it, not behaviour. Reported separately.
+            # the VBlank is timing within it, not behaviour (the port's
+            # decompressors also write their output at once and charge the
+            # ROM routine's time afterwards). Reported separately; a difference
+            # in behaviour persists into the next settled frame.
             unsettled.append(j); continue
         first.setdefault('game_ram', j)
         for slot in [0xB800, 0xB880] + list(range(0xB900, 0xDA00, 0x80)):

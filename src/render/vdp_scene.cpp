@@ -37,8 +37,9 @@ uint16_t VdpScene::rgb1555(unsigned r,unsigned g,unsigned b){
     return 0x8000|((r*255/7>>3)<<10)|((g*255/7>>3)<<5)|(b*255/7>>3);
 }
 bool VdpScene::buildCached(VDPState &s,VDPRenderer &){
+    // VRAM: no write since the cached frame (a write of equal bytes rebuilds).
     reused=cacheValid && same_render_regs(s,previous)
-        && equal_bytes(s.vram_,previous.vram_,sizeof(s.vram_))
+        && s.vramGeneration_==previous.vramGeneration_
         && equal_bytes(s.cram_,previous.cram_,sizeof(s.cram_))
         && equal_bytes(s.vsram_,previous.vsram_,sizeof(s.vsram_))
         && equal_bytes(s.sat_,previous.sat_,sizeof(s.sat_));

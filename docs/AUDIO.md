@@ -4,16 +4,17 @@ Current audio update: [native DAC decoding and AICA evaluation](NATIVE_DAC.md).
 The playback loop now has a validated native path; interpreter setup/fallback remains.
 
 **Enabled by default on Dreamcast (2026-09-19).** The original sound sequencer,
-FM, PSG and the ROM's sampled drum/voice driver run at 60 Hz in Flycast: the
-action replay shows 1,659 flips over 1,659 gameplay VBlanks and the two-player
-encounter 941 over 941, with audio on and profiling off. Stream underruns occur
-only during the two bulk-decompression screen loads (display blanked).
-With the Round 1 cadence work (CADENCE.md) the benchmark's gameplay window is
-1,611 flips over 1,615 VBlanks, and the stream underruns once as Round 1 starts
-(a 77 ms gap). The first seconds of the stage need 10–14 ms of synthesis per
-frame; each lost VBlank lowers the ring by one frame of audio (rate control
-restores 0.4%), and which frames lose one shifts with the cadence. Before
-this work the ring bottomed out at 456 frames there. Open: reduce that synthesis peak. Timing is
+FM, PSG and the ROM's sampled drum/voice driver run at 60 Hz in Flycast with audio
+on and profiling off. Both benchmarks run their gameplay windows at every VBlank
+with no stream underrun in the whole run, boot and screen loads included: the
+action replay 1,611 flips over 1,611 VBlanks (ring minimum 1,222 frames), the
+two-player encounter 893 over 893 (minimum 1,058). The underrun previously put at
+Round 1's start was in the action replay's police special: its noise effect is
+clocked by PSG tone 2 at period 1, and the per-edge PSG loop plus the renderer's
+VRAM comparisons pushed those frames past a VBlank. PSG generation now works
+channel by channel with muted stretches advanced in one step, and the renderer
+tracks VRAM writes instead of comparing 64 KiB twice a frame
+(OPTIMIZATION_LOG.md); audio output is bit-identical. Timing is
 verified against the original ROM in Genesis Plus GX (below). Physical-console
 performance, full soundtrack/SFX coverage and listening QA remain unverified.
 `SOR_AUDIO=0` builds the silent configuration.

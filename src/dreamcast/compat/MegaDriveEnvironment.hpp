@@ -74,6 +74,9 @@ public:
     // The 68000 is halted during 68K-to-VDP DMA.
     void stallCpu(uint64_t masterClocks){
         syncAudio();
+#ifdef SOR_PC_HISTOGRAM
+        audio_.logTimedWrite(cycles_-powerOn,0x8000,1);audio_.logTimedWrite(cycles_-powerOn+masterClocks,0x8000,0);
+#endif
         audio_.blockBus68k(uint32_t(cycles_-frameCycles_),uint32_t(cycles_-frameCycles_+masterClocks));
         cycles_+=masterClocks;pcHistogram(0xFFFFFE,unsigned(masterClocks/7));
     }

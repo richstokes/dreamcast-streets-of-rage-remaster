@@ -239,7 +239,7 @@ void MegaDriveEnvironment::stateSync(){
     if(regs[15]!=r[15]||mem_.readLong(regs[15])!=ramLong(r[15]))return;
     done=true;
     std::copy_n(f.data()+at,65536,mem_.state.ram);at+=65536;
-    std::copy_n(f.data()+at,65536,state_.vram_);at+=65536;
+    std::copy_n(f.data()+at,65536,state_.vram_);at+=65536;state_.markAllVRAM();
     for(auto &c:state_.cram_)c=m_word(u16());
     for(auto &v:state_.vsram_)v=m_word(u16());
     std::copy_n(f.data()+at,24,state_.regs_);at+=24;

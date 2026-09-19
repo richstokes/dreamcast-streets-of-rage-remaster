@@ -28,8 +28,9 @@ only. Adding every valid label changes function partitioning: an initial attempt
 broke the manual call to `enqueue_object_render_bucket(0xAE96u)`, leaving actors
 invisible. Narrowing the repair restores that entry and visible actors in Flycast.
 
-Result: 25,518 decoded instructions, 844 function partitions, 53 manual entries;
-24,408 translated instructions, zero stubbed instructions, 30 translation units.
+Result: 25,614 decoded instructions, 874 function partitions, 53 manual entries;
+24,504 translated instructions, zero stubbed instructions, 30 translation units
+(with the 47 state-table seeds of 2026-09-19, `tools/audit-dispatch-tables.py`).
 These are generation counts, **not runtime coverage or fidelity percentages**.
 
 ## Runs and limits
@@ -72,10 +73,10 @@ comparison tool only, never linked into the Dreamcast executable.
 | Area | Required scenarios | Current evidence |
 | --- | --- | --- |
 | Movement | Four directions, diagonal, plane bounds, jump arcs | Phase-anchored directions, diagonals and jump actions match all object state; Round 1 play matches for 9,976 frames; plane bounds not exhausted |
-| Combat | Combo presses/holds, back attack, jump kick, all grabs/throws, police | Phase-anchored attack/jump/special inputs compared; all grabs/throws still missing |
-| Enemy logic | Every family, damage, invulnerability, knockdown, recovery | Round 1 waves 0–1 (Garcia-family, Signal, Haku-Ro) match for 9,976 frames (`round1-full`, 2026-09-19); other families and bosses not compared |
-| Campaign | Scroll triggers/waves, transitions, all bosses, all endings | Boot, menus and loads frame-exact; Round 1 to wave 2, a death and respawn, and the slowdown frames match until 9,976 (CADENCE.md; FIDELITY_GATE.md); later waves, boss and transitions not compared |
-| Two-player | Join, friendly fire, grabs/assists, lives/continues, scoring | 761 encounter frames match including all object bytes (2026-09-19); broader interactions still required |
+| Combat | Combo presses/holds, back attack, jump kick, all grabs/throws, police | Phase-anchored attack/jump/special inputs compared; state-synced front and back throws, knife, bottle and food (FIDELITY_GATE.md); the bat not picked up |
+| Enemy logic | Every family, damage, invulnerability, knockdown, recovery | Round 1: every family and Antonio match (9,976 frames from power-on, state-synced windows after); later rounds not compared |
+| Campaign | Scroll triggers/waves, transitions, all bosses, all endings | Boot, menus and loads frame-exact; Round 1 from power-on until 9,976, then state-synced through wave 3, the boss, the stage clear into Round 2, continue and game over (FIDELITY_GATE.md); later rounds and endings not compared |
+| Two-player | Join, friendly fire, grabs/assists, lives/continues, scoring | 761 encounter frames match including all object bytes; state-synced friendly fire, player-on-player grabs and throws (2026-09-19); shared continues not covered |
 | Randomness/cadence | Same reset/input stream, seeds and per-tick actor state | Native repeatability verified; cadence frame-exact through boot and loads, gameplay slowdown near-exact (CADENCE.md) |
 
 Record verified, inferred and inaccurate behavior separately. Never substitute
@@ -155,7 +156,24 @@ build/tools-venv/bin/python3 tools/state-sync.py "$SOR_ROM" \
   line up, punch; back off when the camera is held). Until `--aids-until` it tops
   up a standing player's health and lives and, with `--weaken`, holds ordinary
   enemies at one hit point; bosses are never touched. Its `--output` is a
-  reference run in `genesis_reference.py`'s format.
+  reference run in `genesis_reference.py`'s format. Options: `--throws` (from a
+  grab, alternately away + attack and a vault then attack), `--pickups` (walk to
+  weapons and food when no enemy is near), `--continue yes|no` (enter initials,
+  then answer the continue prompt), `--players 2` with `--spar PERIOD:LENGTH`
+  (player 2 attacks player 1 for LENGTH frames of every PERIOD; start from a
+  two-player prologue such as `phase-aligned-two-player.json`). Buttons for
+  menus are pulsed at an odd period: the press flag lasts one VBlank and the
+  game reads it every second one.
+
+Sound-bus timing can be compared on both sides: `genesis_reference.py --ym-log`
+and `SOR_YM_TIMES` (host analysis build) log YM2612 writes (ports 0-3), 68000
+writes to Z80 RAM (`$100|address`), bus requests (`$4000`), 68000-bus DMA
+windows (`$8000`: 1 at the start, 0 at the end) and, in the reference only, Z80
+reads held by DMA (`$8001`).
+
+`tools/audit-dispatch-tables.py ROM` lists object and reaction state-table
+targets with no translated entry (after `tools/generate.py`); decoded ones are
+seeded in `DISPATCH_TABLE_SEEDS`.
 
 ## Shared native headless backend
 
