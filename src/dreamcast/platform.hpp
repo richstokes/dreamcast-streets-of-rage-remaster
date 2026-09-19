@@ -3,6 +3,7 @@
 #include "Controllers.hpp"
 #include "Framebuffer.hpp"
 #include "VDPRenderer.hpp"
+#include "title_caption.hpp"
 extern "C" {
 #include "sor/memory.h"
 }
@@ -12,7 +13,7 @@ void platform_poll_controllers(PlayersControlState &);
 void platform_video_init();
 void platform_video_shutdown();
 void platform_video_present(const Framebuffer &,int width,int height);
-bool platform_render_vdp(VDPState &,VDPRenderer &);
+bool platform_render_vdp(VDPState &,VDPRenderer &,const sor::TitleCaption &);
 uint64_t platform_time_us();
 PlatformMemoryStats platform_memory_stats();
 // Called before presentation/input sampling at each synchronous VBlank wait.

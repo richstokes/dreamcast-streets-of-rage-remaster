@@ -16,20 +16,23 @@ std::string capturePath;
 std::unique_ptr<sor::VdpScene> scene;
 VDPState *sceneState=nullptr;
 unsigned sceneFrames=0;
+sor::TitleCaption sceneTitle;
 }
 const uint8_t *platform_embedded_rom(size_t &size){size=0;return nullptr;}
 void platform_video_init(){}
 void platform_video_shutdown(){}
-bool platform_render_vdp(VDPState &state,VDPRenderer &renderer){
+bool platform_render_vdp(VDPState &state,VDPRenderer &renderer,const sor::TitleCaption &title){
     if(std::getenv("SOR_VALIDATE_GPU_SCENE")){
         if(!scene)scene=std::make_unique<sor::VdpScene>();
         sceneState=scene->buildCached(state,renderer)?&state:nullptr;
+        sceneTitle=title;
     }
     return false;
 }
 void platform_video_present(const Framebuffer &fb,int width,int height){
     if(!sceneState)return;
     uint16_t expected[320*240];sor::raster_scene(*scene,*sceneState,expected);
+    sceneTitle.draw([&](int x,int y,unsigned r,unsigned g,unsigned b){expected[y*320+x]=sor::VdpScene::rgb1555(r,g,b);});
     const auto *b=static_cast<const uint8_t*>(fb.getRawPointer());
     for(int y=0;y<height;y++)for(int x=0;x<width;x++){
         const auto *p=b+y*Framebuffer::PITCH+x*3;
