@@ -14,8 +14,15 @@
   verified against the original), word-wise render-cache compares, VDP LTO.
 - New tools: `bench-flycast.sh`, `pc-profile.py` (`SOR_PC_PROFILE=1`),
   `compare-audio.sh`, `compare-sound-state.py`, `ym-render.cpp`.
-- Next: simulation/interrupt cadence (transition frame counts differ from the
-  original, which also offsets music start), then behaviour comparisons.
+- Cadence model (CADENCE.md): translated instructions charge MC68000 time from the
+  Musashi cycle table, VBlanks follow emulated time, DMA stalls the CPU, and the
+  hand-written decompressors charge costs fitted to timings of the ROM's own
+  routines. Every game mode now lasts within a frame of the original (loads were
+  up to 48 frames short); no gameplay lag; zero stream underruns in Flycast.
+  Not frame-exact: a one-frame load difference leaves SoR's upload-VBlank counter
+  one behind, which changes one enemy's fall 221 frames into the two-player
+  comparison (it matched before only by coincidence). Documented in CADENCE.md.
+- Next: behaviour comparisons (first-section movement/combat coverage).
 
 ## 2026-09-15 — native checkpoint, not a completed game
 

@@ -23,8 +23,17 @@ public:
     NativeAudio &sound(){return audio_;}
     bool shouldQuit()const{return quit_;}
     int irqLevel()const{return irq_;} void clearInterrupt(int){irq_=0;}
-    // Called before every translated instruction; keep the common case inline.
-    void pace(){cycles_+=28;if(++paceCount_>=32000)paceInterrupt();}
+    // Emulated 68000 time: translated instructions charge their MC68000 cycles
+    // (7 master clocks each). Crossing the next frame boundary is a VBlank;
+    // an explicit wait idles the CPU until it.
+    // DRAM refresh stalls the bus for 2 cycles every 128 (Genesis Plus GX:
+    // checked at each instruction start).
+    void pace(unsigned cpuCycles=4){
+        if(cycles_>=refreshAt_){refreshAt_=cycles_+128*7;cycles_+=2*7;}
+        cycles_+=cpuCycles*7;if(cycles_>=nextVblank_)paceInterrupt();
+    }
+    // The 68000 is halted during 68K-to-VDP DMA.
+    void stallCpu(uint64_t masterClocks){cycles_+=masterClocks;}
     void waitForInterrupt(); void debugState();
     void traceEnter(m_long a){last_=a;} m_long lastFunction()const{return last_;}
     void reportUnhandledDispatch(m_long);
@@ -37,9 +46,12 @@ protected:
 private:
     static uint32_t readBus(void *,uint32_t,unsigned);
     static void writeBus(void *,uint32_t,unsigned,uint32_t);
-    void present(); void paceInterrupt();
+    void present(); void paceInterrupt(); void frameBoundary();
     SystemMemory mem_; VDPState state_; VDP port_; VDPTile tile_; Framebuffer fb_; VDPRenderer renderer_;
     Controllers pads_; NativeAudio audio_;
     uint8_t th_[2]{0x40,0x40}; uint8_t *rom_=nullptr; bool quit_=false; int irq_=0;
-    uint64_t cycles_=0,frameCycles_=0; uint32_t last_=0,frames_=0,paceCount_=0;
+    // NTSC master clocks per frame; VBlank begins at line 224 of 262 (3,420
+    // clocks per line), so the VDP's raster counters agree with emulated time.
+    static constexpr uint64_t frameClocks=896040,vblankStart=224*3420;
+    uint64_t cycles_=0,frameCycles_=0,nextVblank_=vblankStart,refreshAt_=0; uint32_t last_=0,frames_=0;
 };

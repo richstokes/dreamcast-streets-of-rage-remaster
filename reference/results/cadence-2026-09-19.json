@@ -1,0 +1,204 @@
+{
+ "date": "2026-09-19",
+ "original": "Genesis Plus GX libretro",
+ "model": "docs/CADENCE.md",
+ "scenarios": {
+  "actions": {
+   "gate": {
+    "original": [
+     {
+      "segment": 9,
+      "frame": 1384,
+      "idle_frames": 0
+     }
+    ],
+    "native": [
+     {
+      "segment": 9,
+      "frame": 1385,
+      "idle_frames": 1
+     }
+    ]
+   },
+   "mode_frames": [
+    {
+     "mode": "$00",
+     "original": 79,
+     "native": 79
+    },
+    {
+     "mode": "$02",
+     "original": 207,
+     "native": 208
+    },
+    {
+     "mode": "$04",
+     "original": 37,
+     "native": 38
+    },
+    {
+     "mode": "$06",
+     "original": 37,
+     "native": 36
+    },
+    {
+     "mode": "$08",
+     "original": 19,
+     "native": 19
+    },
+    {
+     "mode": "$0a",
+     "original": 102,
+     "native": 102
+    },
+    {
+     "mode": "$10",
+     "original": 5,
+     "native": 5
+    },
+    {
+     "mode": "$12",
+     "original": 242,
+     "native": 242
+    },
+    {
+     "mode": "$20",
+     "original": 33,
+     "native": 33
+    },
+    {
+     "mode": "$22",
+     "original": 167,
+     "native": 166
+    },
+    {
+     "mode": "$28",
+     "original": 55,
+     "native": 56
+    },
+    {
+     "mode": "$2a",
+     "original": 268,
+     "native": 269
+    },
+    {
+     "mode": "$14",
+     "original": 1,
+     "native": 1
+    },
+    {
+     "mode": "$16",
+     "original": null,
+     "native": null
+    }
+   ],
+   "observations_equal": true,
+   "compared_frames": 1481,
+   "fields": {},
+   "upload_vblank_counter_first_difference": 325
+  },
+  "two-player": {
+   "gate": {
+    "original": [
+     {
+      "segment": 11,
+      "frame": 1398,
+      "idle_frames": 0
+     }
+    ],
+    "native": [
+     {
+      "segment": 11,
+      "frame": 1399,
+      "idle_frames": 1
+     }
+    ]
+   },
+   "mode_frames": [
+    {
+     "mode": "$00",
+     "original": 79,
+     "native": 79
+    },
+    {
+     "mode": "$02",
+     "original": 207,
+     "native": 208
+    },
+    {
+     "mode": "$04",
+     "original": 37,
+     "native": 38
+    },
+    {
+     "mode": "$06",
+     "original": 37,
+     "native": 36
+    },
+    {
+     "mode": "$08",
+     "original": 19,
+     "native": 19
+    },
+    {
+     "mode": "$0a",
+     "original": 102,
+     "native": 102
+    },
+    {
+     "mode": "$10",
+     "original": 5,
+     "native": 5
+    },
+    {
+     "mode": "$12",
+     "original": 254,
+     "native": 254
+    },
+    {
+     "mode": "$20",
+     "original": 33,
+     "native": 33
+    },
+    {
+     "mode": "$22",
+     "original": 167,
+     "native": 168
+    },
+    {
+     "mode": "$28",
+     "original": 55,
+     "native": 56
+    },
+    {
+     "mode": "$2a",
+     "original": 268,
+     "native": 269
+    },
+    {
+     "mode": "$14",
+     "original": 1,
+     "native": 1
+    },
+    {
+     "mode": "$16",
+     "original": null,
+     "native": null
+    }
+   ],
+   "observations_equal": false,
+   "compared_frames": 761,
+   "fields": {
+    "camera": {
+     "mismatched_frames": 253,
+     "first_relative_frame": 508
+    },
+    "actors": {
+     "mismatched_frames": 540,
+     "first_relative_frame": 221
+    }
+   },
+   "upload_vblank_counter_first_difference": 325
+  }
+ }
+}

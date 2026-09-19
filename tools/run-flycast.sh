@@ -48,11 +48,13 @@ if source!=target:shutil.copyfile(source,target)
 print(target)
 PY
     )
+    # FLYCAST_VSYNC=0 disables host vsync; presentation otherwise blocks while the
+    # host display sleeps. Guest timing (all FRAME_STATS/AICA counters) is emulated.
     : > "$root/build/logs/flycast.log"
     : > "$root/build/logs/flycast-errors.log"
     exec /usr/bin/open -g -j -n -a "$app" \
         --stdout "$root/build/logs/flycast.log" --stderr "$root/build/logs/flycast-errors.log" \
-        --args -config 'config:Debug.SerialConsoleEnabled=yes' "$image"
+        --args -config 'config:Debug.SerialConsoleEnabled=yes' ${FLYCAST_VSYNC:+-config "config:rend.vsync=$( [ "$FLYCAST_VSYNC" = 0 ] && echo no || echo yes )"} "$image"
 fi
 echo 'Automatic launch is configured only for background macOS app bundles.' >&2
 exit 1

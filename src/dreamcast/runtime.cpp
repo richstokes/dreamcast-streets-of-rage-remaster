@@ -36,6 +36,7 @@ uint32_t MegaDriveEnvironment::readBus(void *ctx,uint32_t a,unsigned w){
     if(w==4)return (readBus(ctx,a,2)<<16)|readBus(ctx,a+2,2);
     if(a>=0xc00000 && a<0xc00010){
         uint32_t v=(a&0xc)==4?e.port_.readControlPort():((a&0xc)==8?e.port_.readHVCounter():e.port_.readDataPort());
+        if((a&0xc)==8&&getenv("SOR_HV_DEBUG")){static int n=0;if(n++<60)sor_log("HVREAD frame=%lu value=%04x last=%06lx frame_clock=%llu\n",(unsigned long)e.frames_,v,(unsigned long)e.last_,(unsigned long long)(e.cycles_-e.frameCycles_));}
         return w==1?((a&1)?v&255:v>>8):v;
     }
     if(a>=0xa00000 && a<0xa02000){
@@ -87,9 +88,22 @@ void MegaDriveEnvironment::present(){
 
 }
 void MegaDriveEnvironment::waitForInterrupt(){
-    // Explicit frame waits satisfy progress. Do not carry instruction budget
-    // across them and inject an extra VBlank into an otherwise normal frame.
-    paceCount_=0;
+    // The CPU idles until the next VBlank; a boundary already crossed (for
+    // example during a DMA stall) is the one being waited for.
+    if(getenv("SOR_PHASE_DEBUG")&&frames_>478&&frames_<492)sor_log("PHASE wait frame=%lu used=%llu of 896040 mode=%04x counter=%u\n",(unsigned long)frames_,(unsigned long long)(cycles_+frameClocks-nextVblank_),mem_.readWord(0xffff00),mem_.readWord(0xfffb08));
+    if(cycles_<nextVblank_)cycles_=nextVblank_;
+    frameBoundary();
+}
+void MegaDriveEnvironment::paceInterrupt(){
+    // Emulated time crossed a VBlank while the CPU was running. In gameplay
+    // that is a lag frame on the original too; log the first few.
+    if(getenv("SOR_PHASE_DEBUG")&&frames_>478&&frames_<492)sor_log("PHASE crossed frame=%lu mode=%04x counter=%u last=%06lx\n",(unsigned long)frames_,mem_.readWord(0xffff00),mem_.readWord(0xfffb08),(unsigned long)last_);
+    static unsigned lagFrames=0;
+    if(mem_.readWord(0xffff00)==0x16 && lagFrames++<40)
+        sor_log("LAG frame=%lu last=%06lx mask=%d\n",(unsigned long)frames_,(unsigned long)last_,cpuInterruptMask());
+    frameBoundary();
+}
+void MegaDriveEnvironment::frameBoundary(){
     platform_observe_frame(frames_,mem_.state,fb_);
     alignas(32) int16_t samples[890*2],dacSamples[890*2];
     int16_t *dac=platform_audio_split_dac()?dacSamples:nullptr;
@@ -104,12 +118,9 @@ void MegaDriveEnvironment::waitForInterrupt(){
     if(audio_.enabled&&frames_%600==599)sor_log("DAC_NATIVE starts=%llu samples=%llu batch_frames=%llu interleaved_frames=%llu\n",audio_.nativeDacStarts,audio_.nativeDacSamples,audio_.batchFrames,audio_.interleavedFrames);
     if(audio_.enabled&&platform_audio_profile()&&frames_%600==599)sor_log("AUDIO_PARTS z80=%llu fm=%llu psg=%llu dynamic_ops=%lu ssg_ops=%lu live_ops=%lu fm_clock_us=%llu fm_output_us=%llu audible_ops=%lu\n",audio_.profile[0],audio_.profile[1],audio_.profile[2],(unsigned long)(audio_.fmWorkload&255),(unsigned long)((audio_.fmWorkload>>8)&255),(unsigned long)((audio_.fmWorkload>>16)&255),audio_.profile[3],audio_.profile[4],(unsigned long)(audio_.fmWorkload>>24));
     const auto presentStart=platform_time_us();
-    present(); pads_.poll(mem_.state.ram); frames_++; cycles_+=896040; frameCycles_=cycles_; irq_=6;
+    present(); pads_.poll(mem_.state.ram); frames_++;
+    frameCycles_=nextVblank_; nextVblank_+=frameClocks; irq_=6; // VINT pending until unmasked
     platform_frame_parts(uint32_t(synthDone-audioStart),uint32_t(platform_time_us()-presentStart));
-}
-void MegaDriveEnvironment::paceInterrupt(){
-    // Boot/polling paths outside the hand-written frame loop still require IRQ progress.
-    paceCount_=0;if(!irq_ && cpuInterruptMask()<6)waitForInterrupt();
 }
 void MegaDriveEnvironment::reportUnhandledDispatch(m_long a){
     sor_log("SOR UNHANDLED %06lx caller=%06lx\n",(unsigned long)a,(unsigned long)last_);

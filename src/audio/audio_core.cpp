@@ -178,8 +178,11 @@ struct NativeAudio::Impl:ymfm::ymfm_interface {
         // their original 240-master-clock domain, including muted oscillators.
         int sum=0;unsigned remaining=1008;
         while(remaining){
-            unsigned edge=std::min({unsigned(counter[0]),unsigned(counter[1]),unsigned(counter[2]),
-                                  (noiseControl&3)==3?65536u:unsigned(counter[3])});
+            // Next divider edge (plain comparisons: an initializer-list std::min
+            // compiles to an out-of-line min_element call on SH-4).
+            unsigned edge=counter[0]<counter[1]?counter[0]:counter[1];
+            if(counter[2]<edge)edge=counter[2];
+            if((noiseControl&3)!=3 && counter[3]<edge)edge=counter[3];
             unsigned span=std::min(remaining,edge*240-psgRemainder);
             sum+=psgLevel*int(span);remaining-=span;psgRemainder+=span;
             unsigned ticks=psgRemainder/240;psgRemainder%=240;

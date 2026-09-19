@@ -8,6 +8,8 @@ def replace_once(text, old, new):
 
 
 def patch(name, text):
+    if name == 'VDPPort.hpp':
+        return replace_once(text, '    void executeDMACopy();', '    void executeDMACopy();\n    bool dmaInBlanking();')
     if name == 'VDPState.hpp':
         return replace_once(text, '    uint64_t dmaEndCycle_ = 0;',
                             '    uint64_t dmaEndCycle_ = 0;\n'
@@ -35,6 +37,16 @@ def patch(name, text):
     hCounter_ = static_cast<m_word>((lineCycle * 256) / MASTER_CYCLES_PER_LINE);''')
     if name != 'VDPPort.cpp':
         return text
+    # Blanking: display forcibly disabled, or the raster is in vertical blank
+    # (Genesis Plus GX: `(status & 8) || !(reg[1] & 0x40)`). VBlank-handler DMA
+    # (sprite tables, player art) runs at blanking rates on the console.
+    text = replace_once(text, 'void VDPPort::executeDMACopy() {', '''bool VDPPort::dmaInBlanking() {
+    VDPState &s = *state_;
+    s.updateCountersFromCycles(currentMasterCycles(), env_ != nullptr && env_->isPal50Hz());
+    return !s.displayEnabled() || s.vCounter_ >= s.activeHeight();
+}
+
+void VDPPort::executeDMACopy() {''')
     # With the display forcibly blanked (register 1 bit 6 clear) every line is
     # a blanking line, so DMA runs at the blanking transfer counts documented in
     # Genesis Plus GX's vdp_dma_update(): 68K>VRAM 166/204, fill 165/203 and
@@ -58,10 +70,22 @@ def patch(name, text):
         }
         s.address_ += increment;
     }''')
+    # 68K-to-VDP DMA: counts are words, and each VRAM word is two byte slots
+    # (CRAM/VSRAM counts are in words already). The 68000 is halted meanwhile.
+    text = replace_once(text, '''    s.dmaEndCycle_ = currentMasterCycles()
+                   + std::max<uint64_t>(1, (static_cast<uint64_t>(count) * VDPState::MASTER_CYCLES_PER_LINE)
+                                               / static_cast<uint64_t>(slotsPerLine));
+
+    std::vector<uint8_t> buf''', '''    const uint64_t units = (s.code_ & 0x0F) == 0x01 ? 2ull * count : uint64_t(count);
+    const uint64_t duration = std::max<uint64_t>(1, units * VDPState::MASTER_CYCLES_PER_LINE / static_cast<uint64_t>(slotsPerLine));
+    s.dmaEndCycle_ = currentMasterCycles() + duration;
+    if (env_) env_->stallCpu(duration);
+
+    std::vector<uint8_t> buf''')
     for old, blank in (('s.h40Mode() ? 18 : 16', 's.h40Mode() ? 204 : 166'),
                        ('s.h40Mode() ? 17 : 15', 's.h40Mode() ? 203 : 165'),
                        ('s.h40Mode() ? 9 : 8', 's.h40Mode() ? 102 : 83')):
         # Anchor on the DMA busy flag so the separate FIFO model is untouched.
         text = replace_once(text, 's.status_ |= 0x0002;\n    const int slotsPerLine = ' + old + ';',
-                            's.status_ |= 0x0002;\n    const int slotsPerLine = !s.displayEnabled() ? (' + blank + ') : (' + old + ');')
+                            's.status_ |= 0x0002;\n    const int slotsPerLine = dmaInBlanking() ? (' + blank + ') : (' + old + ');')
     return text
