@@ -71,16 +71,39 @@ comparison tool only, never linked into the Dreamcast executable.
 
 | Area | Required scenarios | Current evidence |
 | --- | --- | --- |
-| Movement | Four directions, diagonal, plane bounds, jump arcs | Phase-anchored directions, diagonals and jump actions match observed state; plane bounds not exhausted |
+| Movement | Four directions, diagonal, plane bounds, jump arcs | Phase-anchored directions, diagonals and jump actions match observed state; Round 1 play matches for 8,283 frames; plane bounds not exhausted |
 | Combat | Combo presses/holds, back attack, jump kick, all grabs/throws, police | Phase-anchored attack/jump/special inputs compared; all grabs/throws still missing |
-| Enemy logic | Every family, damage, invulnerability, knockdown, recovery | Not compared |
-| Campaign | Scroll triggers/waves, transitions, all bosses, all endings | Not compared |
+| Enemy logic | Every family, damage, invulnerability, knockdown, recovery | Round 1 wave 0–1 (Garcia-family, Signal, Haku-Ro) match for 8,283 frames (`round1-full`, 2026-09-19); other families and bosses not compared |
+| Campaign | Scroll triggers/waves, transitions, all bosses, all endings | Round 1 scrolling to wave 1, a death and respawn match; slowdown reproduced to 0.13% of a frame (CADENCE.md); later waves, boss and transitions not compared |
 | Two-player | Join, friendly fire, grabs/assists, lives/continues, scoring | 761 encounter observations matched (2026-09-15); 220 with the cadence model, see CADENCE.md; broader interactions still required |
 | Randomness/cadence | Same reset/input stream, seeds and per-tick actor state | Native repeatability verified; original parity incomplete |
 
 Record verified, inferred and inaccurate behavior separately. Never substitute
 host wall-clock sleep for a deterministic frame input script. Any test using cheats
 must label the altered setup and is not evidence of ordinary progression.
+
+## Per-routine cycle profiles
+
+To find where native emulated time differs from the original, profile the same
+frames on both sides by routine (`labels.csv`):
+
+```sh
+tools/build-profile-core.sh   # Genesis Plus GX with a per-PC cycle hook (HOOK_CPU)
+build/tools-venv/bin/python3 tools/genesis_reference.py \
+  build/gpgx-profile/genesis_plus_gx_libretro.dylib "$SOR_ROM" \
+  reference/scenarios/round1-full.json build/genesis-prof --profile 9656:9656:$PWD/build/g.bin
+SOR_PC_HISTOGRAM_FRAMES=9656:9656:$PWD/build/n.bin \
+  build/headless/sor-headless "$SOR_ROM" build/native-round1-full/replay.bin /tmp/r.bin
+python3 tools/gpgx-profile-report.py build/g.bin build/n.bin --top 40
+```
+
+`--profile` may repeat for disjoint frame ranges. Native frame N and original
+frame N are the same point in SoR's two-VBlank update cycle here (the replay
+gates differ by one frame). The native histogram charges each translated
+instruction and each modelled charge to its ROM address; DMA stalls are
+reported separately, and DRAM refresh and Z80-area wait states are charged
+but not histogrammed (the original's histogram includes them, about 1.5%).
+`SOR_WAIT_LOG=FIRST:LAST` (headless) logs when each frame starts waiting.
 
 ## Shared native headless backend
 
@@ -125,7 +148,7 @@ releases both pads until `(RAM[address] & mask) == value`, then starts the next
 segment immediately. `frames` is its maximum idle-frame budget, not a fixed delay.
 Both harnesses record the exact gate frame. No game state is overwritten and no
 comparison offset is searched after the run. SRP1 fixed-frame playback remains
-supported; the loader allows at most 256 segments and rejects invalid predicates,
+supported; the loader allows at most 4,096 segments and rejects invalid predicates,
 pressed buttons on gates, truncated records and trailing bytes. Timeout is a
 reported failure. `tools/test-replay.sh` checks these boundaries under sanitizers.
 
@@ -163,6 +186,12 @@ Verified against original ROM execution:
 - Directional/action replay repeats with **2,866 identical native RAM snapshots**;
   all **2,865** rendered frames match the original-mode software renderer in RGB1555.
 - Existing SRP1 two-player replay retains all 2,159 prior native RAM snapshots.
+
+- Round 1 (`round1-combat.json`, 244 segments): **3,115** paired observations and
+  all active-object regions match. `round1-full.json` (1,869 segments, 26,415
+  gameplay frames, `--segment 9`) matches until relative frame **8,283**, where
+  the original slows down for a frame and native finishes 163 cycles inside the
+  budget (CADENCE.md; `reference/results/behaviour-round1-2026-09-19.json`).
 
 Remaining differences are reported, not filtered out of the raw data. Spawn flag/
 timer bytes differ in the first 28 action frames (26 encounter frames); animation

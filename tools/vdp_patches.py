@@ -9,7 +9,7 @@ def replace_once(text, old, new):
 
 def patch(name, text):
     if name == 'VDPPort.hpp':
-        return replace_once(text, '    void executeDMACopy();', '    void executeDMACopy();\n    bool dmaInBlanking();')
+        return replace_once(text, '    void executeDMACopy();', '    void executeDMACopy();\n    uint64_t dmaDuration(uint64_t units, int blankRate, int activeRate);')
     if name == 'VDPState.hpp':
         return replace_once(text, '    uint64_t dmaEndCycle_ = 0;',
                             '    uint64_t dmaEndCycle_ = 0;\n'
@@ -40,10 +40,23 @@ def patch(name, text):
     # Blanking: display forcibly disabled, or the raster is in vertical blank
     # (Genesis Plus GX: `(status & 8) || !(reg[1] & 0x40)`). VBlank-handler DMA
     # (sprite tables, player art) runs at blanking rates on the console.
-    text = replace_once(text, 'void VDPPort::executeDMACopy() {', '''bool VDPPort::dmaInBlanking() {
+    # A transfer started in vertical blank continues at active-display rates
+    # once the next frame's display begins (Genesis Plus GX vdp_dma_update()).
+    text = replace_once(text, 'void VDPPort::executeDMACopy() {', '''uint64_t VDPPort::dmaDuration(uint64_t units, int blankRate, int activeRate) {
     VDPState &s = *state_;
-    s.updateCountersFromCycles(currentMasterCycles(), env_ != nullptr && env_->isPal50Hz());
-    return !s.displayEnabled() || s.vCounter_ >= s.activeHeight();
+    const bool pal = env_ != nullptr && env_->isPal50Hz();
+    const uint64_t now = currentMasterCycles(), line = VDPState::MASTER_CYCLES_PER_LINE;
+    s.updateCountersFromCycles(now, pal);
+    if (!s.displayEnabled())
+        return std::max<uint64_t>(1, units * line / blankRate);
+    if (s.vCounter_ < s.activeHeight())
+        return std::max<uint64_t>(1, units * line / activeRate);
+    const uint64_t frame = uint64_t(s.linesPerFrame(pal)) * line;
+    const uint64_t left = frame - now % frame;            // until line 0
+    const uint64_t blankUnits = left * blankRate / line;
+    if (units <= blankUnits)
+        return std::max<uint64_t>(1, units * line / blankRate);
+    return left + (units - blankUnits) * line / activeRate;
 }
 
 void VDPPort::executeDMACopy() {''')
@@ -72,20 +85,23 @@ void VDPPort::executeDMACopy() {''')
     }''')
     # 68K-to-VDP DMA: counts are words, and each VRAM word is two byte slots
     # (CRAM/VSRAM counts are in words already). The 68000 is halted meanwhile.
-    text = replace_once(text, '''    s.dmaEndCycle_ = currentMasterCycles()
+    text = replace_once(text, '''    const int slotsPerLine = s.h40Mode() ? 18 : 16;
+    s.dmaEndCycle_ = currentMasterCycles()
                    + std::max<uint64_t>(1, (static_cast<uint64_t>(count) * VDPState::MASTER_CYCLES_PER_LINE)
                                                / static_cast<uint64_t>(slotsPerLine));
 
     std::vector<uint8_t> buf''', '''    const uint64_t units = (s.code_ & 0x0F) == 0x01 ? 2ull * count : uint64_t(count);
-    const uint64_t duration = std::max<uint64_t>(1, units * VDPState::MASTER_CYCLES_PER_LINE / static_cast<uint64_t>(slotsPerLine));
+    const uint64_t duration = dmaDuration(units, s.h40Mode() ? 204 : 166, s.h40Mode() ? 18 : 16);
     s.dmaEndCycle_ = currentMasterCycles() + duration;
     if (env_) env_->stallCpu(duration);
 
     std::vector<uint8_t> buf''')
-    for old, blank in (('s.h40Mode() ? 18 : 16', 's.h40Mode() ? 204 : 166'),
-                       ('s.h40Mode() ? 17 : 15', 's.h40Mode() ? 203 : 165'),
-                       ('s.h40Mode() ? 9 : 8', 's.h40Mode() ? 102 : 83')):
-        # Anchor on the DMA busy flag so the separate FIFO model is untouched.
-        text = replace_once(text, 's.status_ |= 0x0002;\n    const int slotsPerLine = ' + old + ';',
-                            's.status_ |= 0x0002;\n    const int slotsPerLine = dmaInBlanking() ? (' + blank + ') : (' + old + ');')
+    # Fill and VRAM copy (byte counts): duration from dmaDuration().
+    for active, blank in (('s.h40Mode() ? 17 : 15', 's.h40Mode() ? 203 : 165'),
+                          ('s.h40Mode() ? 9 : 8', 's.h40Mode() ? 102 : 83')):
+        text = replace_once(text, '''    const int slotsPerLine = %s;
+    s.dmaEndCycle_ = currentMasterCycles()
+                   + std::max<uint64_t>(1, (static_cast<uint64_t>(count) * VDPState::MASTER_CYCLES_PER_LINE)
+                                               / static_cast<uint64_t>(slotsPerLine));''' % active,
+                            '''    s.dmaEndCycle_ = currentMasterCycles() + dmaDuration(uint64_t(count), %s, %s);''' % (blank, active))
     return text

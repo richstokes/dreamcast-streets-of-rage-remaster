@@ -99,13 +99,16 @@ def observation(ram,frame):
                 p1_lives=ram[0xff20],p2_lives=ram[0xff23],actors=actors,ram_sha256=hashlib.sha256(ram).hexdigest())
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('core');p.add_argument('rom');p.add_argument('scenario');p.add_argument('output',type=Path);p.add_argument('--raw-ram',action='store_true');p.add_argument('--audio-wav',action='store_true');a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('core');p.add_argument('rom');p.add_argument('scenario');p.add_argument('output',type=Path);p.add_argument('--raw-ram',action='store_true');p.add_argument('--audio-wav',action='store_true');p.add_argument('--profile',action='append',default=[],metavar='FIRST:LAST:PATH',help='per-PC 68000 cycles for frames FIRST..LAST (profiling core built with HOOK_CPU; see tools/build-profile-core.sh)');a=p.parse_args()
     a.output.mkdir(parents=True,exist_ok=True);g=Genesis(a.core,a.rom)
     if a.audio_wav:g.capture_audio(a.output/'audio.wav')
     scenario=json.loads(Path(a.scenario).read_text())
     from contextlib import nullcontext
     ram=g.ram()
     events=[]
+    profiles=[(int(f),int(l),path) for f,l,path in (v.split(':',2) for v in a.profile)]
+    if profiles:
+        g.lib.sor_profile_stop.argtypes=[C.c_char_p]
     with (a.output/'trace.jsonl').open('w') as trace, ((a.output/'ram.bin').open('wb') if a.raw_ram else nullcontext()) as raw:
         for index,segment in enumerate(scenario['segments']):
             masks=[sum(1<<BUTTONS[b] for b in segment.get(k,[])) for k in ('p1','p2')]
@@ -114,7 +117,11 @@ def main():
                 if gate and ram[gate['address']]&gate.get('mask',255)==gate['value']:
                     events.append(dict(segment=index,frame=g.frame,idle_frames=elapsed));break
                 if gate and elapsed==segment['frames']: raise RuntimeError(f'State gate {index} timed out')
+                for first,_,_ in profiles:
+                    if g.frame+1==first:g.lib.sor_profile_start()
                 ram=g.step(*masks);trace.write(json.dumps(observation(ram,g.frame))+'\n')
+                for _,last,path in profiles:
+                    if g.frame==last and g.lib.sor_profile_stop(str(path).encode()):raise RuntimeError('profile write failed')
                 if raw: raw.write(ram)
             if 'capture' in segment:g.capture(a.output/(segment['capture']+'.png'))
     (a.output/'events.json').write_text(json.dumps(events,indent=2)+'\n')

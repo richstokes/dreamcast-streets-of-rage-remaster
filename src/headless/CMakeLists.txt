@@ -8,5 +8,6 @@ list(FILTER GAME_SOURCES EXCLUDE REGEX "arithmetic-probes.cpp$")
 add_executable(sor-headless ${GAME_SOURCES} main.cpp
     ../dreamcast/runtime.cpp ../dreamcast/game_bindings.cpp ../dreamcast/replay.cpp
     ../core/memory.c ../render/vdp_scene.cpp ../audio/audio_core.cpp ../audio/dac_driver.cpp)
+target_compile_definitions(sor-headless PRIVATE SOR_PC_HISTOGRAM)
 target_include_directories(sor-headless PRIVATE ../dreamcast ../dreamcast/compat
     "${ROOT}/include" "${ROOT}/build/native/upstream" ../render ../audio)

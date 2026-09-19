@@ -33,6 +33,12 @@ and relevant commit/capture paths in the progress log.
   (2026-09-19: model established and verified to ±1 frame per mode; not frame-exact —
   see docs/CADENCE.md and reference/results/cadence-2026-09-19.json.)
 - [ ] Verify movement and combat in the first section, including two-player play.
+  (2026-09-19: Round 1 play matches the original for 8,283 gameplay frames — waves 0–1,
+  three enemy families, police special, a death — and Round 1 combat for 3,115 frames;
+  slowdown reproduced to 0.13% of a frame. Two-player beyond 220 frames, grabs/throws,
+  later waves and the boss remain. reference/results/behaviour-round1-2026-09-19.json.)
+- [ ] Reduce stage-start synthesis peaks (10–14 ms/frame at Round 1 start; one 77 ms
+  stream underrun in the benchmark after the cadence changes, AUDIO.md).
 - [x] Replace measured rendering bottlenecks and remeasure target performance.
   (2026-09-19, Flycast: 1,659/1,659 and 941/941 gameplay flips/VBlanks with audio; OPTIMIZATION_LOG.md.)
 - [x] Integrate original audio and verify sound timing.

@@ -33,7 +33,14 @@ public:
         cycles_+=cpuCycles*7;if(cycles_>=nextVblank_)paceInterrupt();
     }
     // The 68000 is halted during 68K-to-VDP DMA.
-    void stallCpu(uint64_t masterClocks){cycles_+=masterClocks;}
+    void stallCpu(uint64_t masterClocks){cycles_+=masterClocks;pcHistogram(0xFFFFFE,unsigned(masterClocks/7));}
+#ifdef SOR_PC_HISTOGRAM
+    // Host analysis (SOR_PC_HISTOGRAM_FRAMES=first:last:path): CPU cycles per
+    // ROM address, comparable with genesis_reference.py --profile.
+    void pcHistogram(unsigned pc,unsigned cpuCycles);
+#else
+    void pcHistogram(unsigned,unsigned){}
+#endif
     void waitForInterrupt(); void debugState();
     void traceEnter(m_long a){last_=a;} m_long lastFunction()const{return last_;}
     void reportUnhandledDispatch(m_long);
@@ -53,5 +60,5 @@ private:
     // NTSC master clocks per frame; VBlank begins at line 224 of 262 (3,420
     // clocks per line), so the VDP's raster counters agree with emulated time.
     static constexpr uint64_t frameClocks=896040,vblankStart=224*3420;
-    uint64_t cycles_=0,frameCycles_=0,nextVblank_=vblankStart,refreshAt_=0; uint32_t last_=0,frames_=0;
+    uint64_t cycles_=0,frameCycles_=0,nextVblank_=vblankStart,refreshAt_=0,ymBusyUntil_=0; uint32_t last_=0,frames_=0;
 };

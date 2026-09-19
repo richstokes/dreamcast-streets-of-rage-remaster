@@ -3,7 +3,7 @@ import json,struct,sys
 from pathlib import Path
 BUTTONS={'UP':1,'DOWN':2,'LEFT':4,'RIGHT':8,'B':16,'C':32,'A':64,'START':128}
 s=json.loads(Path(sys.argv[1]).read_text())['segments']
-if not 1<=len(s)<=256: raise SystemExit('1..256 segments required')
+if not 1<=len(s)<=4096: raise SystemExit('1..4096 segments required')
 version=2 if any('wait' in v for v in s) else 1
 b=bytearray(b'SRP'+str(version).encode()+struct.pack('<I',len(s)))
 for v in s:

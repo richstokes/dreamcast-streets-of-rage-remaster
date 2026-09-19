@@ -7,7 +7,13 @@ The playback loop now has a validated native path; interpreter setup/fallback re
 FM, PSG and the ROM's sampled drum/voice driver run at 60 Hz in Flycast: the
 action replay shows 1,659 flips over 1,659 gameplay VBlanks and the two-player
 encounter 941 over 941, with audio on and profiling off. Stream underruns occur
-only during the two bulk-decompression screen loads (display blanked). Timing is
+only during the two bulk-decompression screen loads (display blanked).
+With the Round 1 cadence work (CADENCE.md) the benchmark's gameplay window is
+1,611 flips over 1,614 VBlanks, and the stream underruns once as Round 1 starts
+(a 77 ms gap). The first seconds of the stage need 10–14 ms of synthesis per
+frame; each lost VBlank lowers the ring by one frame of audio (rate control
+restores 0.4%), and which frames lose one shifts with the cadence. Before
+this work the ring bottomed out at 456 frames there. Open: reduce that synthesis peak. Timing is
 verified against the original ROM in Genesis Plus GX (below). Physical-console
 performance, full soundtrack/SFX coverage and listening QA remain unverified.
 `SOR_AUDIO=0` builds the silent configuration.
@@ -98,6 +104,11 @@ Genesis Plus GX (MAME YM2612 core) after replay gate 9:
   now placed by emulated time within the frame, and never split the Z80's
   address/data pair. `tools/ym-render.cpp` replays a host `SOR_YM_LOG` write log
   through ymfm or Nuked OPN2 for such investigations.
+- **Sound-bus timing.** Before each YM2612 access the 68000 driver requests the
+  Z80 bus and retries while the Z80 DAC driver flags a sample write (`$A01FFD`
+  bit 7). A shadow of the native DAC driver predicts that flag during the frame
+  (the real Z80 runs in frame batches), so the 68000 spends the original's time
+  there (CADENCE.md). The shadow never feeds audio output.
 
 ## Playback stream
 

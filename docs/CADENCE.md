@@ -5,7 +5,8 @@ CPU clock of its own. VBlanks, the VDP's raster counters, DMA completion and the
 placement of sound writes within a frame all depend on how much emulated CPU
 time the code consumes. This document describes the model and how it is checked
 against the original ROM running in Genesis Plus GX. Status: **established and
-verified to about one frame per screen load; not frame-exact** (see Limits).
+verified to about one frame per screen load; gameplay slowdown reproduced to within
+0.13% of a frame in Round 1; not frame-exact** (see Limits).
 
 ## Model
 
@@ -17,8 +18,11 @@ verified to about one frame per screen load; not frame-exact** (see Limits).
   from the ROM at the instruction's address and costed with the Musashi cycle
   table from the Genesis Plus GX research checkout (`tools/m68k-cycle-table.c`),
   plus MOVEM register counts and immediate shift counts (`tools/m68k_cycles.py`).
-  Branches are charged as taken; register shift counts and MUL/DIV use typical
-  values. DRAM refresh adds 2 cycles every 128, as in Genesis Plus GX.
+  Conditional branches charge the path taken (Bcc.s 8/10, Bcc.w 12/10, DBcc
+  12/10/14). MULU/MULS charge 38 + 2n from the multiplier as executed (set bits,
+  or 01/10 pairs for MULS). Register shift counts and DIV use typical values.
+  DRAM refresh adds 2 cycles every 128, and each access to the Z80 area
+  (`$A00000-$A0FFFF`) one cycle, as in Genesis Plus GX.
 - **VBlank**: crossing the next frame boundary while code runs is a VBlank (the
   handler runs when the interrupt mask allows; a masked VBlank stays pending).
   An explicit wait idles until the boundary. Both use one frame-boundary routine.
@@ -29,7 +33,18 @@ verified to about one frame per screen load; not frame-exact** (see Limits).
 - **Hand-written decompressors** (Nemesis, Kosinski, Enigma) count the events
   that dominate the original routines (codes, nibbles, literals, copies, bit
   refills) and charge a fitted cost after their writes, in chunks that let
-  VBlanks and the handler run (`tools/game_patches.py`).
+  VBlanks and the handler run (`tools/game_patches.py`). The incremental queue
+  (`$8510`) decodes and charges each tile when it is uploaded, five per VBlank.
+- **Other hand-written routines** charge their ROM cost: the object pass per
+  slot (40 empty, 154 active) and per update, the joypad sampler, the pickup
+  scan (`$3136`, per slot scanned), the main loop, and mean per-call costs for
+  input remapping, attack descriptors, attack input and the sound queue.
+- **Sound bus**: `sound_ym2612_acquire` charges the ROM loop per path. The YM2612
+  busy flag lasts 32 YM clocks after a data write. The Z80 DAC driver's busy
+  flag (`$A01FFD` bit 7) comes from a shadow of the native driver that advances
+  with 68000 time from the frame's start and stalls while the 68000 holds the
+  bus, so the acquire retries while a drum sample is being written, as on
+  hardware (up to ~5k cycles per frame).
 
 ## Decoder costs
 
@@ -62,6 +77,27 @@ Stage music now starts within a frame of the original relative to gameplay (it
 started 47 frames early), and in Flycast the stream no longer underruns during
 screen loads (0 underruns in both replays, was 2).
 
+## Gameplay slowdown (Round 1)
+
+SoR updates every two VBlanks (mailbox `$FFFA00`); when an update runs past its
+second VBlank the game slows for a frame. `reference/scenarios/round1-full.json`
+plays 26,415 gameplay frames of Round 1 after the gate. The per-routine cycle
+histograms of both backends (`tools/gpgx-profile-report.py`, see REFERENCE.md)
+located the missing time: sound-bus DAC-busy retries (~5k cycles in busy
+frames), branch and multiply timing, the uncharged object pass and pickup scan
+(3.4k cycles in one frame), and Z80-area wait states.
+
+| | Start of this work | Now |
+| --- | --- | --- |
+| Observations equal until (relative frame) | 8,262 | 8,283 |
+| First two slowdowns (original 8261, 8272) | not reproduced | same updates |
+| Idle time per frame near the slowdowns | — | within ~1.5k cycles (1%) |
+| Third slowdown (original 8283) | not reproduced | missed by 163 cycles (0.13%) |
+
+Round 1 combat (`round1-combat.json`, 3,115 frames) and the action replay
+(1,481 frames) match in every observed field. Results:
+`reference/results/behaviour-round1-2026-09-19.json`.
+
 ## Limits
 
 - Each long load still ends up to about a frame early or late (±3%): taken vs
@@ -73,9 +109,14 @@ screen loads (0 underruns in both replays, was 2).
   coincidental: the old model was 24 counts off (a multiple of 8) and the value
   reached no observed field in the window. With the counter one behind, the
   type-`$22` object's fall diverges 221 frames after the gate.
-- The hand-written object pass and menus cost no emulated time; gameplay frames
-  are therefore never over-budget in the model, and the original's slowdown
-  (if any) is not reproduced.
+- Gameplay slowdown depends on the frame's total within about 0.1%; the model
+  is closer than that on average but not per frame. Remaining known
+  approximations: DIV and register-count shifts use typical times, the Nemesis,
+  Kosinski and Enigma costs are fitted (±0.1 frame per decode), hand-written
+  routines charge mean costs, a DAC sample that starts during a frame is not
+  seen until the next (the shadow driver starts at frame boundaries), and 68000
+  bus accesses happen at the end of each charged instruction rather than
+  mid-instruction.
 
 Frame-exact cadence would need cycle-exact emulation of the loads. Until then,
 comparisons past the first counter-dependent behaviour need either identical

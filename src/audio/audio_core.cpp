@@ -33,6 +33,12 @@ struct NativeAudio::Impl:ymfm::ymfm_interface {
     std::array<WriteEvent,3072> merged{};
     unsigned cpuEventCount=0,cpuPsgCount=0,cpuOverflows=0;bool z80AddressOpen=false;
     uint64_t instructionClock=0;std::array<uint64_t,890> sampleTargets{};
+    NativeDacDriver shadow;uint8_t shadowRam[8192]{};
+    uint32_t shadowZ=0,shadowStall=0,heldAt=0;bool shadowValid=false,held=false;
+    void advanceShadow(uint32_t clocks){
+        const uint32_t target=clocks/15>shadowStall?clocks/15-shadowStall:0;
+        if(shadowZ<target)shadowZ+=shadow.advance(int(target-shadowZ));
+    }
     // Host analysis only (SOR_YM_LOG): each chip write with the index of the
     // first output sample it affects. 10-byte records: u64 sample, port, value;
     // port 4 marks PSG writes.
@@ -55,7 +61,7 @@ struct NativeAudio::Impl:ymfm::ymfm_interface {
     void setPolarity(unsigned c,bool value){
         if(polarity[c]!=value){polarity[c]=value;psgLevel+=(value?2:-2)*amplitude[volume[c]];}
     }
-    explicit Impl(NativeAudio &o):owner(o),fm(*this),dac(o.ram,this,read,write){
+    explicit Impl(NativeAudio &o):owner(o),fm(*this),dac(o.ram,this,read,write),shadow(dac.shadow(shadowRam)){
         fm.reset();resetCpu();
 #ifndef __DREAMCAST__
         if(const char *path=std::getenv("SOR_YM_LOG"))ymLog=std::fopen(path,"wb");
@@ -214,6 +220,26 @@ void NativeAudio::setBusRequest(bool b){
     // Native callers retry BUSREQ immediately; permit the DAC driver to finish
     // its short critical section rather than deadlocking on a frozen busy flag.
     if(!b&&!impl->reset)for(int i=0;i<128&&(ram[0x1ffd]&128);i++)impl->ztime+=impl->runSound(16);
+}
+void NativeAudio::beginFrame68k(){
+    if(!impl)return;
+    auto &s=*impl;
+    s.shadowValid=nativeDac&&s.driverKnown&&!s.reset&&s.dac.active();
+    s.shadowZ=s.shadowStall=s.heldAt=0;
+    if(s.shadowValid){std::copy_n(ram,8192,s.shadowRam);s.shadow=s.dac.shadow(s.shadowRam);}
+}
+void NativeAudio::busRequest68k(bool b,uint32_t clocks){
+    if(!impl||!impl->shadowValid||b==impl->held)return;
+    auto &s=*impl;
+    if(b){s.advanceShadow(clocks);s.heldAt=clocks;}
+    else s.shadowStall+=(clocks-s.heldAt)/15;
+    s.held=b;
+}
+uint8_t NativeAudio::dacBusy68k(uint32_t clocks){
+    if(!impl||!impl->shadowValid)return ram[0x1ffd];
+    auto &s=*impl;
+    if(!s.held)s.advanceShadow(clocks);
+    return s.shadow.active()?s.shadowRam[0x1ffd]:0;
 }
 void NativeAudio::writeYM(unsigned p,uint8_t v){
     if(!impl)return;

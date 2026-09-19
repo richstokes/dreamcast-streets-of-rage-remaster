@@ -6,6 +6,11 @@
 #include <cstdlib>
 #include <cstring>
 #include <stdexcept>
+#include <string>
+#include <vector>
+#ifdef SOR_PC_HISTOGRAM
+static void histogramFrame(uint32_t frame);
+#endif
 
 
 void Controllers::poll(const uint8_t *ram){
@@ -34,13 +39,16 @@ void MegaDriveEnvironment::loadROM(const std::string &path){
 uint32_t MegaDriveEnvironment::readBus(void *ctx,uint32_t a,unsigned w){
     auto &e=*static_cast<MegaDriveEnvironment*>(ctx);
     if(w==4)return (readBus(ctx,a,2)<<16)|readBus(ctx,a+2,2);
+    if(a>=0xa00000 && a<0xa10000)e.cycles_+=7; // Z80-bus access latency: one 68000 cycle (Genesis Plus GX)
     if(a>=0xc00000 && a<0xc00010){
         uint32_t v=(a&0xc)==4?e.port_.readControlPort():((a&0xc)==8?e.port_.readHVCounter():e.port_.readDataPort());
         if((a&0xc)==8&&getenv("SOR_HV_DEBUG")){static int n=0;if(n++<60)sor_log("HVREAD frame=%lu value=%04x last=%06lx frame_clock=%llu\n",(unsigned long)e.frames_,v,(unsigned long)e.last_,(unsigned long long)(e.cycles_-e.frameCycles_));}
         return w==1?((a&1)?v&255:v>>8):v;
     }
     if(a>=0xa00000 && a<0xa02000){
-        auto i=a&8191; if(i==0x1ffd&&!e.audio_.enabled)return 0; return w==1?e.audio_.ram[i]:(e.audio_.ram[i]<<8)|e.audio_.ram[(i+1)&8191];
+        auto i=a&8191; if(i==0x1ffd&&!e.audio_.enabled)return 0;
+        if(i==0x1ffd&&w==1)return e.audio_.dacBusy68k(uint32_t(e.cycles_-e.frameCycles_));
+        return w==1?e.audio_.ram[i]:(e.audio_.ram[i]<<8)|e.audio_.ram[(i+1)&8191];
     }
     if(a==0xa10003 || a==0xa10005){
         int n=a==0xa10005; const auto &p=n?e.pads_.current.player2:e.pads_.current.player1;
@@ -52,7 +60,12 @@ uint32_t MegaDriveEnvironment::readBus(void *ctx,uint32_t a,unsigned w){
         return v;
     }
     if(a==0xa10001)return 0x80; // overseas, NTSC, pre-TMSS
-    if(a>=0xa04000 && a<=0xa04003)return e.audio_.readYM(a&3);
+    if(a>=0xa04000 && a<=0xa04003){
+        // Discrete YM2612: status (busy in bit 7) reads from $A04000 only.
+        uint32_t v=e.audio_.readYM(a&3);
+        if(a==0xa04000 && e.cycles_<e.ymBusyUntil_)v|=0x80;
+        return v;
+    }
     if(a==0xa11100)return 0;
     if(a>=0xa10000 && a<=0xa1001f)return 0;
     e.mem_.state.faults++; e.mem_.state.last_fault_address=a; return 0;
@@ -60,6 +73,7 @@ uint32_t MegaDriveEnvironment::readBus(void *ctx,uint32_t a,unsigned w){
 void MegaDriveEnvironment::writeBus(void *ctx,uint32_t a,unsigned w,uint32_t v){
     auto &e=*static_cast<MegaDriveEnvironment*>(ctx);
     if(w==4){writeBus(ctx,a,2,v>>16);writeBus(ctx,a+2,2,v&65535);return;}
+    if(a>=0xa00000 && a<0xa10000)e.cycles_+=7; // Z80-bus access latency: one 68000 cycle (Genesis Plus GX)
     if(a>=0xc00000 && a<0xc00008){
         if(w==1)v=(v&255)*257;
         if(a&4)e.port_.writeControlPort(v);else e.port_.writeDataPort(v);return;
@@ -67,9 +81,14 @@ void MegaDriveEnvironment::writeBus(void *ctx,uint32_t a,unsigned w,uint32_t v){
     if(a>=0xa00000 && a<0xa02000){e.audio_.ram[a&8191]=w==1?v:v>>8;if(w==2)e.audio_.ram[(a+1)&8191]=v;return;}
     if(a==0xa10003 || a==0xa10005){e.th_[a==0xa10005]=v&64;return;}
     // Emulated 68000 time since the frame began places each write in the next block.
-    if(a>=0xa04000&&a<=0xa04003){e.audio_.writeYM68k(a&3,v,uint32_t(e.cycles_-e.frameCycles_));return;}
+    if(a>=0xa04000&&a<=0xa04003){
+        // A data write keeps the YM2612 busy for 32 of its cycles (42 master
+        // clocks each) from the next YM clock (Genesis Plus GX, discrete chip).
+        if(a&1)e.ymBusyUntil_=((e.cycles_+41)/42+32)*42;
+        e.audio_.writeYM68k(a&3,v,uint32_t(e.cycles_-e.frameCycles_));return;
+    }
     if(a==0xc00011){e.audio_.writePSG68k(v,uint32_t(e.cycles_-e.frameCycles_));return;}
-    if(a==0xa11100){e.audio_.setBusRequest(v&0x100);return;}
+    if(a==0xa11100){e.audio_.busRequest68k(v&0x100,uint32_t(e.cycles_-e.frameCycles_));e.audio_.setBusRequest(v&0x100);return;}
     if(a==0xa11200){e.audio_.setReset(!(v&0x100));return;}
     if((a>=0xa10000&&a<0xa14004)||(a>=0xa04000&&a<=0xa04003)||a==0xc00011)return;
     e.mem_.state.faults++;e.mem_.state.last_fault_address=a;
@@ -91,6 +110,11 @@ void MegaDriveEnvironment::waitForInterrupt(){
     // The CPU idles until the next VBlank; a boundary already crossed (for
     // example during a DMA stall) is the one being waited for.
     if(getenv("SOR_PHASE_DEBUG")&&frames_>478&&frames_<492)sor_log("PHASE wait frame=%lu used=%llu of 896040 mode=%04x counter=%u\n",(unsigned long)frames_,(unsigned long long)(cycles_+frameClocks-nextVblank_),mem_.readWord(0xffff00),mem_.readWord(0xfffb08));
+#ifdef SOR_PC_HISTOGRAM
+    // Host analysis: where in each frame FIRST..LAST the game starts waiting.
+    if(const char *b=getenv("SOR_WAIT_LOG")){unsigned long lo=0,hi=0;sscanf(b,"%lu:%lu",&lo,&hi);
+        if(frames_>=lo&&frames_<=hi)sor_log("WAIT frame=%lu clocks=%llu mailbox=%02x\n",(unsigned long)frames_,(unsigned long long)(cycles_+frameClocks-nextVblank_),mem_.readByte(0xfffa00));}
+#endif
     if(cycles_<nextVblank_)cycles_=nextVblank_;
     frameBoundary();
 }
@@ -104,11 +128,14 @@ void MegaDriveEnvironment::paceInterrupt(){
     frameBoundary();
 }
 void MegaDriveEnvironment::frameBoundary(){
+#ifdef SOR_PC_HISTOGRAM
+    histogramFrame(frames_);
+#endif
     platform_observe_frame(frames_,mem_.state,fb_);
     alignas(32) int16_t samples[890*2],dacSamples[890*2];
     int16_t *dac=platform_audio_split_dac()?dacSamples:nullptr;
     const auto audioStart=platform_time_us();
-    unsigned count=audio_.renderFrame(samples,platform_audio_profile()&&frames_%600==599?platform_time_us:nullptr,dac);const auto synthDone=platform_time_us();if(count)platform_audio_submit(samples,count,dac);
+    unsigned count=audio_.renderFrame(samples,platform_audio_profile()&&frames_%600==599?platform_time_us:nullptr,dac);audio_.beginFrame68k();const auto synthDone=platform_time_us();if(count)platform_audio_submit(samples,count,dac);
     if(audio_.enabled&&frames_%600==599)sor_log("AUDIO frame=%lu synth_us=%llu stream_us=%llu ym=%llu psg=%llu dac=%llu z80_faults=%llu\n",(unsigned long)frames_,(unsigned long long)(synthDone-audioStart),(unsigned long long)(platform_time_us()-synthDone),(unsigned long long)audio_.ymWrites,(unsigned long long)audio_.psgWrites,(unsigned long long)audio_.dacWrites,(unsigned long long)audio_.z80Faults);
     if(audio_.enabled&&frames_%600==599){
         uint32_t digest=2166136261u;
@@ -122,6 +149,30 @@ void MegaDriveEnvironment::frameBoundary(){
     frameCycles_=nextVblank_; nextVblank_+=frameClocks; irq_=6; // VINT pending until unmasked
     platform_frame_parts(uint32_t(synthDone-audioStart),uint32_t(platform_time_us()-presentStart));
 }
+#ifdef SOR_PC_HISTOGRAM
+namespace {
+std::vector<uint64_t> histogram;unsigned histogramFirst=~0u,histogramLast=0;std::string histogramPath;bool histogramActive=false;
+}
+void MegaDriveEnvironment::pcHistogram(unsigned pc,unsigned cpuCycles){
+    if(histogramActive)histogram[(pc&0xFFFFFE)>>1]+=uint64_t(cpuCycles)*7;
+}
+static void histogramFrame(uint32_t frame){
+    static bool parsed=false;
+    if(!parsed){parsed=true;if(const char *spec=getenv("SOR_PC_HISTOGRAM_FRAMES")){
+        std::string s(spec);auto a=s.find(':'),b=s.find(':',a+1);
+        histogramFirst=std::stoul(s.substr(0,a));histogramLast=std::stoul(s.substr(a+1,b-a-1));histogramPath=s.substr(b+1);
+        histogram.assign(0x800000,0);}}
+    if(frame+1==histogramFirst)histogramActive=true;
+    if(histogramActive&&frame==histogramLast){
+        histogramActive=false;
+        // Same layout as the Genesis Plus GX profile: 0x40000 ROM words (master clocks).
+        FILE *f=fopen(histogramPath.c_str(),"wb");
+        if(f){fwrite(histogram.data(),8,0x40000,f);fclose(f);}
+        uint64_t stall=histogram[0xFFFFFE>>1];
+        sor_log("PC_HISTOGRAM written %s (DMA stall %llu cycles)\n",histogramPath.c_str(),(unsigned long long)(stall/7));
+    }
+}
+#endif
 void MegaDriveEnvironment::reportUnhandledDispatch(m_long a){
     sor_log("SOR UNHANDLED %06lx caller=%06lx\n",(unsigned long)a,(unsigned long)last_);
     dumpUnhandledDispatchCpuState(); throw std::runtime_error("Untranslated dispatch");

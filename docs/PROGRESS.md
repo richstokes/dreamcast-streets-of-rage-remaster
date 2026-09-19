@@ -1,5 +1,26 @@
 # Progress
 
+## 2026-09-19 — Round 1 behaviour and slowdown against the original
+
+- Round 1 play (`round1-full`, 26,415 gameplay frames) matches the original ROM
+  in every observed field for 8,283 frames: waves 0–1, Garcia-family, Signal and
+  Haku-Ro enemies, the police special, the phone booth, a death and respawn.
+  Round 1 combat (3,115 frames) and the action replay (1,481) match throughout.
+- The original's first two slowdown frames are reproduced on the same updates;
+  the third is missed by 163 CPU cycles (0.13% of a frame), where the comparison
+  diverges. Found with per-routine cycle histograms of both backends
+  (`tools/gpgx-profile-report.py`, `SOR_PC_HISTOGRAM_FRAMES`).
+- Cadence model additions (CADENCE.md): exact branch and multiply timing, EXT no
+  longer costed as MOVEM, Z80-area wait states, sound-bus DAC-busy retries from a
+  shadow DAC driver, and charges for the hand-written object pass, pickup scan,
+  joypad sampler and main loop.
+- The incremental Nemesis queue now decodes each tile when uploaded, as the
+  original does, removing a ~12 ms host burst when art is queued.
+- Flycast: gameplay window 1,611 flips / 1,614 VBlanks (was 1,611 / 1,612); one
+  77 ms stream underrun at Round 1 start (AUDIO.md); follow-up in TODO.md.
+- Next: first-section fidelity gate (two-player beyond 220 frames, grabs/throws,
+  later waves and the boss).
+
 ## 2026-09-19 — original audio on by default, 60 Hz in Flycast
 
 - Release configuration (audio on, profiling off): action replay 1,659 flips /

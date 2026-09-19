@@ -5,7 +5,8 @@
 #include <stdexcept>
 namespace {
 struct Segment{uint32_t frames;uint16_t p1,p2,address;uint8_t mask,value;uint32_t flags;};
-Segment segments[256];unsigned count=0,index=0;uint32_t remaining=0,played=0;
+constexpr unsigned maxSegments=4096; // 80 KiB
+Segment segments[maxSegments];unsigned count=0,index=0;uint32_t remaining=0,played=0;
 uint32_t le(const uint8_t *b,unsigned n){uint32_t v=0;for(unsigned i=0;i<n;i++)v|=uint32_t(b[i])<<(i*8);return v;}
 PlayerControlsState decode(uint16_t b){
  PlayerControlsState p{};p.connected=true;p.up=b&1;p.down=b&2;p.left=b&4;p.right=b&8;
@@ -16,7 +17,7 @@ bool replay_load(const char *path){
  count=index=remaining=played=0;
  auto f=fopen(path,"rb");if(!f)return false;
  uint8_t h[8];if(fread(h,1,8,f)!=8||h[0]!='S'||h[1]!='R'||h[2]!='P'||(h[3]!='1'&&h[3]!='2')){fclose(f);return false;}
- unsigned n=le(h+4,4);if(!n||n>256){fclose(f);return false;}
+ unsigned n=le(h+4,4);if(!n||n>maxSegments){fclose(f);return false;}
  for(unsigned i=0;i<n;i++){
   const unsigned size=h[3]=='2'?16:8;
   uint8_t b[16]{};if(fread(b,1,size,f)!=size){fclose(f);return false;}

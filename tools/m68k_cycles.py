@@ -139,20 +139,36 @@ def cycles(instruction):
     return 8
 
 
+def mul_bits(signed, value):
+    """2 cycles per set bit (MULU) or per 01/10 pair with a zero appended (MULS)."""
+    value &= 0xFFFF
+    return 2 * bin(((value << 1) ^ value) & 0xFFFF if signed else value).count('1')
+
+
+def mul_cycles(op, ea_time, text):
+    """The table holds only the operand fetch; the multiply is 38 + 2n. An
+    immediate multiplier is exact here; otherwise tools/prepare-native.py adds
+    the data-dependent 2n when the instruction runs."""
+    source = split_operands(text.split(None, 1)[1])[0]
+    if source.startswith('#'):
+        return ea_time + 38 + mul_bits(op & 0x0100, int(source[1:].lstrip('$'), 16))
+    return ea_time + 38
+
+
 def instruction_cycles(rom, table, address, text):
     """Musashi base time for the opcode at `address`, plus static extras."""
     op = (rom[address] << 8) | rom[address + 1]
     base = table[op]
+    if op & 0xF1C0 in (0xC0C0, 0xC1C0):              # MULU/MULS.W
+        return mul_cycles(op, base, text)
     if base == 0:
         return cycles(text)
-    if op & 0xFB80 == 0x4880:                       # MOVEM: per register
+    if op & 0xFB80 == 0x4880 and op & 0x38:         # MOVEM (EA mode 0 is EXT): per register
         mask = (rom[address + 2] << 8) | rom[address + 3]
         return base + bin(mask).count('1') * (8 if op & 0x40 else 4)
     if op & 0xF000 == 0xE000 and op & 0xC0 != 0xC0:  # register shifts/rotates
         count = ((op >> 9) & 7 or 8) if not op & 0x20 else 4
         return base + 2 * count
-    if op & 0xF1C0 in (0xC0C0, 0xC1C0):              # MULU/MULS: 2 per set bit, typical 8
-        return base + 16
     if op & 0xF1C0 in (0x80C0, 0x81C0):              # DIVU/DIVS: data dependent
         return max(base, cycles(text))
     return base
