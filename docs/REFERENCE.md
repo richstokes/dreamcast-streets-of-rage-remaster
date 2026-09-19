@@ -71,10 +71,10 @@ comparison tool only, never linked into the Dreamcast executable.
 
 | Area | Required scenarios | Current evidence |
 | --- | --- | --- |
-| Movement | Four directions, diagonal, plane bounds, jump arcs | Phase-anchored directions, diagonals and jump actions match all object state; Round 1 play matches for 10,045 frames; plane bounds not exhausted |
+| Movement | Four directions, diagonal, plane bounds, jump arcs | Phase-anchored directions, diagonals and jump actions match all object state; Round 1 play matches for 9,976 frames; plane bounds not exhausted |
 | Combat | Combo presses/holds, back attack, jump kick, all grabs/throws, police | Phase-anchored attack/jump/special inputs compared; all grabs/throws still missing |
-| Enemy logic | Every family, damage, invulnerability, knockdown, recovery | Round 1 waves 0–1 (Garcia-family, Signal, Haku-Ro) match for 10,045 frames (`round1-full`, 2026-09-19); other families and bosses not compared |
-| Campaign | Scroll triggers/waves, transitions, all bosses, all endings | Boot, menus and loads frame-exact; Round 1 to wave 2, a death and respawn, and six slowdown frames match (one missed; CADENCE.md); later waves, boss and transitions not compared |
+| Enemy logic | Every family, damage, invulnerability, knockdown, recovery | Round 1 waves 0–1 (Garcia-family, Signal, Haku-Ro) match for 9,976 frames (`round1-full`, 2026-09-19); other families and bosses not compared |
+| Campaign | Scroll triggers/waves, transitions, all bosses, all endings | Boot, menus and loads frame-exact; Round 1 to wave 2, a death and respawn, and the slowdown frames match until 9,976 (CADENCE.md; FIDELITY_GATE.md); later waves, boss and transitions not compared |
 | Two-player | Join, friendly fire, grabs/assists, lives/continues, scoring | 761 encounter frames match including all object bytes (2026-09-19); broader interactions still required |
 | Randomness/cadence | Same reset/input stream, seeds and per-tick actor state | Native repeatability verified; cadence frame-exact through boot and loads, gameplay slowdown near-exact (CADENCE.md) |
 
@@ -202,9 +202,8 @@ Verified against original ROM execution:
 
 - Round 1 (`round1-combat.json`, 244 segments): **3,115** paired observations and
   all active-object regions match. `round1-full.json` (1,869 segments, 26,415
-  gameplay frames, `--segment 9`) matches until relative frame **10,045**; the
-  original's slowdown at 9,976 is not reproduced and object state differs from
-  10,046 (CADENCE.md; `reference/results/behaviour-round1-2026-09-19.json`).
+  gameplay frames, `--segment 9`) matches until relative frame **9,976**, where
+  the original's update ends 79 cycles before its VBlank and native's overruns (CADENCE.md; `reference/results/behaviour-round1-2026-09-19.json`).
 - Every game mode from power-on to Round 1 lasts the same number of frames in
   both backends (`tools/compare-timeline.py`).
 

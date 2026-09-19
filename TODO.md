@@ -33,7 +33,7 @@ and relevant commit/capture paths in the progress log.
   (2026-09-19: frame-exact from power-on through menus and loads; decompressor time
   exact per decode; Round 1 slowdown reproduced except one frame at 9,976 — docs/CADENCE.md.)
 - [ ] Verify movement and combat in the first section, including two-player play.
-  (2026-09-19: Round 1 play matches the original for 10,045 gameplay frames — waves 0–1,
+  (2026-09-19: Round 1 play matches the original for 9,976 gameplay frames — waves 0–1,
   three enemy families, police special, a death — Round 1 combat for 3,115 frames and the
   two-player encounter for all 761, with all object bytes. Grabs/throws coverage, later
   waves and the boss remain. reference/results/behaviour-round1-2026-09-19.json.)
@@ -45,6 +45,12 @@ and relevant commit/capture paths in the progress log.
   (Default on; effect channels match original driver state every frame, onsets within 10 ms;
   reference/results/audio-timing-2026-09-19.json. Music start offset follows the cadence item.)
 - [ ] Pass the first-section fidelity gate before starting enhanced presentation.
+  (2026-09-19 evaluation, docs/FIDELITY_GATE.md: boot to Round 1 frame-exact, Round 1 play
+  exact for 9,976 frames; weapons, throws, boss, completion and continue remain.)
+- [ ] Add short Round 1 scenarios for weapons/pickups, throws, friendly fire and continue.
+- [ ] State-synchronised comparisons for later Round 1 content (boss, completion).
+- [ ] Remaining timing: exact costs for profile-costed hand-written routines, DIV and
+  register-shift timing, YM2612 busy from the Z80's writes (docs/CADENCE.md).
 
 ## 1. Input audit and architecture
 
