@@ -46,6 +46,8 @@ int main() {
     menu.apply(memory);
     assert(memory.readByte(0xffff20) == 9 && memory.readByte(0xffff23) == 9);
     assert(memory.readByte(0xffff21) == 1 && memory.readByte(0xffff24) == 1);
+    assert(memory.readWord(0xff6020) == 0x6d2 && memory.readWord(0xff6054) == 0x6d2);
+    assert(memory.readWord(0xff602a) == 0x6c2 && memory.readWord(0xff603a) == 0x6c2);
     assert(memory.readWord(0xffff02) == 2 && memory.readWord(0xffff04) == 6); // No mid-round warp.
     assert(menu.protectsHealth(0xffffb800, memory) && menu.protectsHealth(0xffb880, memory));
     assert(!menu.protectsHealth(0xffb900, memory));

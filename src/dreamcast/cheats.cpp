@@ -20,6 +20,15 @@ bool activePlayer(SystemMemory &memory, unsigned player) {
     return (memory.readByte(playerMode) & (1u << player)) &&
         memory.readByte(0xffb800 + player * 0x80) == 1;
 }
+void refill(SystemMemory &memory, uint32_t address, unsigned count, uint32_t hud) {
+    memory.writeByte(address, count);
+    // The original Update_Lives ($4E14) stages each digit as two tiles in
+    // $FF6020 for the next VBlank upload. Keep that display in sync with RAM,
+    // including a player who has not attacked or died since enabling a cheat.
+    const unsigned tile = 0x6c0 + count * 2;
+    memory.writeWord(hud, tile);
+    memory.writeWord(hud + 0x50, tile + 1);
+}
 }
 
 void Menu::input(const PlayerControlsState &pad) {
@@ -67,13 +76,14 @@ void Menu::apply(SystemMemory &memory) const {
     for (unsigned player = 0; player < 2; ++player) {
         if (!activePlayer(memory, player)) continue;
         const uint32_t lives = 0xffff20 + player * 3;
+        const uint32_t hud = 0xff6020 + player * 0x34;
         // Only top up. Turning a cheat off leaves the remaining stock playable.
         if (settings_.infiniteLives && memory.readByte(lives) < 9)
-            memory.writeByte(lives, 9);
+            refill(memory, lives, 9, hud);
         // Round 8 intentionally has no police support. Preserve that restriction
         // and its indoor scene rather than dispatching the outdoor cutscene.
         if (settings_.infiniteSpecials && memory.readWord(0xffff02) < 7 && memory.readByte(lives + 1) == 0)
-            memory.writeByte(lives + 1, 1);
+            refill(memory, lives + 1, 1, hud + (player ? -26 : 10));
     }
 }
 

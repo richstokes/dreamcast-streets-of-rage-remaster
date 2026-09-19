@@ -88,6 +88,8 @@ def main():
     assert ram[0xb800] == ram[0xb880] == 1
     assert ram[0xff20] == ram[0xff23] == 9
     assert ram[0xff21] == ram[0xff24] == 1
+    assert word(ram, 0x6020) == word(ram, 0x6054) == 0x6d2 # Both life counters show nine.
+    assert word(ram, 0x602a) == word(ram, 0x603a) == 0x6c2 # Both police counters show one.
     assert word(ram, 0xb832) == word(ram, 0xb8b2) == 80
     assert all(word(r, a) == 80 for r in frames for a in (0xb832, 0xb8b2) if word(r, a) != 0)
     print('Two players: infinite lives/health, repeated police calls, one-life start pass', flush=True)
@@ -95,6 +97,11 @@ def main():
     ram, _ = run(rom, 'round-8-cheats', boot_menu() + configure(8, 3, True) + start() + tap('A') + [{'frames': 120}])
     assert word(ram, 0xff02) == 7 and ram[0xff21] == 0
     print('Round 8: police remains disabled', flush=True)
+
+    ram, _ = run(rom, 'gameplay-menu-resume', boot_menu() + start() + tap('CHEATS') +
+                 [{'frames': 60}] + tap('START') + [{'frames': 120}])
+    assert word(ram, 0xff00) == 0x16 and word(ram, 0xff06) == 0
+    print('In-game menu: Start closes without leaking a pause press', flush=True)
 
     # End a replay inside the menu to produce a visual capture, without advancing
     # game time while it is open. The native host explicitly supports this exit.
