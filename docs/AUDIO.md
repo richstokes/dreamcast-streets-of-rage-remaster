@@ -82,7 +82,8 @@ to reproduce the earlier silent WRAM traces. `--audio-wav` explicitly enables it
 Genesis Plus GX (MAME YM2612 core) after replay gate 9:
 
 - **68000 driver state** (`tools/compare-sound-state.py`): all four effect channels
-  match on all 1,300 compared frames at the gameplay alignment. Music started 47
+  match on all 1,300 compared frames at the gameplay alignment. (Measured before
+  the cadence model; music now starts within a frame of the original.) Music started 47
   frames earlier relative to gameplay in the native run (screen transitions differ;
   see the cadence item in TODO.md); aligned at its own start, all nine music
   channels match except channel flag bits that effects also write.

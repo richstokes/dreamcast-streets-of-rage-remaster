@@ -75,7 +75,7 @@ comparison tool only, never linked into the Dreamcast executable.
 | Combat | Combo presses/holds, back attack, jump kick, all grabs/throws, police | Phase-anchored attack/jump/special inputs compared; all grabs/throws still missing |
 | Enemy logic | Every family, damage, invulnerability, knockdown, recovery | Not compared |
 | Campaign | Scroll triggers/waves, transitions, all bosses, all endings | Not compared |
-| Two-player | Join, friendly fire, grabs/assists, lives/continues, scoring | 761 phase-anchored encounter observations match; broader interactions still required |
+| Two-player | Join, friendly fire, grabs/assists, lives/continues, scoring | 761 encounter observations matched (2026-09-15); 220 with the cadence model, see CADENCE.md; broader interactions still required |
 | Randomness/cadence | Same reset/input stream, seeds and per-tick actor state | Native repeatability verified; original parity incomplete |
 
 Record verified, inferred and inaccurate behavior separately. Never substitute
@@ -153,10 +153,13 @@ Verified against original ROM execution:
   collision IDs, fixed-point positions/velocities, damage, input and attack flags
   also match. Police stock goes 1 to 0 and the control lock lasts **637** frames
   in both backends. The script waits for completion and moves right afterward.
-- Two-player encounter: **761** paired observations match those same public
-  gameplay fields. Collision IDs, fixed-point positions/velocities, damage, input,
-  weapon/grab fields and attack flags match in the sampled frames. This alone
-  does not prove each grab or weapon action was exercised.
+- Two-player encounter: **761** paired observations matched those same public
+  gameplay fields with the 2026-09-15 build. Collision IDs, fixed-point positions/
+  velocities, damage, input, weapon/grab fields and attack flags matched in the
+  sampled frames. This alone does not prove each grab or weapon action was exercised.
+  With the cadence model (CADENCE.md, 2026-09-19) the first 220 frames match; a
+  one-frame load difference then leaves the upload-VBlank counter one behind and a
+  counter-seeded enemy falls differently. The earlier full match was coincidental.
 - Directional/action replay repeats with **2,866 identical native RAM snapshots**;
   all **2,865** rendered frames match the original-mode software renderer in RGB1555.
 - Existing SRP1 two-player replay retains all 2,159 prior native RAM snapshots.
