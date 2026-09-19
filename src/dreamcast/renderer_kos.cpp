@@ -8,12 +8,16 @@
 #include "pvr_tiles.hpp"
 #include "equal_bytes.hpp"
 #include "cheats.hpp"
+#include "title_caption.hpp"
 namespace {
 std::unique_ptr<sor::VdpScene> scene;
 pvr_ptr_t tiles=nullptr,spriteTexture[2]{};
 pvr_poly_hdr_t tileHeaders[8192],spriteHeaders[2];
 pvr_ptr_t cheatHintTexture=nullptr;
 pvr_poly_hdr_t cheatHintHeader;
+pvr_ptr_t titleTextures[sor::TitleCaption::regions.size()]{};
+pvr_poly_hdr_t titleHeaders[sor::TitleCaption::regions.size()];
+uint8_t titleBrightness=0;
 alignas(32) uint8_t previousTiles[65536]{};
 uint8_t valid[2048]{};
 alignas(32) uint16_t previousColors[64]{};
@@ -56,21 +60,39 @@ void dc_renderer_init(){
     });
     pvr_txr_load(hintPixels,cheatHintTexture,sizeof(hintPixels));
     header(cheatHintHeader,cheatHintTexture,256,16,true);
+    for(size_t i=0;i<sor::TitleCaption::regions.size();i++){
+        const auto &r=sor::TitleCaption::regions[i];
+        titleTextures[i]=pvr_mem_malloc(r.textureWidth*r.textureHeight*2);
+        if(!titleTextures[i])throw std::runtime_error("PowerVR title texture budget exhausted");
+        header(titleHeaders[i],titleTextures[i],r.textureWidth,r.textureHeight,true);
+    }
     sor_log("PowerVR indexed tile cache: 65536 bytes; sprite layers: 524288 bytes\n");
 }
 void dc_renderer_shutdown(){
     if(tiles)pvr_mem_free(tiles);
     for(auto p:spriteTexture)if(p)pvr_mem_free(p);
     if(cheatHintTexture)pvr_mem_free(cheatHintTexture);
+    for(auto p:titleTextures)if(p)pvr_mem_free(p);
     scene.reset();
 }
-bool dc_render_vdp(VDPState &state,VDPRenderer &renderer){
+bool dc_render_vdp(VDPState &state,VDPRenderer &renderer,const sor::TitleCaption &title){
     const auto begin=timer_us_gettime64();
     if(!scene->buildCached(state,renderer)||scene->count>maxTileQuads)return false;
     const bool same=scene->reused;
     const auto compiled=timer_us_gettime64();
     pvr_wait_ready();
     const auto ready=timer_us_gettime64();
+    if(title.brightness && title.brightness!=titleBrightness){
+        for(size_t i=0;i<sor::TitleCaption::regions.size();i++){
+            const auto &region=sor::TitleCaption::regions[i];
+            alignas(32) uint16_t pixels[sor::TitleCaption::MAX_TEXTURE_PIXELS]{};
+            title.drawLayer(i,[&](int x,int y,unsigned r,unsigned g,unsigned b){
+                pixels[(y-region.y)*region.textureWidth+x-region.x]=sor::VdpScene::rgb1555(r,g,b);
+            });
+            pvr_txr_load(pixels,titleTextures[i],region.textureWidth*region.textureHeight*2);
+        }
+        titleBrightness=title.brightness;
+    }
     bool opacityChanged=false;
     if(!same || !frames){
         for(int p=0;p<4;p++)if(!frames || !sor::equal_bytes(previousColors+p*16,scene->colors+p*16,32)){
@@ -127,6 +149,16 @@ bool dc_render_vdp(VDPState &state,VDPRenderer &renderer){
         const float sx=640.f/scene->width,sy=480.f/scene->height;
         quad(hint,cheatHintHeader,32*sx,196*sy,256*sx,16*sy,7,0,0,1,1);
         pvr_prim(&hint,sizeof(hint));
+    }
+    if(title.brightness){
+        const float sx=640.f/scene->width,sy=480.f/scene->height;
+        for(size_t i=0;i<sor::TitleCaption::regions.size();i++){
+            const auto &r=sor::TitleCaption::regions[i];
+            alignas(32) Packet caption;
+            quad(caption,titleHeaders[i],r.x*sx,r.y*sy,r.width*sx,r.height*sy,7,0,0,
+                float(r.width)/r.textureWidth,float(r.height)/r.textureHeight);
+            pvr_prim(&caption,sizeof(caption));
+        }
     }
     pvr_list_finish();pvr_scene_finish();
     const auto finished=timer_us_gettime64();

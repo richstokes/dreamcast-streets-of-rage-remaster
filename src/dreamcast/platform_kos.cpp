@@ -8,9 +8,9 @@
 #include "cheats.hpp"
 void dc_renderer_init();
 void dc_renderer_shutdown();
-bool dc_render_vdp(VDPState &,VDPRenderer &);
+bool dc_render_vdp(VDPState &,VDPRenderer &,const sor::TitleCaption &);
 static bool useGpu=true,previousToggle=false;
-bool platform_render_vdp(VDPState &s,VDPRenderer &r){return useGpu && dc_render_vdp(s,r);}
+bool platform_render_vdp(VDPState &s,VDPRenderer &r,const sor::TitleCaption &title){return useGpu && dc_render_vdp(s,r,title);}
 static pvr_ptr_t texture;
 static uint16_t pixels[512*256] __attribute__((aligned(32)));
 static pvr_poly_hdr_t header;

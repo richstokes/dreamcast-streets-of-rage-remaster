@@ -118,11 +118,13 @@ void MegaDriveEnvironment::writeBus(void *ctx,uint32_t a,unsigned w,uint32_t v){
 }
 void MegaDriveEnvironment::present(){
     const auto start=platform_time_us();
-    if(platform_render_vdp(state_,renderer_)){
+    const sor::TitleCaption title(state_,mem_.readWord(0xffff00));
+    if(platform_render_vdp(state_,renderer_,title)){
         if(frames_%600==0){auto stats=platform_memory_stats();sor_log("PVR frame=%lu render_us=%llu heap_used=%lu vram_free=%lu\n",(unsigned long)frames_,(unsigned long long)(platform_time_us()-start),(unsigned long)stats.heap_used,(unsigned long)stats.vram_free);}
         return;
     }
     renderer_.renderFrame();
+    title.draw([&](int x,int y,unsigned r,unsigned g,unsigned b){fb_.setPixel(x,y,b,g,r);});
     const auto renderDone=platform_time_us();
     int h=state_.activeHeight(),w=state_.activeWidth(); if(h>256)h=256;if(w>320)w=320;
     platform_video_present(fb_,w,h);
