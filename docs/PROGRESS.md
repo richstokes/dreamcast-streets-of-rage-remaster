@@ -1,5 +1,18 @@
 # Progress
 
+## 2026-09-19 — Z80 and 68000 share the bus as on hardware
+
+- The Z80 now follows the 68000 through each frame (catch-up) and is stopped
+  while the 68000 holds its bus, including during joypad reads. Its reads of the
+  68000 bus wait 3 cycles and for any DMA, and stall the 68000 70-77 clocks
+  (Genesis Plus GX). Drum-driver writes match the original's in count and value,
+  within a few hundred cycles over several frames.
+- Translated instructions now access memory at their start, as in Musashi.
+- New host logs: every YM2612 write with its time on both backends
+  (`genesis_reference.py --ym-log`, `SOR_YM_TIMES`).
+- Round 1 play matches for 9,976 frames; the next update ends within 79 cycles
+  of its VBlank in the original (CADENCE.md). All other comparisons unchanged.
+
 ## 2026-09-19 — frame-exact cadence through boot and loads
 
 - Every game mode from power-on to Round 1 now lasts exactly as long as in the

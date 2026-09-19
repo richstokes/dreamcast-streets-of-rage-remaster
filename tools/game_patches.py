@@ -31,46 +31,63 @@ def charge_entries(name, text):
 def patch(name, text):
     text = charge_entries(name, text)
     if name == 'SoRSound.cpp':
-        # sound_ym2612_acquire ($73298): move.w #$100,BUSREQ (20); btst/bne on
-        # the grant (28); btst #7,($A01FFD) (20); while the DAC driver is busy,
-        # release (8+20) and retry after three NOPs and bra.s (22); otherwise
-        # beq.s (10), then poll YM busy with move.b/btst/bne.s (34) and rts (16).
-        # The busy flag comes from the shadow DAC driver (NativeAudio).
+        # sound_ym2612_acquire ($73298), accesses at each instruction's start:
+        # MOVE.W #$100,BUSREQ (20); BTST/BNE on the grant (28); BTST #7,($A01FFD)
+        # (20); while the DAC driver is busy, BEQ.S (8), MOVE.W #0,BUSREQ (20),
+        # three NOPs and BRA.S (22); otherwise BEQ.S (10), then YM busy polls
+        # MOVE.B/BTST/BNE.S (34) and RTS (16).
         text = replace_once(text, '''    while (!shouldQuit()) {
         memory().writeWord(kZ80Busreq, 0x0100u);
         memory().waitForByteValue(kZ80Busreq, 0, waitForHardware);''', '''    while (!shouldQuit()) {
-        pcHistogram(0x73298u, 20); pace(20);
         memory().writeWord(kZ80Busreq, 0x0100u);
-        pcHistogram(0x73298u, 48); pace(48);
-        memory().waitForByteValue(kZ80Busreq, 0, waitForHardware);''')
+        pcHistogram(0x73298u, 20); pace(20);
+        memory().waitForByteValue(kZ80Busreq, 0, waitForHardware);
+        pcHistogram(0x73298u, 28); pace(28);''')
         text = replace_once(text, '''            memory().writeWord(kZ80Busreq, 0);
             continue;''', '''            pcHistogram(0x73298u, 28); pace(28);
             memory().writeWord(kZ80Busreq, 0);
-            pcHistogram(0x73298u, 22); pace(22);
+            pcHistogram(0x73298u, 42); pace(42);
             continue;''')
-        return replace_once(text, '''        for (;;) {
-            const m_byte status = memory().readByte(kYm2612A0);''', '''        pcHistogram(0x73298u, 26); pace(26);
+        text = replace_once(text, '''        for (;;) {
+            const m_byte status = memory().readByte(kYm2612A0);''', '''        pcHistogram(0x73298u, 30); pace(30);
         for (;;) {
-            pcHistogram(0x73298u, 34); pace(34);
-            const m_byte status = memory().readByte(kYm2612A0);''')
+            const m_byte status = memory().readByte(kYm2612A0);
+            pcHistogram(0x73298u, 34); pace(34);''')
+        return replace_once(text, '''        break;
+    }
+
+    cpu().ssp += 4;
+}''', '''        break;
+    }
+
+    pcHistogram(0x73298u, 16); pace(16);
+    cpu().ssp += 4;
+}''')
     if name == 'SoRControls.cpp':
-        # sample_all_joypads ($810C) with its two sample_one_joypad calls costs
-        # 552 cycles per VBlank (Genesis Plus GX profile of the Round 1 replay).
-        return replace_once(text, '''    memory().writeWord(kZ80BusRequest, 0x0100u);
-    cpu().a[1] = kIoPlayer1DataPort;''', '''    pcHistogram(0x810Cu, 552); charge(552);
-    memory().writeWord(kZ80BusRequest, 0x0100u);
+        # sample_all_joypads ($810C) holds the Z80 bus while it reads both pads:
+        # the requesting MOVE.W (20), the two sample_one_joypad calls and their
+        # setup (492), then the releasing MOVE.W (20) and RTS (16).
+        text = replace_once(text, '''    memory().writeWord(kZ80BusRequest, 0x0100u);
+    cpu().a[1] = kIoPlayer1DataPort;''', '''    memory().writeWord(kZ80BusRequest, 0x0100u);
+    pcHistogram(0x810Cu, 512); pace(512);
     cpu().a[1] = kIoPlayer1DataPort;''')
+        return replace_once(text, '''    memory().writeWord(kZ80BusRequest, 0);
+    setMoveWordFlags(cpu(), 0);''', '''    memory().writeWord(kZ80BusRequest, 0);
+    pcHistogram(0x810Cu, 36); pace(36);
+    setMoveWordFlags(cpu(), 0);''')
     if name == 'SoRManualFunctions.cpp':
         # wait_vblank_and_upload_graphics ($10502) / wait_vblank_without_graphics_upload
-        # ($10514): MOVE.B and MOVE to SR (32) before spinning on the mailbox,
-        # then TST.B, BNE.S and RTS (36) once the VBlank handler has cleared it.
+        # ($10514): MOVE.B to the mailbox and MOVE to SR (16 each) before spinning
+        # on it, then TST.B, BNE.S and RTS (36) once the VBlank handler clears it.
         for mailbox in ('1', '2'):
+            entry = '10502u' if mailbox == '1' else '10514u'
             text = replace_once(text, '''    memory().writeByte(kVBlankMailbox, %s);
     cpu().setStatus(kStatusIrqEnabled);
-''' % mailbox, '''    pcHistogram(0x%s, 32); pace(32);
-    memory().writeByte(kVBlankMailbox, %s);
+''' % mailbox, '''    memory().writeByte(kVBlankMailbox, %s);
+    pcHistogram(0x%s, 16); pace(16);
     cpu().setStatus(kStatusIrqEnabled);
-''' % ('10502u' if mailbox == '1' else '10514u', mailbox))
+    pcHistogram(0x%s, 16); pace(16);
+''' % (mailbox, entry, entry))
         for entry in ('0x00010502u', '0x00010514u'):
             start = text.index('    traceEnter(%s);' % entry)
             end = text.index('    cpu().ssp += 4;\n}', start)

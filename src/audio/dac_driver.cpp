@@ -63,12 +63,19 @@ int NativeDacDriver::advance(int clocks){
         if(!step_ && (phase_==HighNormal || phase_==LowNormal) && stableDelay && clocks-elapsed>=256){
             unsigned delay=read_(context_,delayAddress);
             const auto &program=programs_[phase_];
-            unsigned duration=program.fixedClocks+13*(delay?delay:256)-5;
-            if(unsigned(clocks-elapsed)>=duration){
+            // HighNormal ends by reading the low nibble from the same byte;
+            // reads of the 68000 bus (bank window) wait 3 clocks.
+            unsigned duration=program.fixedClocks+13*(delay?delay:256)-5+(phase_==HighNormal&&pointer_>=0x8000?3:0)+
+                              (delayAddress>=0x8000?3:0);
+            // A DMA window within the nibble delays a read: take the steps.
+            const uint64_t start=clockBase+unsigned(elapsed);
+            const bool blocked=blockedUntil>start && blockedFrom<start+duration;
+            if(!blocked && unsigned(clocks-elapsed)>=duration){
                 delta_=ram_[0x1e + nibble_];ram_[0x2e]=delta_;accumulator_+=delta_;
                 ram_[0x1ffd]=0x80;delay_=delay;
-                eventOffset=elapsed+program.addressAt;write_(context_,0x4000,0x2a);
-                eventOffset=elapsed+program.dataAt;write_(context_,0x4001,accumulator_);samples++;
+                const unsigned wait=delayAddress>=0x8000?3:0;   // the delay read precedes both writes
+                eventOffset=elapsed+program.addressAt+wait;write_(context_,0x4000,0x2a);
+                eventOffset=elapsed+program.dataAt+wait;write_(context_,0x4001,accumulator_);samples++;
                 delay_=0;ram_[0x1ffd]=0;
                 if(phase_==HighNormal){low_=true;nibble_=read_(context_,pointer_)&15;phase(Low);}
                 else phase(FinishByte);
@@ -88,14 +95,14 @@ int NativeDacDriver::advance(int clocks){
         }
         switch(s.action){
         case None:break;
-        case ReadHigh:low_=false;nibble_=read_(context_,pointer_)>>4;break;
-        case ReadLow:low_=true;nibble_=read_(context_,pointer_)&15;phase(Low);break;
+        case ReadHigh:low_=false;if(pointer_>=0x8000)cost+=busRead(elapsed);nibble_=read_(context_,pointer_)>>4;break;
+        case ReadLow:low_=true;if(pointer_>=0x8000)cost+=busRead(elapsed);nibble_=read_(context_,pointer_)&15;phase(Low);break;
         case Choose:phase(nibble_?(low_?LowNormal:HighNormal):ZeroSetup);break;
         case Delta:delta_=ram_[nibble_?0x1e + nibble_:0x2e];break;
         case StoreDelta:ram_[0x2e]=delta_;break;
         case Accumulate:accumulator_+=delta_;break;
         case BusyOn:ram_[0x1ffd]=0x80;break;
-        case LoadDelay:delay_=read_(context_,uint16_t(descriptor_+4));break;
+        case LoadDelay:if(uint16_t(descriptor_+4)>=0x8000)cost+=busRead(elapsed);delay_=read_(context_,uint16_t(descriptor_+4));break;
         case Address:write_(context_,0x4000,0x2a);break;
         case Data:write_(context_,0x4001,accumulator_);samples++;break;
         case Delay:{

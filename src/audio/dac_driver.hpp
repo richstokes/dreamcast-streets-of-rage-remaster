@@ -11,6 +11,10 @@ public:
     int advance(int clocks);
     int eventOffset=0; // Instruction start within the current advance call.
     bool active()const{return active_;}
+    // Z80 clock at the start of the current advance() call, and a window in
+    // which reads of the 68000 bus wait for its end (68000-to-VDP DMA holds
+    // the bus; Genesis Plus GX, memz80.c).
+    uint64_t clockBase=0,blockedFrom=0,blockedUntil=0;
     void cancel(){active_=false;}
     uint64_t samples=0;
     static bool recognizes(const uint8_t *ram);
@@ -37,4 +41,10 @@ private:
     uint16_t pointer_=0,remaining_=0,descriptor_=0,stack_=0;
     uint8_t accumulator_=0,nibble_=0,delta_=0,repeat_=0,delay_=0;
     void phase(Phase p){phase_=p;step_=0;steps_=programs_[p].steps;size_=programs_[p].size;}
+    // Clocks a 68000-bus read at `elapsed` into advance() waits: the DMA
+    // window's remainder plus the Z80's 3-clock access wait.
+    unsigned busRead(int elapsed)const{
+        const uint64_t z=clockBase+unsigned(elapsed);
+        return 3+(z>=blockedFrom&&z<blockedUntil?unsigned(blockedUntil-z):0);
+    }
 };

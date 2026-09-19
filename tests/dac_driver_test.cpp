@@ -23,7 +23,7 @@ int main(int argc,char **argv){
  assert(NativeDacDriver::recognizes(initial.data()));unsigned checked=0;
  for(unsigned quantum:{67u,59733u})for(unsigned command=0x81;command<=0x91;command++)for(unsigned stop:{0u,5000u,1u}){
   if(stop==1 && command!=0x81)continue;
-  Bus ref;ref.ram=initial;ref.rom=&rom;suzukiplan::Z80 cpu(Bus::read,Bus::write,Bus::in,Bus::out,&ref);
+  Bus ref;ref.ram=initial;ref.rom=&rom;suzukiplan::Z80 cpu(Bus::read,Bus::write,Bus::in,Bus::out,&ref);cpu.busReadWait=3; // 68000-bus reads wait, as in NativeAudio
   for(int i=0;cpu.reg.PC!=0x32;i++){assert(i<10000);cpu.execute(1);}
   ref.ram[0x1fff]=command;bool empty=false;
   for(int i=0;cpu.reg.PC!=0xd9;i++){assert(i<10000);cpu.execute(1);if(cpu.reg.PC==0x2f){empty=true;break;}}

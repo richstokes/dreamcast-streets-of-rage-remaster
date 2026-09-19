@@ -6,7 +6,8 @@ placement of sound writes within a frame all depend on how much emulated CPU
 time the code consumes. This document describes the model and how it is checked
 against the original ROM running in Genesis Plus GX. Status: **frame-exact from
 power-on through the menus and every screen load of the checked replays; Round 1
-play matches for 10,045 gameplay frames, where one slowdown frame is missed**
+play matches for 9,976 gameplay frames, until an update that the original
+finishes 79 cycles before its VBlank**
 (see Limits).
 
 ## Model
@@ -17,7 +18,10 @@ play matches for 10,045 gameplay frames, where one slowdown frame is missed**
   111,856 clocks before the first VBlank (Genesis Plus GX, from the VDP's fixed
   power-on position).
 - **Translated instructions** charge their MC68000 time at staging
-  (`BEFORE_INSTRUCTION_AT(n, pc)`, `tools/prepare-native.py`). The opcode is read
+  (`BEFORE_INSTRUCTION_AT(n, pc)`, `tools/prepare-native.py`). As in Genesis
+  Plus GX, an instruction's memory accesses happen at its start and its cycles
+  are added before the next one; interrupts and DRAM refresh are taken at the
+  boundary. The opcode is read
   from the ROM at the instruction's address and costed with the Musashi cycle
   table from the Genesis Plus GX research checkout (`tools/m68k-cycle-table.c`),
   plus MOVEM register counts and immediate shift counts (`tools/m68k_cycles.py`).
@@ -48,11 +52,15 @@ play matches for 10,045 gameplay frames, where one slowdown frame is missed**
   joypad sampler, input remapping, attack descriptors, attack input and the
   sound queue from Genesis Plus GX profiles (mean per call). A decode the port
   adds (the top-10 re-seed) costs no time.
-- **Sound bus**: the YM2612 busy flag lasts 32 YM clocks after a data write. The
-  Z80 runs ahead to the 68000's time whenever the 68000 touches the Z80 bus, its
-  RAM or the bus/reset lines (catch-up), and stays stopped while the 68000 holds
-  the bus, so commands reach the driver on time and the acquire retries while a
-  drum sample is being written, as on hardware (up to ~5k cycles per frame).
+- **Sound bus**: the YM2612 busy flag lasts 32 YM clocks after a 68000 data
+  write. The Z80 runs ahead to the 68000's time whenever the 68000 touches the
+  Z80 bus, its RAM or the bus/reset lines (catch-up), and stays stopped while the
+  68000 holds the bus (the sound driver's acquire and the joypad sampler), so
+  commands reach the driver on time and the acquire retries while a drum sample
+  is being written (up to ~5k cycles per frame). Each Z80 read of the 68000 bus
+  (drum sample bytes and delays) waits 3 Z80 cycles, waits for any 68000-to-VDP
+  DMA to finish, and stalls the 68000 by 70 or 77 master clocks (Genesis Plus
+  GX); while a sample plays the stalls are charged every 1,500 cycles.
 
 ## Decoder time
 
@@ -92,17 +100,24 @@ VBlank N.
 | Action replay observations (1,481) | equal | equal, and all object bytes |
 | Two-player observations (761) | equal for 220 frames | equal, and all object bytes |
 | Round 1 combat (3,115) | equal | equal |
-| Round 1 play (26,415) equal until | 8,283 | 10,045 |
+| Round 1 play (26,415) equal until | 8,283 | 9,976 |
 
 ## Gameplay slowdown (Round 1)
 
 SoR updates every two VBlanks (mailbox `$FFFA00`); when an update runs past its
 second VBlank the game slows for a frame. `reference/scenarios/round1-full.json`
-plays 26,415 gameplay frames of Round 1 after the gate. The original slows at
-relative frames 8,261, 8,272, 8,283, 9,976, 10,046, 10,173, 10,564, …; native
-reproduces 8,261, 8,272, 8,283, 10,046, 10,173 and 10,564 on the same frames
-and misses 9,976, after which object state differs (10,046).
+plays 26,415 gameplay frames of Round 1 after the gate. Native reproduces the
+original's slowdowns at relative frames 8,261, 8,272 and 8,283 on the same
+frames. At 9,976 the original's update ends 79 cycles before its VBlank (the
+sample is taken mid-update, but the game is not slowed); native's ends a few
+hundred cycles later and overruns, and play differs from there.
 `reference/results/behaviour-round1-2026-09-19.json`.
+
+Over frames 10,000–11,357 of the full replay, native reaches each update's
+start and wait on average 199 cycles early (RMS 489, worst 2,551; 0.4% of a
+frame), measured with the call timelines. The differences arise mostly in the
+VBlank handler's sound driver, whose bus-acquire retries depend on the drum
+driver's exact phase.
 
 The per-routine cycle histograms of both backends (`tools/gpgx-profile-report.py`)
 and the call timelines located the remaining differences in turn: sound-bus
@@ -115,10 +130,8 @@ delay, the power-on position, and a one-frame input offset in the native replay.
 - A gameplay update whose total is within a fraction of a percent of its budget
   can finish on the other side of a VBlank. Remaining approximations: DIV and
   register-count shifts use typical times; hand-written routines costed from
-  profiles charge means; Z80 reads of the 68000 bus (drum samples) cost neither
-  side the wait states Genesis Plus GX gives them; 68000 bus accesses happen at the end of each
-  charged instruction rather than mid-instruction; interrupts are taken at the
-  next charged instruction of translated code.
+  profiles charge means; the YM2612 busy flag ignores the Z80's own writes;
+  a DAC sample's Z80 stalls are charged in 1,500-cycle steps.
 - SoR counts VBlanks that upload graphics (`$FFFB08`) and some objects copy it,
   so one missed or extra slowdown frame changes behaviour later. The Round 1
   comparison is therefore exact until the first slowdown the model misses.

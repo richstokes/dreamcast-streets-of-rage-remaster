@@ -36,6 +36,7 @@ struct NativeAudio::Impl:ymfm::ymfm_interface {
     // Catch-up frame: the next block's Z80 events are collected while the
     // 68000 runs, the Z80 advancing to the 68000's time whenever it touches
     // the Z80 bus, so bus requests stall it and commands arrive on time.
+    uint64_t busStall=0;   // 68000 master clocks lost to Z80 bus reads, not yet charged
     bool catchUp=false,open=false;unsigned openSamples=0;uint64_t frameZ=0;   // catch-up starts with the first sync
     unsigned nextSamples(){remainder+=896040;const unsigned n=remainder/1008;remainder%=1008;return n;}
     bool batchable()const{return owner.nativeDac && driverKnown && !(ymMode&0x80);}
@@ -86,6 +87,7 @@ struct NativeAudio::Impl:ymfm::ymfm_interface {
     void clockTimers(){for(unsigned n=0;n<2;n++)if(timer[n]&&ymClock>=timer[n]){timer[n]=0;m_engine->engine_timer_expired(n);}}
     void resetCpu(){
         cpu=std::make_unique<suzukiplan::Z80>(read,write,in,out,this);
+        cpu->busReadWait=3;
         bank=0;ztime=zTarget;dac.cancel();driverKnown=false;
     }
     static unsigned char in(void*,unsigned short){return 255;}
@@ -94,7 +96,11 @@ struct NativeAudio::Impl:ymfm::ymfm_interface {
         auto &s=*static_cast<Impl*>(p);
         if(a<0x4000)return s.owner.ram[a&8191];
         if(a<0x6000)return s.fm.read(a&3);
-        if(a>=0x8000){size_t address=(s.bank<<15)+(a&0x7fff);if(address<s.romSize)return s.rom[address];s.owner.z80Faults++;}
+        if(a>=0x8000){
+            // A read of the 68000 bus stalls the 68000 for 70 or 77 master
+            // clocks, by the Z80 clock's phase (Genesis Plus GX, memz80.c).
+            const uint64_t z=s.instructionClock+(s.driving?s.dac.eventOffset:0);
+            s.busStall+=(((z*15)%7+72)/7)*7;size_t address=(s.bank<<15)+(a&0x7fff);if(address<s.romSize)return s.rom[address];s.owner.z80Faults++;}
         return 255;
     }
     static void write(void *p,unsigned short a,unsigned char v){
@@ -104,7 +110,12 @@ struct NativeAudio::Impl:ymfm::ymfm_interface {
             while(s.eventSample+1<s.eventSamples && s.sampleTargets[s.eventSample]<=now)s.eventSample++;
         }
         if(a<0x4000){s.owner.ram[a&8191]=v;return;}
-        if(a<0x6000){s.owner.writeYM(a&3,v);return;}
+        if(a<0x6000){
+#ifndef __DREAMCAST__
+            if(s.collecting)s.owner.logTimedWrite(s.owner.frameStart68k+(s.instructionClock+(s.driving?s.dac.eventOffset:0)-s.frameZ)*15,a&3,v);
+#endif
+            s.owner.writeYM(a&3,v);return;
+        }
         if((a&0xff00)==0x6000){s.bank=((s.bank>>1)|((v&1)<<8))&511;return;}
         if((a&0xfff9)==0x7f11){s.owner.writePSG(v);return;}
         s.owner.z80Faults++;
@@ -115,7 +126,7 @@ struct NativeAudio::Impl:ymfm::ymfm_interface {
         while(elapsed<clocks){
             instructionClock=ztime+elapsed;
             if(dac.active()){
-                driving=true;elapsed+=dac.advance(clocks-elapsed);driving=false;
+                driving=true;dac.clockBase=ztime+elapsed;elapsed+=dac.advance(clocks-elapsed);driving=false;
                 if(!dac.active())cpu->reg.PC=0x2f;
             }else if(cpu->reg.PC==0xd9){
                 auto &r=cpu->reg;
@@ -236,6 +247,26 @@ void NativeAudio::setBusRequest(bool b){
     if(!b&&!impl->reset&&!impl->open)for(int i=0;i<128&&(ram[0x1ffd]&128);i++)impl->ztime+=impl->runSound(16);
 }
 void NativeAudio::sync68k(uint32_t clocks){if(impl)impl->sync(clocks);}
+void NativeAudio::logTimedWrite(uint64_t clock,unsigned port,uint8_t value){
+#ifndef __DREAMCAST__
+    static std::FILE *file=nullptr;static uint64_t lo=0,hi=0;static bool parsed=false;
+    if(!parsed){parsed=true;if(const char *spec=std::getenv("SOR_YM_TIMES")){
+        unsigned long a=0,b=0;char path[512]{};
+        if(std::sscanf(spec,"%lu:%lu:%511s",&a,&b,path)==3){lo=uint64_t(a)*896040;hi=uint64_t(b+1)*896040;file=std::fopen(path,"w");}}}
+    if(file&&clock>=lo&&clock<hi)std::fprintf(file,"%llu %u %02x\n",(unsigned long long)clock,port,value);
+#else
+    (void)clock;(void)port;(void)value;
+#endif
+}
+uint32_t NativeAudio::takeBusStall(){
+    if(!impl)return 0;
+    const uint32_t stall=uint32_t(impl->busStall);impl->busStall=0;return stall;
+}
+bool NativeAudio::dacPlaying()const{return impl&&impl->dac.active();}
+void NativeAudio::blockBus68k(uint32_t from,uint32_t to){
+    if(!impl||!impl->open)return;
+    impl->dac.blockedFrom=impl->frameZ+from/15;impl->dac.blockedUntil=impl->frameZ+(to+14)/15;
+}
 void NativeAudio::writeYM(unsigned p,uint8_t v){
     if(!impl)return;
     ymWrites++;impl->logWrite(p,v);

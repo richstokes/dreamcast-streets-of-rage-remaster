@@ -89,13 +89,13 @@ for f in (S/'generated').glob('SoR*'):
     elif f.name=='SoR-common.hpp':
         text=text.replace('#define BEFORE_INSTRUCTION if (irqLevel() > cpu().interruptMask()) serviceIRQ(); pace();',
             '#define BEFORE_INSTRUCTION if (irqLevel() > cpu().interruptMask()) serviceIRQ(); pace();\n'
-            '#define BEFORE_INSTRUCTION_CYCLES(n) if (irqLevel() > cpu().interruptMask()) serviceIRQ(); pace(n);\n'
+            '#define BEFORE_INSTRUCTION_CYCLES(n) settleInstruction(); if (irqLevel() > cpu().interruptMask()) serviceIRQ(); startInstruction(n);\n'
             '#ifdef SOR_PC_HISTOGRAM\n'
-            '#define BEFORE_INSTRUCTION_AT(n, pc) if (irqLevel() > cpu().interruptMask()) serviceIRQ(); pcHistogram(pc, n); pace(n);\n'
-            '#define SOR_EXTRA_CYCLES(n, pc) pcHistogram(pc, n); pace(n);\n'
+            '#define BEFORE_INSTRUCTION_AT(n, pc) pcHistogram(pc, n); BEFORE_INSTRUCTION_CYCLES(n)\n'
+            '#define SOR_EXTRA_CYCLES(n, pc) pcHistogram(pc, n); extendInstruction(n);\n'
             '#else\n'
             '#define BEFORE_INSTRUCTION_AT(n, pc) BEFORE_INSTRUCTION_CYCLES(n)\n'
-            '#define SOR_EXTRA_CYCLES(n, pc) pace(n);\n'
+            '#define SOR_EXTRA_CYCLES(n, pc) extendInstruction(n);\n'
             '#endif\n'
             '// MULU: 2 cycles per set multiplier bit; MULS: 2 per 01/10 pair.\n'
             'inline unsigned sorMuluBits(unsigned v){return 2u*unsigned(__builtin_popcount(v&0xFFFFu));}\n'
@@ -123,7 +123,9 @@ for directory,pattern in [('include/MegaDriveEnvironment/system/sound/mame_ymfm'
         text=patch_audio(f.name,f.read_text())
         target=D/f.name
         if not target.exists() or target.read_text()!=text:target.write_text(text)
-copy(M/'include/MegaDriveEnvironment/system/z80/suzukiplan/z80.hpp',D/'sor_z80.hpp')
+source=M/'include/MegaDriveEnvironment/system/z80/suzukiplan/z80.hpp';target=D/'sor_z80.hpp'
+text=patch_audio(source.name,source.read_text())
+if not target.exists() or target.read_text()!=text:target.write_text(text)
 
 if '--dreamcast' in sys.argv:
     audio=os.environ.get('SOR_AUDIO','1')

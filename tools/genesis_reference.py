@@ -99,7 +99,7 @@ def observation(ram,frame):
                 p1_lives=ram[0xff20],p2_lives=ram[0xff23],actors=actors,ram_sha256=hashlib.sha256(ram).hexdigest())
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('core');p.add_argument('rom');p.add_argument('scenario');p.add_argument('output',type=Path);p.add_argument('--raw-ram',action='store_true');p.add_argument('--audio-wav',action='store_true');p.add_argument('--profile',action='append',default=[],metavar='FIRST:LAST:PATH',help='per-PC 68000 cycles for frames FIRST..LAST (profiling core built with HOOK_CPU; see tools/build-profile-core.sh)');p.add_argument('--watch',metavar='PCS:LAST:PATH',help='profiling core: time of each entry to the hex addresses in file PCS until frame LAST');a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('core');p.add_argument('rom');p.add_argument('scenario');p.add_argument('output',type=Path);p.add_argument('--raw-ram',action='store_true');p.add_argument('--audio-wav',action='store_true');p.add_argument('--profile',action='append',default=[],metavar='FIRST:LAST:PATH',help='per-PC 68000 cycles for frames FIRST..LAST (profiling core built with HOOK_CPU; see tools/build-profile-core.sh)');p.add_argument('--watch',metavar='PCS:LAST:PATH',help='profiling core: time of each entry to the hex addresses in file PCS until frame LAST');p.add_argument('--ym-log',metavar='FIRST:LAST:PATH',help='profiling core: every YM2612 write in frames FIRST..LAST (frame, clock, port, value)');a=p.parse_args()
     a.output.mkdir(parents=True,exist_ok=True);g=Genesis(a.core,a.rom)
     if a.audio_wav:g.capture_audio(a.output/'audio.wav')
     scenario=json.loads(Path(a.scenario).read_text())
@@ -124,6 +124,13 @@ def main():
                 for first,_,_ in profiles:
                     if g.frame+1==first:g.lib.sor_profile_start()
                 if watch:g.lib.sor_watch_frame(g.frame)
+                if a.ym_log:
+                    first,last,path=a.ym_log.split(':',2)
+                    if g.frame==int(first):g.lib.sor_ym_start()
+                    g.lib.sor_ym_frame(g.frame)
+                    if g.frame==int(last)+1:
+                        g.lib.sor_ym_stop.argtypes=[C.c_char_p]
+                        if g.lib.sor_ym_stop(path.encode()):raise RuntimeError('ym log write failed')
                 ram=g.step(*masks);trace.write(json.dumps(observation(ram,g.frame))+'\n')
                 if watch and g.frame==watch[0]:
                     if g.lib.sor_watch_stop(str(watch[1]).encode()):raise RuntimeError('watch write failed')

@@ -27,6 +27,17 @@ public:
     // lines: while the 68000 holds the bus the Z80 is stopped, as on hardware.
     // The driver's YM writes keep their sample positions within the block.
     void sync68k(uint32_t clocks);
+    // 68000 master clocks lost to the Z80's reads of the 68000 bus (drum
+    // samples) since the last call, and whether a sample is playing.
+    uint32_t takeBusStall();
+    bool dacPlaying()const;
+    // A 68000-to-VDP DMA holds the 68000 bus over [from, to) (master clocks
+    // since the frame began): Z80 reads of it wait until the end.
+    void blockBus68k(uint32_t from,uint32_t to);
+    // Host analysis: the current frame's start in master clocks since power-on
+    // (SOR_YM_TIMES=first:last:path logs every YM2612 write with its time).
+    uint64_t frameStart68k=0;
+    void logTimedWrite(uint64_t clock,unsigned port,uint8_t value);
     uint32_t fmWorkload=0;
     uint64_t profile[5]{}; // At most 890 stereo frames.
     uint64_t nativeDacSamples=0,nativeDacStarts=0;

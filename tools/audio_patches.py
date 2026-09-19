@@ -10,6 +10,15 @@ SPAN=Path(__file__).resolve().parents[1]/'src/audio/ymfm_sor_span.ipp'
 
 
 def patch(name, text):
+    if name == 'z80.hpp':
+        # SoR port: the Z80 waits ~3 cycles for each read of the 68000 bus
+        # (bank window $8000-$FFFF), as in Genesis Plus GX (memz80.c).
+        text = replace_once(text, """    inline unsigned char readByte(unsigned short addr, int clock = 4)
+    {""", """    int busReadWait = 0; // SoR port: extra clocks per $8000-$FFFF read
+    inline unsigned char readByte(unsigned short addr, int clock = 4)
+    {
+        if (addr >= 0x8000 && busReadWait) consumeClock(busReadWait);""")
+        return text
     if name == 'ymfm_fm.h':
         text=replace_once(text,'namespace ymfm\n{','namespace ymfm\n{\nconst int16_t *sor_power_at(uint32_t attenuation);')
         # The span renderer's fast path reads operator state directly.

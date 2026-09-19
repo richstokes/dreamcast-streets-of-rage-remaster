@@ -72,3 +72,27 @@ __attribute__((visibility("default"))) int sor_watch_stop(const char *path)
   fclose(f); return 0;
 }
 #endif
+#ifdef HOOK_CPU
+/* YM2612 writes: frame, master clock within the frame, port, value. */
+static unsigned int *sor_ym_entries, sor_ym_count, sor_ym_cap, sor_ym_frame_no;
+static int sor_ym_active;
+void sor_ym_log(unsigned int cycles, unsigned int a, unsigned int v)
+{
+  if (!sor_ym_active || sor_ym_count >= sor_ym_cap) return;
+  sor_ym_entries[sor_ym_count * 4] = sor_ym_frame_no; sor_ym_entries[sor_ym_count * 4 + 1] = cycles;
+  sor_ym_entries[sor_ym_count * 4 + 2] = a; sor_ym_entries[sor_ym_count * 4 + 3] = v; sor_ym_count++;
+}
+__attribute__((visibility("default"))) void sor_ym_start(void)
+{
+  sor_ym_cap = 1u << 22; sor_ym_count = 0;
+  sor_ym_entries = (unsigned int *)realloc(sor_ym_entries, sizeof(unsigned int) * 4 * sor_ym_cap); sor_ym_active = 1;
+}
+__attribute__((visibility("default"))) void sor_ym_frame(unsigned int frame) { sor_ym_frame_no = frame; }
+__attribute__((visibility("default"))) int sor_ym_stop(const char *path)
+{
+  unsigned int i; FILE *f; sor_ym_active = 0; f = fopen(path, "w"); if (!f) return -1;
+  for (i = 0; i < sor_ym_count; i++)
+    fprintf(f, "%u %u %u %02x\n", sor_ym_entries[i * 4], sor_ym_entries[i * 4 + 1], sor_ym_entries[i * 4 + 2], sor_ym_entries[i * 4 + 3]);
+  fclose(f); return 0;
+}
+#endif

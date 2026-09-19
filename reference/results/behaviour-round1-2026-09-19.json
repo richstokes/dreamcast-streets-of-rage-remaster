@@ -7,7 +7,7 @@
   "round1-full": {
    "compared_frames": 26415,
    "observations_equal": false,
-   "first_difference": 10046,
+   "first_difference": 9977,
    "first_difference_by_field": {
     "wave": 17494,
     "camera": 10773,
@@ -58,7 +58,7 @@
      18303
     ]
    },
-   "cause_of_first_difference": "The original's update overruns at relative frame 9,976; native finishes it within its frame. The next slowdowns at 10,046 and 10,173 coincide, but object state differs from 10,046."
+   "cause_of_first_difference": "At relative frame 9,976 the original's update ends 79 cycles before its VBlank; native's ends a few hundred cycles later and overruns. Timeline drift over frames 10,000-11,357: mean -199 cycles, RMS 489."
   },
   "round1-combat": {
    "compared_frames": 3115,

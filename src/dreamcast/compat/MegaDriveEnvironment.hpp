@@ -31,21 +31,52 @@ public:
     int irqLevel()const{return vintPending_&&(state_.regs_[1]&0x20)&&!irqHold_?6:0;}
     // Acknowledge: the autovector exception takes 44 cycles.
     void clearInterrupt(int){vintPending_=false;pace(44);}
-    // Emulated 68000 time: translated instructions charge their MC68000 cycles
-    // (7 master clocks each). Crossing the next frame boundary is a VBlank;
-    // an explicit wait idles the CPU until it.
-    // DRAM refresh stalls the bus for 2 cycles every 128 (Genesis Plus GX:
-    // checked at each instruction start).
-    void pace(unsigned cpuCycles=4){
+    // Emulated 68000 time. A translated instruction's MC68000 cycles are
+    // charged when the next one starts, so its memory accesses happen at its
+    // start as in Genesis Plus GX (Musashi adds an instruction's cycles after
+    // executing it). At each boundary: settle the previous instruction, take a
+    // VBlank crossed and any pending interrupt, then DRAM refresh (2 cycles
+    // every 128, checked at each instruction start). An explicit wait idles
+    // the CPU until the next VINT.
+    void settleInstruction(){
+        if(!pending_)return;
+        cycles_+=uint64_t(pending_)*7;pending_=0;
+        if(cycles_>=audioSyncAt_)syncAudio();
+        if(cycles_>=nextVblank_)paceInterrupt();
+    }
+    void startInstruction(unsigned cpuCycles){
         irqHold_=false;
+        if(cycles_>=refreshAt_){refreshAt_=cycles_+128*7;cycles_+=2*7;}
+        pending_=cpuCycles;
+    }
+    // A data-dependent part of the current instruction (branch taken, MUL).
+    void extendInstruction(unsigned cpuCycles){pending_+=cpuCycles;}
+    // Hand-written code: spend cycles now (accesses that follow come after).
+    void pace(unsigned cpuCycles=4){
+        settleInstruction();
+        irqHold_=false;
+        if(cycles_>=audioSyncAt_)syncAudio();
         if(cycles_>=refreshAt_){refreshAt_=cycles_+128*7;cycles_+=2*7;}
         cycles_+=cpuCycles*7;if(cycles_>=nextVblank_)paceInterrupt();
     }
     // Time measured with DRAM refresh already included (decoder and profile
     // based charges for hand-written routines): no refresh is added here.
-    void charge(unsigned cpuCycles){cycles_+=uint64_t(cpuCycles)*7;if(cycles_>=nextVblank_)paceInterrupt();}
+    void charge(unsigned cpuCycles){
+        settleInstruction();
+        cycles_+=uint64_t(cpuCycles)*7;
+        if(cycles_>=audioSyncAt_)syncAudio();
+        if(cycles_>=nextVblank_)paceInterrupt();
+    }
+    // Bring the Z80 up to the 68000's time and charge the 68000 the bus time
+    // the Z80 took reading drum samples; while a sample plays, repeat every
+    // 1,500 cycles so those stalls fall near where they happen.
+    void syncAudio();
     // The 68000 is halted during 68K-to-VDP DMA.
-    void stallCpu(uint64_t masterClocks){cycles_+=masterClocks;pcHistogram(0xFFFFFE,unsigned(masterClocks/7));}
+    void stallCpu(uint64_t masterClocks){
+        syncAudio();
+        audio_.blockBus68k(uint32_t(cycles_-frameCycles_),uint32_t(cycles_-frameCycles_+masterClocks));
+        cycles_+=masterClocks;pcHistogram(0xFFFFFE,unsigned(masterClocks/7));
+    }
 #ifdef SOR_PC_HISTOGRAM
     // Host analysis (SOR_PC_HISTOGRAM_FRAMES=first:last:path): CPU cycles per
     // ROM address, comparable with genesis_reference.py --profile.
@@ -74,7 +105,7 @@ private:
     void present(); void paceInterrupt(); void frameBoundary();
     SystemMemory mem_; VDPState state_; VDP port_; VDPTile tile_; Framebuffer fb_; VDPRenderer renderer_;
     Controllers pads_; NativeAudio audio_;
-    uint8_t th_[2]{0x40,0x40}; uint8_t *rom_=nullptr; bool quit_=false,vintPending_=false,irqHold_=false,longWrite_=false;
+    uint8_t th_[2]{0x40,0x40}; uint8_t *rom_=nullptr; bool quit_=false,vintPending_=false,irqHold_=false,longWrite_=false,idleToVblank_=false;
     // NTSC master clocks per frame; VBlank begins at line 224 of 262 (3,420
     // clocks per line), so the VDP's raster counters agree with emulated time.
     // VINT follows the VBlank flag by 788 clocks in H40 (770 in H32). At power
@@ -83,5 +114,5 @@ private:
     static constexpr uint64_t frameClocks=896040,vblankStart=224*3420,powerOn=vblankStart-111856;
     uint64_t vintDelay()const{return (state_.regs_[12]&1)?788:770;}
     uint64_t cycles_=powerOn,frameCycles_=0,vblankFlag_=vblankStart,nextVblank_=vblankStart+788,
-             refreshAt_=(powerOn/896+1)*896,ymBusyUntil_=0; uint32_t last_=0,frames_=0;
+             refreshAt_=(powerOn/896+1)*896,ymBusyUntil_=0,audioSyncAt_=~uint64_t(0); uint32_t last_=0,frames_=0,pending_=0;
 };
