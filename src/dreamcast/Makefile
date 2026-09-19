@@ -15,7 +15,7 @@ $(AUDIO_OBJS): KOS_CPPFLAGS += -O3 -flto -DNDEBUG
 # accessors from another file on every access; let LTO inline them.
 VDP_OBJS := $(ROOT)/build/native/upstream/VDPState.o $(ROOT)/build/native/upstream/VDPPort.o runtime.o
 $(VDP_OBJS): KOS_CPPFLAGS += -O3 -flto
-KOS_CPPFLAGS += -std=gnu++23 -g -Icompat -I../render -I../audio -I$(ROOT)/include -I$(ROOT)/build/native/upstream -ffunction-sections -fdata-sections -MMD -MP
+KOS_CPPFLAGS += -std=gnu++23 -g -I. -Icompat -I../render -I../audio -I$(ROOT)/include -I$(ROOT)/build/native/upstream -ffunction-sections -fdata-sections -MMD -MP
 KOS_CFLAGS += -g -I$(ROOT)/include -ffunction-sections -fdata-sections -MMD -MP
 KOS_LDFLAGS += -Wl,--gc-sections,-Map,$(ROOT)/build/native/sor.map
 all: $(TARGET)

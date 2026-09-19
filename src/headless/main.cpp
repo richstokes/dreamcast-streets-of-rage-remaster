@@ -41,6 +41,19 @@ void platform_video_present(const Framebuffer &fb,int width,int height){
     sceneFrames++;
 }
 void platform_poll_controllers(PlayersControlState &){throw std::runtime_error("Headless replay exhausted or missing");}
+void platform_cheat_menu_present(const Framebuffer &fb){
+    if(!replay_finished())return;
+    FILE *capture=fopen(capturePath.c_str(),"wb");
+    if(!capture)throw std::runtime_error("Menu capture open failed");
+    fprintf(capture,"P6\n320 224\n255\n");
+    const auto *pixels=static_cast<const uint8_t*>(fb.getRawPointer());
+    for(int i=0;i<320*224;i++){
+        const uint8_t rgb[]={uint8_t(pixels[i*3+2]*255/7),uint8_t(pixels[i*3+1]*255/7),uint8_t(pixels[i*3]*255/7)};
+        if(fwrite(rgb,1,3,capture)!=3){fclose(capture);throw std::runtime_error("Menu capture write failed");}
+    }
+    if(fclose(capture))throw std::runtime_error("Menu capture close failed");
+    throw ReplayFinished{};
+}
 uint64_t platform_time_us(){return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();}
 PlatformMemoryStats platform_memory_stats(){return {};}
 void platform_frame_parts(uint32_t,uint32_t){}

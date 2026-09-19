@@ -18,6 +18,7 @@ for f in D.glob('SoR-*'):
     if f.suffix in ('.cpp','.hpp') and not (S/'generated'/f.name).exists(): f.unlink()
 sys.path.insert(0,str(R/'tools'))
 from game_patches import patch as patch_game
+from cheat_patches import patch_generated as patch_cheats
 for f in ['CPU68K.hpp','SoRCheats.hpp','SoRCheats.cpp','SoRControls.cpp','SoRManualFunctions.cpp','SoRInteractions.cpp','SoRMainMenus.cpp','SoRDecompress.cpp','SoRSound.cpp']:
     text=patch_game(f,(S/f).read_text());target=D/f
     if not target.exists() or target.read_text()!=text:target.write_text(text)
@@ -50,6 +51,7 @@ instruction=re.compile(r'(// \$([0-9A-F]{6}) ([^\n]*)\n\s*\{\n\s*)BEFORE_INSTRUC
 for f in (S/'generated').glob('SoR*'):
     text=f.read_text()
     if f.suffix=='.cpp':
+        text=patch_cheats(text)
         def charge(m):
             n=m68k_cycles(int(m.group(2),16),m.group(3))
             if not 4<=n<=200:raise SystemExit(f'Implausible 68000 time {n} for {m.group(3)!r} in {f.name}')

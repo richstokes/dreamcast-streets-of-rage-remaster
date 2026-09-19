@@ -12,6 +12,7 @@ void platform_poll_controllers(PlayersControlState &);
 void platform_video_init();
 void platform_video_shutdown();
 void platform_video_present(const Framebuffer &,int width,int height);
+void platform_cheat_menu_present(const Framebuffer &);
 bool platform_render_vdp(VDPState &,VDPRenderer &);
 uint64_t platform_time_us();
 PlatformMemoryStats platform_memory_stats();

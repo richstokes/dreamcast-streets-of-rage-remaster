@@ -10,7 +10,7 @@ Segment segments[maxSegments];unsigned count=0,index=0;uint32_t remaining=0,play
 uint32_t le(const uint8_t *b,unsigned n){uint32_t v=0;for(unsigned i=0;i<n;i++)v|=uint32_t(b[i])<<(i*8);return v;}
 PlayerControlsState decode(uint16_t b){
  PlayerControlsState p{};p.connected=true;p.up=b&1;p.down=b&2;p.left=b&4;p.right=b&8;
- p.b=b&16;p.c=b&32;p.a=b&64;p.start=b&128;return p;
+ p.b=b&16;p.c=b&32;p.a=b&64;p.start=b&128;p.mode=b&256;p.x=b&512;return p;
 }
 }
 bool replay_load(const char *path){
@@ -22,7 +22,7 @@ bool replay_load(const char *path){
   const unsigned size=h[3]=='2'?16:8;
   uint8_t b[16]{};if(fread(b,1,size,f)!=size){fclose(f);return false;}
   segments[i]={le(b,4),uint16_t(le(b+4,2)),uint16_t(le(b+6,2)),uint16_t(le(b+8,2)),b[10],b[11],le(b+12,4)};
-  if(!segments[i].frames||segments[i].frames>60000||segments[i].p1>255||segments[i].p2>255||segments[i].flags>1||(segments[i].flags && (segments[i].p1 || segments[i].p2 || (segments[i].value&segments[i].mask)!=segments[i].value))){fclose(f);return false;}
+  if(!segments[i].frames||segments[i].frames>60000||segments[i].p1>1023||segments[i].p2>1023||segments[i].flags>1||(segments[i].flags && (segments[i].p1 || segments[i].p2 || (segments[i].value&segments[i].mask)!=segments[i].value))){fclose(f);return false;}
  }
  if(fgetc(f)==EOF){count=n;remaining=segments[0].frames;sor_log("REPLAY enabled: %u segments (SRP%c)\n",n,h[3]);}fclose(f);
  return count!=0;

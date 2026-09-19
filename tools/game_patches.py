@@ -119,6 +119,8 @@ def patch(name, text):
     }
     if (target == 0u) {''')
     if name == 'SoRMainMenus.cpp':
+        from cheat_patches import patch_menu
+        text = patch_menu(text)
         # restore_player_continues ($1199E): two MOVE.W and RTS (48). The port's
         # top-10 re-seed decode is not in the ROM routine and costs no time.
         text = replace_once(text, '''    traceEnter(0x0001199Eu);
