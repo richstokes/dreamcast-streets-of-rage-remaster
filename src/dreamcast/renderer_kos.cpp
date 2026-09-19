@@ -14,7 +14,7 @@ pvr_ptr_t tiles=nullptr,spriteTexture[2]{};
 pvr_poly_hdr_t tileHeaders[8192],spriteHeaders[2];
 pvr_ptr_t titleTextures[sor::TitleCaption::regions.size()]{};
 pvr_poly_hdr_t titleHeaders[sor::TitleCaption::regions.size()];
-uint8_t titleBrightness=0;
+uint16_t titleTextureKey=0;
 alignas(32) uint8_t previousTiles[65536]{};
 uint8_t valid[2048]{};
 alignas(32) uint16_t previousColors[64]{};
@@ -70,7 +70,7 @@ bool dc_render_vdp(VDPState &state,VDPRenderer &renderer,const sor::TitleCaption
     const auto compiled=timer_us_gettime64();
     pvr_wait_ready();
     const auto ready=timer_us_gettime64();
-    if(title.brightness && title.brightness!=titleBrightness){
+    if(title.brightness && title.textureKey()!=titleTextureKey){
         for(size_t i=0;i<sor::TitleCaption::regions.size();i++){
             const auto &region=sor::TitleCaption::regions[i];
             alignas(32) uint16_t pixels[sor::TitleCaption::MAX_TEXTURE_PIXELS]{};
@@ -79,7 +79,7 @@ bool dc_render_vdp(VDPState &state,VDPRenderer &renderer,const sor::TitleCaption
             });
             pvr_txr_load(pixels,titleTextures[i],region.textureWidth*region.textureHeight*2);
         }
-        titleBrightness=title.brightness;
+        titleTextureKey=title.textureKey();
     }
     bool opacityChanged=false;
     if(!same || !frames){
