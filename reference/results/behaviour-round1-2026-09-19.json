@@ -2,31 +2,31 @@
  "date": "2026-09-19",
  "original": "Genesis Plus GX libretro",
  "model": "docs/CADENCE.md",
- "note": "Relative frames count from each backend's gate (original 1,384 / native 1,385). Samples are taken at different points in the frame (original after its frame, native before VBlank), so a mid-update sample on the original at frame n+1 is the same update as native frame n.",
+ "note": "Both backends number frames from power-on (frame 1 ends at the first VBlank) and read replay input N at VBlank N. Relative frames count from the gate (frame 1384 or 1398 in both).",
  "scenarios": {
   "round1-full": {
    "compared_frames": 26415,
    "observations_equal": false,
-   "first_difference": 8284,
+   "first_difference": 10046,
    "first_difference_by_field": {
-    "wave": 8320,
-    "camera": 8320,
-    "p1_lives": 14402,
-    "actors": 8284,
-    "collision_ids": 8286,
-    "animation": 8284,
-    "positions_and_velocity": 8294,
-    "state_health_damage": 8286,
-    "grab_target": 10318,
-    "input": 8315,
-    "attack_flags": 8288,
+    "wave": 17494,
+    "camera": 10773,
+    "p1_lives": 13842,
+    "actors": 10773,
+    "collision_ids": 11029,
+    "animation": 10046,
+    "positions_and_velocity": 10787,
+    "state_health_damage": 10787,
+    "grab_target": 11790,
+    "input": 10941,
+    "attack_flags": 11112,
     "weapon": 20359,
-    "grab_mode_target": 8957,
-    "spawn_flags_and_timer": 9589,
-    "full_object": 8284
+    "grab_mode_target": 11789,
+    "spawn_flags_and_timer": 11029,
+    "full_object": 10046
    },
    "scenario": "reference/scenarios/round1-full.json",
-   "coverage_in_matched_window": "Round 1 wave 0 to just before wave 2: Garcia-family ($21/$23), Signal ($24) and Haku-Ro ($25) enemies, police special ($05/$0E), phone booth ($11), a player death and respawn",
+   "coverage_in_matched_window": "Round 1 wave 0 to past wave 1 (wave 2 at 8,321 in the original): Garcia-family, Signal and Haku-Ro enemies, police special, phone booth, a death and respawn",
    "mid_update_samples": {
     "original": [
      8261,
@@ -40,22 +40,25 @@
      10767,
      10772,
      10775,
-     10788
+     10788,
+     11033,
+     11040
     ],
     "native": [
-     8260,
-     8271,
-     9772,
-     10031,
-     10410,
-     10437,
-     10450,
-     11025,
-     11032,
-     11039
+     8261,
+     8272,
+     8283,
+     10046,
+     10173,
+     10564,
+     10767,
+     10774,
+     11033,
+     11040,
+     18303
     ]
    },
-   "cause_of_first_difference": "The original overruns its two-VBlank update at relative frame 8283; native finishes that update with 163 CPU cycles to spare (0.13% of a frame). The two earlier overruns (original 8261/8272, native 8260/8271) are the same updates."
+   "cause_of_first_difference": "The original's update overruns at relative frame 9,976; native finishes it within its frame. The next slowdowns at 10,046 and 10,173 coincide, but object state differs from 10,046."
   },
   "round1-combat": {
    "compared_frames": 3115,
@@ -73,22 +76,11 @@
   },
   "two-player": {
    "compared_frames": 761,
-   "observations_equal": false,
-   "first_difference": 0,
-   "first_difference_by_field": {
-    "camera": 508,
-    "actors": 221,
-    "collision_ids": 247,
-    "animation": 0,
-    "positions_and_velocity": 221,
-    "state_health_damage": 247,
-    "attack_flags": 466,
-    "grab_mode_target": 461,
-    "spawn_flags_and_timer": 0,
-    "full_object": 0
-   },
-   "scenario": "reference/scenarios/phase-aligned-two-player.json",
-   "note": "Observed fields (mode, actors, positions, health) match for the first 220 frames, as before; from 221 the upload-VBlank counter difference described in CADENCE.md. Active-object byte regions differ early: both players' animation timers (+$0D, +$49) are one count apart for the first 28 frames (known start-up difference, see REFERENCE.md), then equal."
+   "observations_equal": true,
+   "first_difference": null,
+   "first_difference_by_field": {},
+   "scenario": "reference/scenarios/phase-aligned-two-player.json"
   }
- }
+ },
+ "mode_durations": "Every game mode from power-on to Round 1 lasts the same number of frames in both backends (tools/compare-timeline.py, two-player replay)."
 }

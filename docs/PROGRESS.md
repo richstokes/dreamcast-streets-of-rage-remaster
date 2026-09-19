@@ -1,5 +1,26 @@
 # Progress
 
+## 2026-09-19 — frame-exact cadence through boot and loads
+
+- Every game mode from power-on to Round 1 now lasts exactly as long as in the
+  original; the two-player encounter (761 frames) and the action replay (1,481)
+  match in every object byte, and Round 1 play for 10,045 frames (was 8,283).
+- Decompressor time is derived path by path from the ROM routines and matches
+  `tools/m68k-time` exactly for every decode of the Round 1 and two-player
+  replays (`tools/test-decoder-cycles.py`); the fitted costs were off by up to
+  0.6 frame (the Z80 driver's Kosinski stream, twice at boot).
+- Interrupt fidelity: VINT gated by VDP register 1 (IE0) and held pending, 788
+  clocks after the VBlank flag, one-instruction latency when enabled by a word
+  write, 44-cycle exception; waits take a pending VINT at once; the 68000 starts
+  at the VDP's power-on position.
+- The native replay delivered each scripted input one VBlank late relative to the
+  reference harness; fixed, and native captures are numbered from power-on as the
+  original's are. The earlier start-up object-byte differences are gone.
+- New analysis tools: routine-entry timelines on both backends
+  (`genesis_reference.py --watch`, `SOR_WATCH`, `tools/compare-calls.py`).
+- Flycast: gameplay 1,611 flips / 1,615 VBlanks; the stage-start underrun remains
+  (TODO.md).
+
 ## 2026-09-19 — Round 1 behaviour and slowdown against the original
 
 - Round 1 play (`round1-full`, 26,415 gameplay frames) matches the original ROM

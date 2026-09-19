@@ -71,12 +71,12 @@ comparison tool only, never linked into the Dreamcast executable.
 
 | Area | Required scenarios | Current evidence |
 | --- | --- | --- |
-| Movement | Four directions, diagonal, plane bounds, jump arcs | Phase-anchored directions, diagonals and jump actions match observed state; Round 1 play matches for 8,283 frames; plane bounds not exhausted |
+| Movement | Four directions, diagonal, plane bounds, jump arcs | Phase-anchored directions, diagonals and jump actions match all object state; Round 1 play matches for 10,045 frames; plane bounds not exhausted |
 | Combat | Combo presses/holds, back attack, jump kick, all grabs/throws, police | Phase-anchored attack/jump/special inputs compared; all grabs/throws still missing |
-| Enemy logic | Every family, damage, invulnerability, knockdown, recovery | Round 1 wave 0–1 (Garcia-family, Signal, Haku-Ro) match for 8,283 frames (`round1-full`, 2026-09-19); other families and bosses not compared |
-| Campaign | Scroll triggers/waves, transitions, all bosses, all endings | Round 1 scrolling to wave 1, a death and respawn match; slowdown reproduced to 0.13% of a frame (CADENCE.md); later waves, boss and transitions not compared |
-| Two-player | Join, friendly fire, grabs/assists, lives/continues, scoring | 761 encounter observations matched (2026-09-15); 220 with the cadence model, see CADENCE.md; broader interactions still required |
-| Randomness/cadence | Same reset/input stream, seeds and per-tick actor state | Native repeatability verified; original parity incomplete |
+| Enemy logic | Every family, damage, invulnerability, knockdown, recovery | Round 1 waves 0–1 (Garcia-family, Signal, Haku-Ro) match for 10,045 frames (`round1-full`, 2026-09-19); other families and bosses not compared |
+| Campaign | Scroll triggers/waves, transitions, all bosses, all endings | Boot, menus and loads frame-exact; Round 1 to wave 2, a death and respawn, and six slowdown frames match (one missed; CADENCE.md); later waves, boss and transitions not compared |
+| Two-player | Join, friendly fire, grabs/assists, lives/continues, scoring | 761 encounter frames match including all object bytes (2026-09-19); broader interactions still required |
+| Randomness/cadence | Same reset/input stream, seeds and per-tick actor state | Native repeatability verified; cadence frame-exact through boot and loads, gameplay slowdown near-exact (CADENCE.md) |
 
 Record verified, inferred and inaccurate behavior separately. Never substitute
 host wall-clock sleep for a deterministic frame input script. Any test using cheats
@@ -97,7 +97,19 @@ SOR_PC_HISTOGRAM_FRAMES=9656:9656:$PWD/build/n.bin \
 python3 tools/gpgx-profile-report.py build/g.bin build/n.bin --top 40
 ```
 
-`--profile` may repeat for disjoint frame ranges. Native frame N and original
+`--profile` may repeat for disjoint frame ranges. For where time drifts rather
+than how much, record routine-entry timelines on both sides and align them:
+
+```sh
+build/tools-venv/bin/python3 tools/genesis_reference.py build/gpgx-profile/genesis_plus_gx_libretro.dylib \
+  "$SOR_ROM" SCENARIO build/genesis-watch --watch pcs.txt:LAST:$PWD/build/watch-g.txt
+SOR_WATCH=pcs.txt:LAST:$PWD/build/watch-n.txt build/headless/sor-headless "$SOR_ROM" REPLAY.bin /tmp/r.bin
+python3 tools/compare-calls.py build/watch-g.txt build/watch-n.txt --frames
+```
+
+`pcs.txt` lists hex routine addresses (for example every label in `labels.csv`).
+`tools/test-decoder-cycles.py ROM REPLAY.bin` checks the decompressors' time
+against the ROM routines (`tools/m68k-time`). Native frame N and original
 frame N are the same point in SoR's two-VBlank update cycle here (the replay
 gates differ by one frame). The native histogram charges each translated
 instruction and each modelled charge to its ROM address; DMA stalls are
@@ -166,7 +178,9 @@ python3 tools/compare-phase.py build/genesis-actions build/native-actions \
 Use `phase-aligned-two-player.json` and `--segment 11` for the encounter probe.
 Comparison requires identical ROM/scenario hashes and reports both anchor frames,
 all remaining-frame counts, selected observations, and active-object byte regions.
-Raw files explicitly identify their first frame: original frame 1, native frame 0.
+Both backends number frames from power-on (frame 1 ends at the first VBlank; native
+captures are labelled to match) and deliver replay input N at VBlank N, so anchors
+and frames compare directly.
 `--require-observations-equal` does **not** require entire-object/WRAM equality.
 
 Verified against original ROM execution:
@@ -180,23 +194,22 @@ Verified against original ROM execution:
   gameplay fields with the 2026-09-15 build. Collision IDs, fixed-point positions/
   velocities, damage, input, weapon/grab fields and attack flags matched in the
   sampled frames. This alone does not prove each grab or weapon action was exercised.
-  With the cadence model (CADENCE.md, 2026-09-19) the first 220 frames match; a
-  one-frame load difference then leaves the upload-VBlank counter one behind and a
-  counter-seeded enemy falls differently. The earlier full match was coincidental.
+  With the frame-exact cadence (CADENCE.md, 2026-09-19) all 761 observations and
+  all active-object bytes match; the gate is reached on the same frame (1,398).
 - Directional/action replay repeats with **2,866 identical native RAM snapshots**;
   all **2,865** rendered frames match the original-mode software renderer in RGB1555.
 - Existing SRP1 two-player replay retains all 2,159 prior native RAM snapshots.
 
 - Round 1 (`round1-combat.json`, 244 segments): **3,115** paired observations and
   all active-object regions match. `round1-full.json` (1,869 segments, 26,415
-  gameplay frames, `--segment 9`) matches until relative frame **8,283**, where
-  the original slows down for a frame and native finishes 163 cycles inside the
-  budget (CADENCE.md; `reference/results/behaviour-round1-2026-09-19.json`).
+  gameplay frames, `--segment 9`) matches until relative frame **10,045**; the
+  original's slowdown at 9,976 is not reproduced and object state differs from
+  10,046 (CADENCE.md; `reference/results/behaviour-round1-2026-09-19.json`).
+- Every game mode from power-on to Round 1 lasts the same number of frames in
+  both backends (`tools/compare-timeline.py`).
 
-Remaining differences are reported, not filtered out of the raw data. Spawn flag/
-timer bytes differ in the first 28 action frames (26 encounter frames); animation
-bytes differ in the first two. Full active-object data differs in 450 encounter
-frames, including an unclassified object-tail byte. Cold-boot/menu timing, clock,
-random-state and complete combat/campaign parity remain open. See committed
-`reference/results/phase-*.json`; older same-global-frame results remain historical
-evidence and are not replaced by a claim that boot timing now matches.
+Remaining differences are reported, not filtered out of the raw data. The earlier
+start-up differences in spawn/timer and animation bytes came from the native replay
+reading each input one VBlank late and are gone. Complete combat/campaign parity
+remains open. Older results in `reference/results/phase-*.json` remain historical
+evidence.

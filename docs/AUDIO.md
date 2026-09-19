@@ -9,7 +9,7 @@ action replay shows 1,659 flips over 1,659 gameplay VBlanks and the two-player
 encounter 941 over 941, with audio on and profiling off. Stream underruns occur
 only during the two bulk-decompression screen loads (display blanked).
 With the Round 1 cadence work (CADENCE.md) the benchmark's gameplay window is
-1,611 flips over 1,614 VBlanks, and the stream underruns once as Round 1 starts
+1,611 flips over 1,615 VBlanks, and the stream underruns once as Round 1 starts
 (a 77 ms gap). The first seconds of the stage need 10–14 ms of synthesis per
 frame; each lost VBlank lowers the ring by one frame of audio (rate control
 restores 0.4%), and which frames lose one shifts with the cadence. Before

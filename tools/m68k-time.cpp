@@ -6,6 +6,8 @@
 // usage: m68k-time ROM < calls.txt
 //   calls.txt lines: entry src dst d0   (hex; src->A0, dst->A1 and A4, d0->D0)
 // output lines:      entry src cycles
+// DRAM refresh restarts with each call (M68K_NO_REFRESH=1 disables it);
+// M68K_PC_COUNTS=1 prints visits and cycles per instruction address to stderr.
 // Work RAM starts zeroed except for the stack. The VDP ports accept writes and
 // report "FIFO empty, not busy"; nothing else is emulated. Build: tools/m68k-time.sh
 #include <cstdint>
@@ -47,14 +49,15 @@ int main(int argc, char **argv) {
         if (bank >= 0xe0) { map.base = ram; map.read8 = nullptr; map.read16 = nullptr; map.write8 = nullptr; map.write16 = nullptr; }
         if (bank == 0xc0) { map.read8 = vdp_read8; map.read16 = vdp_read16; }
     }
+    const bool noRefresh = std::getenv("M68K_NO_REFRESH") != nullptr;
+    const bool pcCounts = std::getenv("M68K_PC_COUNTS") != nullptr;   // per-PC visits to stderr
     constexpr unsigned kReturn = 0xFFFE00;   // RAM: BRA.S * marks the return
-    unsigned entry, src, dst, d0;
-    while (std::scanf("%x %x %x %x", &entry, &src, &dst, &d0) == 4) {
-        std::memset(ram, 0, sizeof(ram));
+    std::vector<unsigned> visits(pcCounts ? 0x40000 : 0), spent(pcCounts ? 0x40000 : 0);
+    // Run one call from entry to its RTS; returns CPU cycles, or -1 on timeout.
+    const auto run = [&](unsigned entry, unsigned src, unsigned dst, unsigned d0) -> long {
         ram[(kReturn & 0xffff) ^ 1] = 0x60; ram[((kReturn & 0xffff) + 1) ^ 1] = 0xfe;
         m68k_pulse_reset();
         m68k_set_reg(M68K_REG_SR, 0x2700);
-        m68k_set_reg(M68K_REG_SP, 0xFFFF00);
         // Push the return address, as JSR would.
         const unsigned sp = 0xFFFEFC;
         for (int i = 0; i < 4; i++) ram[((sp & 0xffff) + i) ^ 1] = uint8_t(kReturn >> (24 - 8 * i));
@@ -63,15 +66,40 @@ int main(int argc, char **argv) {
         m68k_set_reg(M68K_REG_D0, d0);
         m68k_set_reg(M68K_REG_PC, entry);
         m68k.cycles = 0;
-        unsigned target = 0;
-        bool done = false;
-        while (target < 400000000u) {
-            target += 700;
+        // DRAM refresh (2 cycles per 128) restarts with each call; the core
+        // otherwise keeps the previous call's refresh deadline.
+        // M68K_NO_REFRESH=1 measures the instructions alone.
+        m68k.refresh_cycles = noRefresh ? 0x7fffffff : 0;
+        // One instruction per slice, so the count stops exactly at the return
+        // (the final RTS is included, the BRA.S at the return point is not).
+        for (unsigned target = 0; target < 400000000u;) {
+            target = m68k.cycles + 1;
+            const unsigned pc = m68k_get_reg(M68K_REG_PC), before = m68k.cycles;
             m68k_run(target);
-            if (m68k_get_reg(M68K_REG_PC) == kReturn) { done = true; break; }
+            if (pcCounts && pc < 0x80000) { visits[pc >> 1]++; spent[pc >> 1] += (m68k.cycles - before) / 7; }
+            if (m68k_get_reg(M68K_REG_PC) == kReturn) return long(m68k.cycles / 7);
         }
-        // Master clocks to CPU cycles (7 master clocks each); the final JSR-
-        // matching RTS is included, the BRA.S at the return point is not.
-        std::printf("%x %x %d%s\n", entry, src, done ? m68k.cycles / 7 : -1, done ? "" : " timeout");
+        return -1;
+    };
+    const auto ramWord = [&](unsigned address) { return unsigned(ram[(address & 0xffff) ^ 1] << 8 | ram[((address & 0xffff) + 1) ^ 1]); };
+    unsigned entry, src, dst, d0;
+    while (std::scanf("%x %x %x %x", &entry, &src, &dst, &d0) == 4) {
+        std::memset(ram, 0, sizeof(ram));
+        long cycles;
+        if (entry == 0x84BA) {
+            // Incremental Nemesis: queue src at $FFDCD0, start the stream, then
+            // upload five tiles per call ($8510) until none remain.
+            for (int i = 0; i < 4; i++) ram[((0xDCD0 + i) & 0xffff) ^ 1] = uint8_t(src >> (24 - 8 * i));
+            cycles = run(0x84BA, 0, 0, 0);
+            for (int calls = 0; cycles >= 0 && ramWord(0xDD28) != 0 && calls < 100000; calls++) {
+                const long call = run(0x8510, 0, 0, 0);
+                cycles = call < 0 ? -1 : cycles + call;
+            }
+        } else {
+            cycles = run(entry, src, dst, d0);
+        }
+        std::printf("%x %x %ld%s\n", entry, src, cycles, cycles >= 0 ? "" : " timeout");
+        for (unsigned i = 0; i < visits.size(); i++)
+            if (visits[i]) { std::fprintf(stderr, "%x %u %u\n", i * 2, visits[i], spent[i]); visits[i] = spent[i] = 0; }
     }
 }

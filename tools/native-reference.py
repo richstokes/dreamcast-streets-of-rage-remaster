@@ -35,14 +35,16 @@ def main():
                 while block:=pcm.read(65536):audio.writeframesraw(block)
     events=[dict(segment=int(i),frame=int(f),idle_frames=int(n)) for i,f,n in re.findall(r'REPLAY gate (\d+) matched at frame (\d+) after (\d+) idle frames',(args.output/'run.log').read_text())]
     (args.output/'events.json').write_text(json.dumps(events,indent=2)+'\n')
-    frames=0
+    # Capture k is the state before VBlank k+1; the reference harness calls
+    # that frame k+1 (its first frame, power-on to the first VBlank, is frame 1).
+    frames=1
     with raw.open('rb') as source,(args.output/'trace.jsonl').open('w') as target:
         while True:
             ram=source.read(65536)
             if not ram:break
             if len(ram)!=65536:raise ValueError('Truncated trace')
             target.write(json.dumps(observation(ram,frames))+'\n');frames+=1
-    (args.output/'metadata.json').write_text(json.dumps(dict(rom=identity,frames=frames-1,ram_first_frame=0,audio_enabled=run_env.get('SOR_AUDIO','1')!='0',
+    (args.output/'metadata.json').write_text(json.dumps(dict(rom=identity,frames=frames-1,ram_first_frame=1,audio_enabled=run_env.get('SOR_AUDIO','1')!='0',
         native_dac=run_env.get('SOR_DAC_NATIVE','1')!='0',aica_split=run_env.get('SOR_DAC_AICA','0')=='1',
         scenario_sha256=hashlib.sha256(args.scenario.read_bytes()).hexdigest(),
         backend='shared Dreamcast simulation; host offscreen platform',

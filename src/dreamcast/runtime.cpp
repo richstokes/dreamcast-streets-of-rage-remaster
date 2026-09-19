@@ -14,6 +14,11 @@ static void histogramFrame(uint32_t frame);
 
 
 void Controllers::poll(const uint8_t *ram){
+    // A replay's frame N is read at the Nth VBlank, as in the reference
+    // harness, whose first frame (power-on to the first VBlank) has no VBlank:
+    // its input is consumed here without being seen by the game.
+    static bool powerOnFrame=true;
+    if(powerOnFrame){powerOnFrame=false;PlayersControlState unused{};replay_poll(unused,ram);}
     if(!replay_poll(current,ram)) platform_poll_controllers(current);
 }
 MegaDriveEnvironment::MegaDriveEnvironment(VDP::Synchronization,VDP::Scaling,VDP::SpriteLimit,uint16_t)
@@ -72,11 +77,16 @@ uint32_t MegaDriveEnvironment::readBus(void *ctx,uint32_t a,unsigned w){
 }
 void MegaDriveEnvironment::writeBus(void *ctx,uint32_t a,unsigned w,uint32_t v){
     auto &e=*static_cast<MegaDriveEnvironment*>(ctx);
-    if(w==4){writeBus(ctx,a,2,v>>16);writeBus(ctx,a+2,2,v&65535);return;}
+    if(w==4){e.longWrite_=true;writeBus(ctx,a,2,v>>16);writeBus(ctx,a+2,2,v&65535);e.longWrite_=false;return;}
     if(a>=0xa00000 && a<0xa10000)e.cycles_+=7; // Z80-bus access latency: one 68000 cycle (Genesis Plus GX)
     if(a>=0xc00000 && a<0xc00008){
         if(w==1)v=(v&255)*257;
-        if(a&4)e.port_.writeControlPort(v);else e.port_.writeDataPort(v);return;
+        if(a&4){
+            const bool enabled=e.state_.regs_[1]&0x20;
+            e.port_.writeControlPort(v);
+            if(!enabled&&(e.state_.regs_[1]&0x20)&&e.vintPending_&&!e.longWrite_)e.irqHold_=true;
+        }else e.port_.writeDataPort(v);
+        return;
     }
     if(a>=0xa00000 && a<0xa02000){e.audio_.ram[a&8191]=w==1?v:v>>8;if(w==2)e.audio_.ram[(a+1)&8191]=v;return;}
     if(a==0xa10003 || a==0xa10005){e.th_[a==0xa10005]=v&64;return;}
@@ -115,6 +125,9 @@ void MegaDriveEnvironment::waitForInterrupt(){
     if(const char *b=getenv("SOR_WAIT_LOG")){unsigned long lo=0,hi=0;sscanf(b,"%lu:%lu",&lo,&hi);
         if(frames_>=lo&&frames_<=hi)sor_log("WAIT frame=%lu clocks=%llu mailbox=%02x\n",(unsigned long)frames_,(unsigned long long)(cycles_+frameClocks-nextVblank_),mem_.readByte(0xfffa00));}
 #endif
+    // An unmasked interrupt already pending (a VINT left pending while the VDP
+    // or the mask held it off) is taken at once, without waiting.
+    if(irqLevel()>cpuInterruptMask())return;
     if(cycles_<nextVblank_)cycles_=nextVblank_;
     frameBoundary();
 }
@@ -146,22 +159,48 @@ void MegaDriveEnvironment::frameBoundary(){
     if(audio_.enabled&&platform_audio_profile()&&frames_%600==599)sor_log("AUDIO_PARTS z80=%llu fm=%llu psg=%llu dynamic_ops=%lu ssg_ops=%lu live_ops=%lu fm_clock_us=%llu fm_output_us=%llu audible_ops=%lu\n",audio_.profile[0],audio_.profile[1],audio_.profile[2],(unsigned long)(audio_.fmWorkload&255),(unsigned long)((audio_.fmWorkload>>8)&255),(unsigned long)((audio_.fmWorkload>>16)&255),audio_.profile[3],audio_.profile[4],(unsigned long)(audio_.fmWorkload>>24));
     const auto presentStart=platform_time_us();
     present(); pads_.poll(mem_.state.ram); frames_++;
-    frameCycles_=nextVblank_; nextVblank_+=frameClocks; irq_=6; // VINT pending until unmasked
+    frameCycles_=nextVblank_; vblankFlag_+=frameClocks; nextVblank_=vblankFlag_+vintDelay(); vintPending_=true;
     platform_frame_parts(uint32_t(synthDone-audioStart),uint32_t(platform_time_us()-presentStart));
 }
 #ifdef SOR_PC_HISTOGRAM
 namespace {
 std::vector<uint64_t> histogram;unsigned histogramFirst=~0u,histogramLast=0;std::string histogramPath;bool histogramActive=false;
 }
+// Call timeline: master-clock time of each entry to a watched routine, until
+// frame LAST (compare with genesis_reference.py --watch; tools/compare-calls.py).
+static std::vector<uint8_t> watched;static std::vector<std::pair<uint32_t,uint64_t>> watchLog;
+static unsigned long watchLast=0;static std::string watchPath;static bool watchActive=false;
+void MegaDriveEnvironment::watchEnter(m_long a){
+    static bool parsed=false;
+    if(!parsed){parsed=true;if(const char *spec=getenv("SOR_WATCH")){
+        std::string s(spec);auto i=s.find(':'),j=s.find(':',i+1);
+        watchLast=std::stoul(s.substr(i+1,j-i-1));watchPath=s.substr(j+1);watched.assign(0x40000,0);
+        if(FILE *f=fopen(s.substr(0,i).c_str(),"r")){unsigned pc;while(fscanf(f,"%x",&pc)==1)if(pc<0x80000)watched[pc>>1]=1;fclose(f);}
+        watchActive=true;}}
+    if(watchActive&&a<0x80000&&watched[a>>1])watchLog.emplace_back(a,cycles_-powerOn);   // since power-on
+}
+static void watchFrame(uint32_t frame){
+    if(!watchActive||frame!=watchLast)return;
+    watchActive=false;
+    if(FILE *f=fopen(watchPath.c_str(),"w")){for(auto &e:watchLog)fprintf(f,"%x %llu\n",e.first,(unsigned long long)e.second);fclose(f);}
+    sor_log("WATCH written %s (%zu entries)\n",watchPath.c_str(),watchLog.size());
+}
+static void histogramParse(){
+    static bool parsed=false;
+    if(parsed)return;
+    parsed=true;
+    if(const char *spec=getenv("SOR_PC_HISTOGRAM_FRAMES")){
+        std::string s(spec);auto a=s.find(':'),b=s.find(':',a+1);
+        histogramFirst=std::stoul(s.substr(0,a));histogramLast=std::stoul(s.substr(a+1,b-a-1));histogramPath=s.substr(b+1);
+        histogram.assign(0x800000,0);histogramActive=histogramFirst==0;}
+}
 void MegaDriveEnvironment::pcHistogram(unsigned pc,unsigned cpuCycles){
+    histogramParse();
     if(histogramActive)histogram[(pc&0xFFFFFE)>>1]+=uint64_t(cpuCycles)*7;
 }
 static void histogramFrame(uint32_t frame){
-    static bool parsed=false;
-    if(!parsed){parsed=true;if(const char *spec=getenv("SOR_PC_HISTOGRAM_FRAMES")){
-        std::string s(spec);auto a=s.find(':'),b=s.find(':',a+1);
-        histogramFirst=std::stoul(s.substr(0,a));histogramLast=std::stoul(s.substr(a+1,b-a-1));histogramPath=s.substr(b+1);
-        histogram.assign(0x800000,0);}}
+    watchFrame(frame);
+    histogramParse();
     if(frame+1==histogramFirst)histogramActive=true;
     if(histogramActive&&frame==histogramLast){
         histogramActive=false;
@@ -179,7 +218,7 @@ void MegaDriveEnvironment::reportUnhandledDispatch(m_long a){
 }
 
 void MegaDriveEnvironment::debugState(){
-    sor_log("DIAG frame=%lu mode=%04x mailbox=%02x irq=%d last=%06lx cycles=%llu faults=%lu addr=%06lx\n",(unsigned long)frames_,mem_.readWord(0xffff00),mem_.readByte(0xfffa00),irq_,(unsigned long)last_,(unsigned long long)cycles_,(unsigned long)mem_.state.faults,(unsigned long)mem_.state.last_fault_address);
+    sor_log("DIAG frame=%lu mode=%04x mailbox=%02x irq=%d last=%06lx cycles=%llu faults=%lu addr=%06lx\n",(unsigned long)frames_,mem_.readWord(0xffff00),mem_.readByte(0xfffa00),irqLevel(),(unsigned long)last_,(unsigned long long)cycles_,(unsigned long)mem_.state.faults,(unsigned long)mem_.state.last_fault_address);
     sor_log("P1 type=%02x pos=%04x,%04x,%04x state=%04x health=%04x held=%02x SAT=%02x%02x%02x%02x\n",mem_.readByte(0xffb800),mem_.readWord(0xffb810),mem_.readWord(0xffb814),mem_.readWord(0xffb818),mem_.readWord(0xffb830),mem_.readWord(0xffb832),mem_.readByte(0xfffc04),state_.sat_[0],state_.sat_[1],state_.sat_[2],state_.sat_[3]);
     dumpUnhandledDispatchCpuState();
 }

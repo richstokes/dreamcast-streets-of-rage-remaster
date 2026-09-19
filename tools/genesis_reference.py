@@ -99,7 +99,7 @@ def observation(ram,frame):
                 p1_lives=ram[0xff20],p2_lives=ram[0xff23],actors=actors,ram_sha256=hashlib.sha256(ram).hexdigest())
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('core');p.add_argument('rom');p.add_argument('scenario');p.add_argument('output',type=Path);p.add_argument('--raw-ram',action='store_true');p.add_argument('--audio-wav',action='store_true');p.add_argument('--profile',action='append',default=[],metavar='FIRST:LAST:PATH',help='per-PC 68000 cycles for frames FIRST..LAST (profiling core built with HOOK_CPU; see tools/build-profile-core.sh)');a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('core');p.add_argument('rom');p.add_argument('scenario');p.add_argument('output',type=Path);p.add_argument('--raw-ram',action='store_true');p.add_argument('--audio-wav',action='store_true');p.add_argument('--profile',action='append',default=[],metavar='FIRST:LAST:PATH',help='per-PC 68000 cycles for frames FIRST..LAST (profiling core built with HOOK_CPU; see tools/build-profile-core.sh)');p.add_argument('--watch',metavar='PCS:LAST:PATH',help='profiling core: time of each entry to the hex addresses in file PCS until frame LAST');a=p.parse_args()
     a.output.mkdir(parents=True,exist_ok=True);g=Genesis(a.core,a.rom)
     if a.audio_wav:g.capture_audio(a.output/'audio.wav')
     scenario=json.loads(Path(a.scenario).read_text())
@@ -109,6 +109,10 @@ def main():
     profiles=[(int(f),int(l),path) for f,l,path in (v.split(':',2) for v in a.profile)]
     if profiles:
         g.lib.sor_profile_stop.argtypes=[C.c_char_p]
+    watch=None
+    if a.watch:
+        pcs_file,last,path=a.watch.split(':',2);pcs=[int(x,16) for x in Path(pcs_file).read_text().split()]
+        g.lib.sor_watch_stop.argtypes=[C.c_char_p];g.lib.sor_watch_start((C.c_uint*len(pcs))(*pcs),len(pcs));watch=(int(last),path)
     with (a.output/'trace.jsonl').open('w') as trace, ((a.output/'ram.bin').open('wb') if a.raw_ram else nullcontext()) as raw:
         for index,segment in enumerate(scenario['segments']):
             masks=[sum(1<<BUTTONS[b] for b in segment.get(k,[])) for k in ('p1','p2')]
@@ -119,7 +123,11 @@ def main():
                 if gate and elapsed==segment['frames']: raise RuntimeError(f'State gate {index} timed out')
                 for first,_,_ in profiles:
                     if g.frame+1==first:g.lib.sor_profile_start()
+                if watch:g.lib.sor_watch_frame(g.frame)
                 ram=g.step(*masks);trace.write(json.dumps(observation(ram,g.frame))+'\n')
+                if watch and g.frame==watch[0]:
+                    if g.lib.sor_watch_stop(str(watch[1]).encode()):raise RuntimeError('watch write failed')
+                    watch=None
                 for _,last,path in profiles:
                     if g.frame==last and g.lib.sor_profile_stop(str(path).encode()):raise RuntimeError('profile write failed')
                 if raw: raw.write(ram)
