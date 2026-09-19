@@ -597,6 +597,14 @@ def edits():
     auto         result      = decodeKosinski(readByte, cpu().a[0]);''', '''    const m_long destination = cpu().a[1];
     const m_long source      = cpu().a[0];
     auto         result      = decodeKosinski(readByte, cpu().a[0]);'''),
+        # $1061C decodes the driver into work RAM at $FF7000 and copies it from
+        # there; upstream decodes in host memory. Leave the RAM image the ROM
+        # leaves (the buffer keeps it until the next load overwrites it).
+        ('''    for (std::size_t offset = 0; offset < kZ80DriverCopyBytes; ++offset)
+        z80().writeRAMFor68K(''', '''    for (std::size_t offset = 0; offset < result.data.size(); ++offset)
+        memory().writeByte(0x00FF7000u + static_cast<m_long>(offset), result.data[offset]);
+    for (std::size_t offset = 0; offset < kZ80DriverCopyBytes; ++offset)
+        z80().writeRAMFor68K('''),
         # $1061C: bus requests (116), the Kosinski decode, setup (36), the copy of
         # 0x1EC7 bytes into Z80 RAM (13 per byte with the Z80-bus wait, DBF 10/14),
         # the sample bank bytes, Z80 reset pulse and RTS (162).

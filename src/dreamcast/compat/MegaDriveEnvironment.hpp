@@ -86,6 +86,13 @@ public:
 #endif
     void waitForInterrupt(); void debugState();
 #ifdef SOR_PC_HISTOGRAM
+    // Host analysis: SOR_STATE_SYNC=state:replay replaces the machine state with
+    // the reference's (genesis_reference.py --export-state) at the first VBlank
+    // wait in play that matches the reference's (routine, stack and return
+    // address), then plays `replay`.
+    void stateSync();
+#endif
+#ifdef SOR_PC_HISTOGRAM
     // Host analysis (SOR_WATCH=pcs:last:path): time of each routine entry.
     void traceEnter(m_long a){last_=a;watchEnter(a);} void watchEnter(m_long a);
 #else
@@ -99,6 +106,8 @@ protected:
     virtual void run()=0; virtual int cpuInterruptMask()const=0;
     virtual void onPowerOn()=0; virtual void handleOptionHotkey(OptionHotkeyCode){}
     virtual void dumpUnhandledDispatchCpuState(){}
+    // D0-D7, A0-A6, SSP and SR: read (load=false) or replace (load=true).
+    virtual void exchangeCpuState(uint32_t *regs,bool load){(void)regs;(void)load;}
 private:
     static uint32_t readBus(void *,uint32_t,unsigned);
     static void writeBus(void *,uint32_t,unsigned,uint32_t);

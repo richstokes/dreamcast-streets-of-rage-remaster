@@ -35,8 +35,9 @@ and relevant commit/capture paths in the progress log.
 - [ ] Verify movement and combat in the first section, including two-player play.
   (2026-09-19: Round 1 play matches the original for 9,976 gameplay frames — waves 0–1,
   three enemy families, police special, a death — Round 1 combat for 3,115 frames and the
-  two-player encounter for all 761, with all object bytes. Grabs/throws coverage, later
-  waves and the boss remain. reference/results/behaviour-round1-2026-09-19.json.)
+  two-player encounter for all 761, with all object bytes. State-synced: wave 3, the boss,
+  the stage clear and the continue prompt match in all game RAM (docs/FIDELITY_GATE.md).
+  Throws and friendly fire remain. reference/results/behaviour-round1-2026-09-19.json.)
 - [ ] Reduce stage-start synthesis peaks (10–14 ms/frame at Round 1 start; one 77 ms
   stream underrun in the benchmark after the cadence changes, AUDIO.md).
 - [x] Replace measured rendering bottlenecks and remeasure target performance.
@@ -46,9 +47,13 @@ and relevant commit/capture paths in the progress log.
   reference/results/audio-timing-2026-09-19.json. Music start offset follows the cadence item.)
 - [ ] Pass the first-section fidelity gate before starting enhanced presentation.
   (2026-09-19 evaluation, docs/FIDELITY_GATE.md: boot to Round 1 frame-exact, Round 1 play
-  exact for 9,976 frames; weapons, throws, boss, completion and continue remain.)
-- [ ] Add short Round 1 scenarios for weapons/pickups, throws, friendly fire and continue.
-- [ ] State-synchronised comparisons for later Round 1 content (boss, completion).
+  exact for 9,976 frames; state-synced boss and round completion met; throws, friendly
+  fire, other weapons, continuing and game over remain.)
+- [ ] Add Round 1 scenarios (or bot runs) for throws, friendly fire, other weapons,
+  eating food, continuing and game over.
+- [x] State-synchronised comparisons for later Round 1 content (boss, completion).
+  (2026-09-19: tools/state-sync.py, tools/bot-play.py; six windows equal in all game RAM,
+  reference/results/state-sync-2026-09-19.json.)
 - [ ] Remaining timing: exact costs for profile-costed hand-written routines, DIV and
   register-shift timing, YM2612 busy from the Z80's writes (docs/CADENCE.md).
 

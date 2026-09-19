@@ -117,6 +117,46 @@ reported separately, and DRAM refresh and Z80-area wait states are charged
 but not histogrammed (the original's histogram includes them, about 1.5%).
 `SOR_WAIT_LOG=FIRST:LAST` (headless) logs when each frame starts waiting.
 
+## State-synchronised comparisons
+
+Comparisons from power-on stay exact only until an update lands on the other
+side of a VBlank (CADENCE.md). For content beyond that point both backends are
+started from the original's machine state instead. This departs from the rule
+above that no game state is overwritten, and is reported as a comparison
+technique, not play (FIDELITY_GATE.md).
+
+```sh
+# Recorded replay: export at FRAME from a new reference run, then compare.
+build/tools-venv/bin/python3 tools/state-sync.py "$SOR_ROM" \
+  reference/scenarios/round1-full.json build/genesis-round1-full 18685 build/sync-17300
+# Scripted play to the boss: aids (RAM writes) stop at 11,000, state from 11,400 on.
+build/tools-venv/bin/python3 tools/bot-play.py build/gpgx-profile/genesis_plus_gx_libretro.dylib \
+  "$SOR_ROM" reference/scenarios/round1-full.json 22000 reference/scenarios/round1-bot.json \
+  --weaken --aids-until 11000 --output build/bot-round1 \
+  --export-state 11400:$PWD/build/sync-boss/state.bin
+build/tools-venv/bin/python3 tools/state-sync.py "$SOR_ROM" \
+  reference/scenarios/round1-bot.json build/bot-round1 11497 build/sync-boss --frames 4000
+```
+
+- The state is exported by the profiling core (`sor_export_state`,
+  `genesis_reference.py --export-state`, `bot-play.py --export-state`) at the
+  first frame from the one requested with no incremental Nemesis stream in
+  flight; the frame used is printed and is the one to pass to `state-sync.py`.
+  A state already in the output directory is reused.
+- The native run (`SOR_STATE_SYNC=state:replay`) loads it at its first VBlank
+  wait in Round 1 that matches the reference's: the same wait routine
+  (mailbox 1 or 2), stack pointer and return address. It then plays `replay`,
+  the original's inputs from the export frame on.
+- `result.json` gives the first differing frame per object region and for mode,
+  wave, camera and lives, plus whole-RAM counts with and without host-owned RAM.
+  Frames captured mid-update or mid-load on both sides are listed as
+  `unsettled_differences`. `--reuse` compares an existing native run again.
+- `bot-play.py` plays with a closed-loop policy (walk to the nearest awake enemy,
+  line up, punch; back off when the camera is held). Until `--aids-until` it tops
+  up a standing player's health and lives and, with `--weaken`, holds ordinary
+  enemies at one hit point; bosses are never touched. Its `--output` is a
+  reference run in `genesis_reference.py`'s format.
+
 ## Shared native headless backend
 
 ```

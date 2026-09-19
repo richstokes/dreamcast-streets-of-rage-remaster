@@ -70,6 +70,12 @@ class Genesis:
         # GPGX work_ram uses little-endian word storage on this little-endian core.
         b[0::2],b[1::2]=b[1::2],b[0::2]
         return bytes(b)
+    def poke(self,addr,value,width):
+        # Reference-only RAM writes, to reach content a replay cannot survive to
+        # (state-sync.py). Work RAM stores each byte at address^1 on this core.
+        p=self.lib.retro_get_memory_data(2)
+        for i,b in enumerate(value.to_bytes(width,'big')):
+            C.c_ubyte.from_address(p+((addr+i)^1)).value=b
     def step(self,p1=0,p2=0):
         self.buttons=[p1,p2]; self.lib.retro_run(); self.frame+=1; return self.ram()
     def capture(self,path):
@@ -89,6 +95,13 @@ class Genesis:
         self.lib.retro_unload_game();self.lib.retro_deinit()
 
 # Physical libretro IDs, independent of upstream's Genesis button masks.
+def decoder_idle(ram):
+    # A state can only be handed to the native port when no incremental Nemesis
+    # stream is in flight: the port keeps that decoder's cursor in host state,
+    # which the machine state does not carry. Queue head $FFDCD0 and tiles
+    # remaining $FFDD28 are both zero between streams.
+    return not any(ram[0xDCD0:0xDCD4]) and not any(ram[0xDD28:0xDD2A])
+
 BUTTONS={'B':0,'A':1,'C':8,'START':3,'UP':4,'DOWN':5,'LEFT':6,'RIGHT':7}
 def observation(ram,frame):
     word=lambda a:int.from_bytes(ram[a:a+2],'big')
@@ -99,7 +112,7 @@ def observation(ram,frame):
                 p1_lives=ram[0xff20],p2_lives=ram[0xff23],actors=actors,ram_sha256=hashlib.sha256(ram).hexdigest())
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('core');p.add_argument('rom');p.add_argument('scenario');p.add_argument('output',type=Path);p.add_argument('--raw-ram',action='store_true');p.add_argument('--audio-wav',action='store_true');p.add_argument('--profile',action='append',default=[],metavar='FIRST:LAST:PATH',help='per-PC 68000 cycles for frames FIRST..LAST (profiling core built with HOOK_CPU; see tools/build-profile-core.sh)');p.add_argument('--watch',metavar='PCS:LAST:PATH',help='profiling core: time of each entry to the hex addresses in file PCS until frame LAST');p.add_argument('--ym-log',metavar='FIRST:LAST:PATH',help='profiling core: every YM2612 write in frames FIRST..LAST (frame, clock, port, value)');a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('core');p.add_argument('rom');p.add_argument('scenario');p.add_argument('output',type=Path);p.add_argument('--raw-ram',action='store_true');p.add_argument('--audio-wav',action='store_true');p.add_argument('--profile',action='append',default=[],metavar='FIRST:LAST:PATH',help='per-PC 68000 cycles for frames FIRST..LAST (profiling core built with HOOK_CPU; see tools/build-profile-core.sh)');p.add_argument('--watch',metavar='PCS:LAST:PATH',help='profiling core: time of each entry to the hex addresses in file PCS until frame LAST');p.add_argument('--ym-log',metavar='FIRST:LAST:PATH',help='profiling core: every YM2612 write in frames FIRST..LAST (frame, clock, port, value)');p.add_argument('--poke',action='append',default=[],metavar='ADDR:VALUE[:WIDTH[:FIRST:LAST]]',help='write VALUE into work RAM at ADDR (hex) before each frame, optionally only in frames FIRST..LAST; a reference-only aid for reaching late content (see tools/state-sync.py)');p.add_argument('--export-state',metavar='FRAME:PATH',help='profiling core: machine state at the end of FRAME (the state its RAM capture shows)');a=p.parse_args()
     a.output.mkdir(parents=True,exist_ok=True);g=Genesis(a.core,a.rom)
     if a.audio_wav:g.capture_audio(a.output/'audio.wav')
     scenario=json.loads(Path(a.scenario).read_text())
@@ -109,6 +122,11 @@ def main():
     profiles=[(int(f),int(l),path) for f,l,path in (v.split(':',2) for v in a.profile)]
     if profiles:
         g.lib.sor_profile_stop.argtypes=[C.c_char_p]
+    pokes=[]
+    for spec in a.poke:
+        f=spec.split(':')
+        pokes.append((int(f[0],16),int(f[1],0),int(f[2]) if len(f)>2 else 1,
+                      int(f[3]) if len(f)>3 else 1,int(f[4]) if len(f)>4 else 1<<62))
     watch=None
     if a.watch:
         pcs_file,last,path=a.watch.split(':',2);pcs=[int(x,16) for x in Path(pcs_file).read_text().split()]
@@ -131,7 +149,14 @@ def main():
                     if g.frame==int(last)+1:
                         g.lib.sor_ym_stop.argtypes=[C.c_char_p]
                         if g.lib.sor_ym_stop(path.encode()):raise RuntimeError('ym log write failed')
+                for spec in pokes:
+                    addr,value,width,first,last=spec
+                    if first<=g.frame+1<=last: g.poke(addr,value,width)
                 ram=g.step(*masks);trace.write(json.dumps(observation(ram,g.frame))+'\n')
+                if a.export_state and g.frame>=int(a.export_state.split(':',1)[0]) and decoder_idle(ram):
+                    g.lib.sor_export_state.argtypes=[C.c_char_p]
+                    if g.lib.sor_export_state(a.export_state.split(':',1)[1].encode()):raise RuntimeError('state export failed')
+                    print('state exported at frame %d'%g.frame);a.export_state=None
                 if watch and g.frame==watch[0]:
                     if g.lib.sor_watch_stop(str(watch[1]).encode()):raise RuntimeError('watch write failed')
                     watch=None

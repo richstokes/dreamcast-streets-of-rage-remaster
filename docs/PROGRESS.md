@@ -1,5 +1,27 @@
 # Progress
 
+## 2026-09-19 — state-synchronised comparisons: the rest of Round 1
+
+- New comparison technique (FIDELITY_GATE.md, REFERENCE.md): the original's
+  machine state is exported by the profiling core, the native port loads it at
+  the matching VBlank wait and both play the same inputs; RAM is compared frame
+  by frame (`tools/state-sync.py`). Labelled as a comparison, not play.
+- No recorded replay survives to the boss, so `tools/bot-play.py` plays the
+  original with a scripted policy, aided by RAM writes (player health, ordinary
+  enemies at one hit point) that stop before the compared window, and records
+  its inputs as scenarios (`reference/scenarios/round1-bot*.json`).
+- Six windows match in all game RAM: wave 3 (Garcia, Nora, a held knife), the
+  Antonio fight (4,000 frames), his knockout through the stage clear into Round
+  2, and the last death to the continue prompt. The only differences are frames
+  captured mid-update or mid-load, each equal to the other side one frame away.
+  `reference/results/state-sync-2026-09-19.json`.
+- Fixed: the Z80 driver loader now leaves the decompressed driver in work RAM at
+  `$FF7000`, as the ROM does (found by the round-clear window).
+- Fidelity gate: boss and round completion met; weapons (knife) and continue
+  partly met; throws, friendly fire, continuing and game over remain.
+- Round 1 from power-on still matches for 9,976 frames; action and two-player
+  replays unchanged.
+
 ## 2026-09-19 — Z80 and 68000 share the bus as on hardware
 
 - The Z80 now follows the 68000 through each frame (catch-up) and is stopped

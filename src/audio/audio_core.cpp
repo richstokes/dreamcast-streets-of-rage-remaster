@@ -247,6 +247,18 @@ void NativeAudio::setBusRequest(bool b){
     if(!b&&!impl->reset&&!impl->open)for(int i=0;i<128&&(ram[0x1ffd]&128);i++)impl->ztime+=impl->runSound(16);
 }
 void NativeAudio::sync68k(uint32_t clocks){if(impl)impl->sync(clocks);}
+void NativeAudio::loadZ80(const uint8_t *zram,uint32_t bank,bool resetLine,bool busRequest,const uint16_t *r,const uint8_t *m){
+    if(!impl)return;
+    auto &s=*impl;
+    std::copy_n(zram,8192,ram);
+    s.bank=(bank>>15)&511;s.reset=resetLine;s.bus=busRequest;   // bank: the 68000 base address
+    s.dac.cancel();s.driverKnown=NativeDacDriver::recognizes(ram);
+    auto &z=s.cpu->reg;
+    const auto pair=[](suzukiplan::Z80::RegisterPair &p,uint16_t af,uint16_t bc,uint16_t de,uint16_t hl){
+        p.A=af>>8;p.F=af&255;p.B=bc>>8;p.C=bc&255;p.D=de>>8;p.E=de&255;p.H=hl>>8;p.L=hl&255;};
+    z.PC=r[0];z.SP=r[1];pair(z.pair,r[2],r[3],r[4],r[5]);z.IX=r[6];z.IY=r[7];pair(z.back,r[8],r[9],r[10],r[11]);
+    z.I=m[0];z.R=m[1];z.IFF=(m[2]?1:0)|(m[3]?4:0)|(m[5]?0x80:0);z.interrupt=(z.interrupt&0xfc)|(m[4]&3);
+}
 void NativeAudio::logTimedWrite(uint64_t clock,unsigned port,uint8_t value){
 #ifndef __DREAMCAST__
     static std::FILE *file=nullptr;static uint64_t lo=0,hi=0;static bool parsed=false;

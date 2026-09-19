@@ -1,0 +1,149 @@
+{
+ "date": "2026-09-19",
+ "tool": "tools/state-sync.py",
+ "note": "Both backends start from the original machine state exported at sync_frame (Genesis Plus GX profiling core) and play the same inputs from there. sync-boss, sync-clear and sync-gameover come from tools/bot-play.py runs whose RAM-write aids (player health, ordinary enemies at 1 HP) stop before the sync frame (aids_until 11000 for round1-bot.json, 14800 for round1-bot-clear.json). Host-owned RAM (incremental Nemesis state, code table, stack below the main loop frame) is excluded from game_ram; unsettled frames are captures where both sides are mid-update or mid-load (mailbox 0).",
+ "windows": [
+  {
+   "scenario": "reference/scenarios/round1-full.json",
+   "sync_frame": 10384,
+   "native_sync_frame": 1252,
+   "compared_frames": 3000,
+   "identical_ram_frames": 946,
+   "identical_game_ram_frames": 976,
+   "unsettled_differences": [
+    976,
+    1564,
+    1767
+   ],
+   "first_difference": 977,
+   "first_difference_by_field": {
+    "game_ram": 977,
+    "animation": 977,
+    "attack_flags": 977,
+    "spawn_flags_and_timer": 977,
+    "full_object": 977,
+    "input": 978,
+    "positions_and_velocity": 978,
+    "collision_ids": 979,
+    "state_health_damage": 979,
+    "camera": 1000,
+    "grab_mode_target": 1031
+   },
+   "name": "sync-9000",
+   "content": "Round 1 wave 2 (relative frame 9,000); diverges at the known near-tie"
+  },
+  {
+   "scenario": "reference/scenarios/round1-full.json",
+   "sync_frame": 18685,
+   "native_sync_frame": 1252,
+   "compared_frames": 3000,
+   "identical_ram_frames": 68,
+   "identical_game_ram_frames": 2998,
+   "unsettled_differences": [
+    179,
+    530
+   ],
+   "first_difference": null,
+   "first_difference_by_field": {},
+   "name": "sync-17300",
+   "content": "Round 1 wave 3: Garcia $20, Nora $26"
+  },
+  {
+   "scenario": "reference/scenarios/round1-full.json",
+   "sync_frame": 20584,
+   "native_sync_frame": 1252,
+   "compared_frames": 3000,
+   "identical_ram_frames": 1324,
+   "identical_game_ram_frames": 2999,
+   "unsettled_differences": [
+    2824
+   ],
+   "first_difference": null,
+   "first_difference_by_field": {},
+   "name": "sync-19200",
+   "content": "Round 1 wave 3: knife $08 held, food $47"
+  },
+  {
+   "scenario": "reference/scenarios/round1-full.json",
+   "sync_frame": 23485,
+   "native_sync_frame": 1252,
+   "compared_frames": 3000,
+   "identical_ram_frames": 2997,
+   "identical_game_ram_frames": 3000,
+   "unsettled_differences": [],
+   "first_difference": null,
+   "first_difference_by_field": {},
+   "name": "sync-22100",
+   "content": "Round 1 wave 3, last death, continue object $0F"
+  },
+  {
+   "scenario": "reference/scenarios/round1-bot.json",
+   "sync_frame": 11497,
+   "native_sync_frame": 1252,
+   "compared_frames": 4000,
+   "identical_ram_frames": 3947,
+   "identical_game_ram_frames": 4000,
+   "unsettled_differences": [],
+   "first_difference": null,
+   "first_difference_by_field": {},
+   "name": "sync-boss",
+   "content": "Round 1 boss: Antonio $56 and boomerang $96, two player deaths"
+  },
+  {
+   "scenario": "reference/scenarios/round1-bot-clear.json",
+   "sync_frame": 14900,
+   "native_sync_frame": 1317,
+   "compared_frames": 3000,
+   "identical_ram_frames": 443,
+   "identical_game_ram_frames": 2971,
+   "unsettled_differences": [
+    482,
+    483,
+    485,
+    486,
+    487,
+    1250,
+    1251,
+    1252,
+    1253,
+    1254,
+    1255,
+    1258,
+    1259,
+    1260,
+    1262,
+    1263,
+    1264,
+    1265,
+    1266,
+    1267,
+    1268,
+    1285,
+    1286,
+    1287,
+    1288,
+    1289,
+    1290,
+    1296,
+    1297
+   ],
+   "first_difference": null,
+   "first_difference_by_field": {},
+   "name": "sync-clear",
+   "content": "Antonio knocked out, stage clear, Round 2 intro and first wave"
+  },
+  {
+   "scenario": "reference/scenarios/round1-bot.json",
+   "sync_frame": 16900,
+   "native_sync_frame": 1317,
+   "compared_frames": 3000,
+   "identical_ram_frames": 2994,
+   "identical_game_ram_frames": 3000,
+   "unsettled_differences": [],
+   "first_difference": null,
+   "first_difference_by_field": {},
+   "name": "sync-gameover",
+   "content": "last death against Antonio, continue object $0F"
+  }
+ ]
+}

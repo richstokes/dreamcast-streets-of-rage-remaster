@@ -37,6 +37,10 @@ public:
     // Host analysis: the current frame's start in master clocks since power-on
     // (SOR_YM_TIMES=first:last:path logs every YM2612 write with its time).
     uint64_t frameStart68k=0;
+    // Host analysis: take the Z80's state from the reference (state-synchronised
+    // comparisons). bank: 68000 address of the bank window; regs: PC SP AF BC
+    // DE HL IX IY AF' BC' DE' HL'; misc: I R IFF1 IFF2 IM HALT.
+    void loadZ80(const uint8_t *zram,uint32_t bank,bool reset,bool busRequest,const uint16_t *regs,const uint8_t *misc);
     void logTimedWrite(uint64_t clock,unsigned port,uint8_t value);
     uint32_t fmWorkload=0;
     uint64_t profile[5]{}; // At most 890 stereo frames.

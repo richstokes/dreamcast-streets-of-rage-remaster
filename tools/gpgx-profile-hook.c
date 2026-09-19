@@ -96,3 +96,34 @@ __attribute__((visibility("default"))) int sor_ym_stop(const char *path)
   fclose(f); return 0;
 }
 #endif
+#ifdef HOOK_CPU
+/* Machine state at a frame end for state-synchronised comparisons with the
+   native port: 68000 registers, work RAM, VDP (registers, VRAM, CRAM, VSRAM,
+   control-port latches), Z80 RAM, bank and registers. Mega Drive byte order. */
+#include "../z80/z80.h"
+extern unsigned char work_ram[0x10000], zram[0x2000], vram[0x10000], cram[0x80], vsram[0x80], reg[0x20], zstate;
+extern unsigned int zbank;
+extern void sor_vdp_latches(unsigned int *out);
+static void sor_put32(FILE *f, unsigned int v) { fputc(v >> 24, f); fputc(v >> 16, f); fputc(v >> 8, f); fputc(v, f); }
+static void sor_put16(FILE *f, unsigned int v) { fputc((v >> 8) & 0xff, f); fputc(v & 0xff, f); }
+__attribute__((visibility("default"))) int sor_export_state(const char *path)
+{
+  unsigned int i, latches[3]; FILE *f = fopen(path, "wb"); if (!f) return -1;
+  fwrite("SORSTAT1", 1, 8, f);
+  for (i = 0; i < 16; i++) sor_put32(f, m68k_get_reg(M68K_REG_D0 + i));
+  sor_put32(f, m68k_get_reg(M68K_REG_SR)); sor_put32(f, m68k_get_reg(M68K_REG_PC));
+  for (i = 0; i < 0x10000; i++) fputc(work_ram[i ^ 1], f);
+  for (i = 0; i < 0x10000; i++) fputc(vram[i ^ 1], f);
+  for (i = 0; i < 64; i++) { unsigned int p = *(unsigned short *)&cram[i * 2];
+    sor_put16(f, ((p & 0x1C0) << 3) | ((p & 0x038) << 2) | ((p & 0x007) << 1)); }
+  for (i = 0; i < 40; i++) sor_put16(f, *(unsigned short *)&vsram[i * 2] & 0x7FF);
+  fwrite(reg, 1, 24, f);
+  sor_vdp_latches(latches); sor_put16(f, latches[0]); fputc(latches[1], f); fputc(latches[2], f);
+  fwrite(zram, 1, 0x2000, f); sor_put32(f, zbank); fputc(zstate, f);
+  sor_put16(f, Z80.pc.w.l); sor_put16(f, Z80.sp.w.l); sor_put16(f, Z80.af.w.l); sor_put16(f, Z80.bc.w.l);
+  sor_put16(f, Z80.de.w.l); sor_put16(f, Z80.hl.w.l); sor_put16(f, Z80.ix.w.l); sor_put16(f, Z80.iy.w.l);
+  sor_put16(f, Z80.af2.w.l); sor_put16(f, Z80.bc2.w.l); sor_put16(f, Z80.de2.w.l); sor_put16(f, Z80.hl2.w.l);
+  fputc(Z80.i, f); fputc((Z80.r & 0x7f) | (Z80.r2 & 0x80), f); fputc(Z80.iff1, f); fputc(Z80.iff2, f); fputc(Z80.im, f); fputc(Z80.halt, f);
+  fclose(f); return 0;
+}
+#endif

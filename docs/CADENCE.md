@@ -102,6 +102,11 @@ VBlank N.
 | Round 1 combat (3,115) | equal | equal |
 | Round 1 play (26,415) equal until | 8,283 | 9,976 |
 
+Past the first difference, state-synchronised comparisons start both backends
+from the original's machine state (FIDELITY_GATE.md, REFERENCE.md). Six windows
+of 3,000-4,000 frames from wave 3 to the start of Round 2, including the boss,
+match in all game RAM, so the remaining differences are timing, not behaviour.
+
 ## Gameplay slowdown (Round 1)
 
 SoR updates every two VBlanks (mailbox `$FFFA00`); when an update runs past its

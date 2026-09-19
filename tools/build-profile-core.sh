@@ -27,6 +27,9 @@ old = 'void gen_zbusreq_w(unsigned int data, unsigned int cycles)\n{\n'
 assert t.count(old) == 1
 t = 'extern void sor_ym_log(unsigned int, unsigned int, unsigned int);\n' + t.replace(old, old + '  sor_ym_log(cycles, 0x4000, data);\n')
 gen.write_text(t)
+vdp = Path(sys.argv[1]).parent.parent / 'vdp_ctrl.c'
+vdp.write_text(vdp.read_text() + '\n/* SoR analysis: control-port latches for state export. */\n'
+               'void sor_vdp_latches(unsigned int *out) { out[0] = addr; out[1] = code; out[2] = pending; }\n')
 PY
 cd "$root/build/gpgx-profile"
 make -f Makefile.libretro clean > /dev/null

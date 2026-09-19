@@ -1,6 +1,12 @@
 {
  "actions": {
   "frames": 1481,
+  "modes": {
+   "16": 1481
+  },
+  "waves": [
+   0
+  ],
   "object_types": {
    "0x5": 613,
    "0xe": 1781,
@@ -14,12 +20,19 @@
   "weapon_frames": 0,
   "weapons": [],
   "police_specials_used": 1,
+  "lives_lost": 0,
   "player_health_drops": 0,
   "enemy_hits": {},
   "enemy_knockouts": {}
  },
  "two-player": {
   "frames": 761,
+  "modes": {
+   "16": 761
+  },
+  "waves": [
+   0
+  ],
   "object_types": {
    "0x21": 761,
    "0x22": 1761,
@@ -32,6 +45,7 @@
   "weapon_frames": 0,
   "weapons": [],
   "police_specials_used": 0,
+  "lives_lost": 0,
   "player_health_drops": 3,
   "enemy_hits": {
    "0x22": 7
@@ -42,6 +56,12 @@
  },
  "round1-combat": {
   "frames": 3115,
+  "modes": {
+   "16": 3115
+  },
+  "waves": [
+   0
+  ],
   "object_types": {
    "0x21": 284,
    "0x22": 2882,
@@ -54,6 +74,7 @@
   "weapon_frames": 0,
   "weapons": [],
   "police_specials_used": 0,
+  "lives_lost": 0,
   "player_health_drops": 3,
   "enemy_hits": {
    "0x22": 4,
@@ -65,6 +86,14 @@
  },
  "round1-full": {
   "frames": 9976,
+  "modes": {
+   "16": 9976
+  },
+  "waves": [
+   0,
+   1,
+   2
+  ],
   "object_types": {
    "0x5": 613,
    "0xa": 472,
@@ -87,6 +116,7 @@
   "weapon_frames": 0,
   "weapons": [],
   "police_specials_used": 1,
+  "lives_lost": 1,
   "player_health_drops": 28,
   "enemy_hits": {
    "0x22": 20,
@@ -98,5 +128,213 @@
    "0x21": 1,
    "0x24": 1
   }
+ },
+ "sync-17300": {
+  "frames": 3000,
+  "modes": {
+   "16": 3000
+  },
+  "waves": [
+   2,
+   3
+  ],
+  "object_types": {
+   "0x5": 622,
+   "0x8": 1023,
+   "0xa": 1519,
+   "0xe": 1781,
+   "0x11": 7206,
+   "0x20": 2725,
+   "0x21": 2936,
+   "0x22": 2716,
+   "0x25": 64,
+   "0x26": 5872,
+   "0x29": 560,
+   "0x47": 86,
+   "0x48": 183,
+   "0x49": 189,
+   "0x4a": 2006,
+   "0x54": 6653
+  },
+  "grab_starts": 6,
+  "grab_frames": 434,
+  "weapon_frames": 0,
+  "weapons": [],
+  "police_specials_used": 1,
+  "lives_lost": 0,
+  "player_health_drops": 4,
+  "enemy_hits": {
+   "0x22": 5,
+   "0x21": 2
+  },
+  "enemy_knockouts": {
+   "0x22": 2,
+   "0x21": 1
+  }
+ },
+ "sync-19200": {
+  "frames": 3000,
+  "modes": {
+   "16": 3000
+  },
+  "waves": [
+   3
+  ],
+  "object_types": {
+   "0x8": 2922,
+   "0x11": 930,
+   "0x20": 890,
+   "0x21": 1342,
+   "0x22": 1820,
+   "0x26": 9388,
+   "0x47": 86,
+   "0x49": 90,
+   "0x4a": 2186,
+   "0x54": 6750
+  },
+  "grab_starts": 7,
+  "grab_frames": 505,
+  "weapon_frames": 102,
+  "weapons": [
+   "0x8"
+  ],
+  "police_specials_used": 0,
+  "lives_lost": 1,
+  "player_health_drops": 12,
+  "enemy_hits": {
+   "0x21": 2,
+   "0x26": 5,
+   "0x22": 1
+  },
+  "enemy_knockouts": {
+   "0x21": 1,
+   "0x26": 1
+  }
+ },
+ "sync-22100": {
+  "frames": 3000,
+  "modes": {
+   "16": 3000
+  },
+  "waves": [
+   3
+  ],
+  "object_types": {
+   "0x8": 3000,
+   "0x22": 3000,
+   "0x26": 12000,
+   "0x4a": 102,
+   "0x54": 6000
+  },
+  "grab_starts": 0,
+  "grab_frames": 0,
+  "weapon_frames": 0,
+  "weapons": [],
+  "police_specials_used": 0,
+  "lives_lost": 1,
+  "player_health_drops": 1,
+  "enemy_hits": {},
+  "enemy_knockouts": {}
+ },
+ "sync-boss": {
+  "frames": 4000,
+  "modes": {
+   "16": 4000
+  },
+  "waves": [
+   3
+  ],
+  "object_types": {
+   "0x47": 4000,
+   "0x49": 9,
+   "0x4a": 6372,
+   "0x54": 8000,
+   "0x56": 3966,
+   "0x96": 2322
+  },
+  "grab_starts": 5,
+  "grab_frames": 1827,
+  "weapon_frames": 0,
+  "weapons": [],
+  "police_specials_used": 0,
+  "lives_lost": 2,
+  "player_health_drops": 9,
+  "enemy_hits": {
+   "0x56": 1
+  },
+  "enemy_knockouts": {}
+ },
+ "sync-clear": {
+  "frames": 3000,
+  "modes": {
+   "16": 1908,
+   "18": 19,
+   "1a": 753,
+   "28": 51,
+   "2a": 268,
+   "14": 1
+  },
+  "waves": [
+   0,
+   3
+  ],
+  "object_types": {
+   "0x12": 684,
+   "0x13": 1702,
+   "0x19": 3404,
+   "0x21": 3404,
+   "0x22": 1069,
+   "0x24": 3289,
+   "0x47": 1250,
+   "0x49": 324,
+   "0x4a": 1571,
+   "0x4d": 1702,
+   "0x54": 2500,
+   "0x56": 411,
+   "0x96": 425
+  },
+  "grab_starts": 1,
+  "grab_frames": 2,
+  "weapon_frames": 0,
+  "weapons": [],
+  "police_specials_used": 0,
+  "lives_lost": 0,
+  "player_health_drops": 3,
+  "enemy_hits": {
+   "0x56": 4,
+   "0x22": 4,
+   "0x24": 4,
+   "0x21": 1
+  },
+  "enemy_knockouts": {
+   "0x56": 1,
+   "0x22": 1,
+   "0x24": 1
+  }
+ },
+ "sync-gameover": {
+  "frames": 3000,
+  "modes": {
+   "16": 3000
+  },
+  "waves": [
+   3
+  ],
+  "object_types": {
+   "0x47": 3000,
+   "0x4a": 611,
+   "0x54": 6000,
+   "0x56": 3000,
+   "0x96": 465
+  },
+  "grab_starts": 0,
+  "grab_frames": 224,
+  "weapon_frames": 0,
+  "weapons": [],
+  "police_specials_used": 0,
+  "lives_lost": 1,
+  "player_health_drops": 1,
+  "enemy_hits": {},
+  "enemy_knockouts": {}
  }
 }

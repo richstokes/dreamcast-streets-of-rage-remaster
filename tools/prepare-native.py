@@ -88,6 +88,18 @@ for f in (S/'generated').glob('SoR*'):
         for form,rewrite,expected in ((branch,bcc,conditional),(dbcc_form,dbcc,decrement)):
             text,count=form.subn(rewrite,text)
             if count!=len(expected.findall(text)):raise SystemExit(f'Unrecognized branch form in {f.name}')
+    elif f.name=='SoR.hpp':
+        # Host analysis (state-synchronised comparisons): the register file.
+        old='    int cpuInterruptMask() const override {'
+        assert text.count(old)==1
+        text=text.replace(old,'''    void exchangeCpuState(uint32_t *regs, bool load) override {
+        for (int i = 0; i < 8; i++) { if (load) cpu_.d[i] = regs[i]; else regs[i] = cpu_.d[i]; }
+        for (int i = 0; i < 7; i++) { if (load) cpu_.a[i] = regs[8 + i]; else regs[8 + i] = cpu_.a[i]; }
+        if (load) { cpu_.ssp = regs[15]; cpu_.setStatus(m_word(regs[16])); }
+        else { regs[15] = cpu_.ssp; regs[16] = cpu_.status(); }
+    }
+
+'''+old)
     elif f.name=='SoR-common.hpp':
         text=text.replace('#define BEFORE_INSTRUCTION if (irqLevel() > cpu().interruptMask()) serviceIRQ(); pace();',
             '#define BEFORE_INSTRUCTION if (irqLevel() > cpu().interruptMask()) serviceIRQ(); pace();\n'

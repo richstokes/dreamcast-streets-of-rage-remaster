@@ -138,6 +138,9 @@ void MegaDriveEnvironment::syncAudio(){
 }
 void MegaDriveEnvironment::waitForInterrupt(){
     settleInstruction();
+#ifdef SOR_PC_HISTOGRAM
+    stateSync();
+#endif
     // The CPU idles until the next VBlank; a boundary already crossed (for
     // example during a DMA stall) is the one being waited for.
     if(getenv("SOR_PHASE_DEBUG")&&frames_>478&&frames_<492)sor_log("PHASE wait frame=%lu used=%llu of 896040 mode=%04x counter=%u\n",(unsigned long)frames_,(unsigned long long)(cycles_+frameClocks-nextVblank_),mem_.readWord(0xffff00),mem_.readWord(0xfffb08));
@@ -208,6 +211,56 @@ static void watchFrame(uint32_t frame){
     watchActive=false;
     if(FILE *f=fopen(watchPath.c_str(),"w")){for(auto &e:watchLog)fprintf(f,"%x %llu\n",e.first,(unsigned long long)e.second);fclose(f);}
     sor_log("WATCH written %s (%zu entries)\n",watchPath.c_str(),watchLog.size());
+}
+void MegaDriveEnvironment::stateSync(){
+    static const char *spec=getenv("SOR_STATE_SYNC");
+    static bool done=false;
+    if(!spec||done)return;
+    const std::string s(spec);const auto colon=s.find(':');
+    static std::vector<uint8_t> f;
+    if(f.empty()){
+        if(FILE *in=fopen(s.substr(0,colon).c_str(),"rb")){int c;while((c=fgetc(in))!=EOF)f.push_back(uint8_t(c));fclose(in);}
+        if(f.size()<8||memcmp(f.data(),"SORSTAT1",8))throw std::runtime_error("SOR_STATE_SYNC: bad state file");}
+    size_t at=8;
+    const auto u8=[&]{return f[at++];};
+    const auto u16=[&]{uint32_t v=f[at]<<8|f[at+1];at+=2;return v;};
+    const auto u32=[&]{uint32_t v=uint32_t(f[at])<<24|f[at+1]<<16|f[at+2]<<8|f[at+3];at+=4;return v;};
+    uint32_t r[16];for(auto &v:r)v=u32();
+    const uint32_t sr=u32(),pc=u32();
+    // The main loop waits in one of two routines, each spinning on its own
+    // mailbox value ($10502 sets 1, $10514 sets 2). Sync where the reference
+    // waited: same routine, same stack pointer and same return address.
+    if((pc<0x1050C||pc>0x10512)&&(pc<0x1051E||pc>0x10524))
+        throw std::runtime_error("SOR_STATE_SYNC: reference is not in a VBlank wait loop");
+    const uint8_t *ram=f.data()+at;
+    const auto ramLong=[&](uint32_t a){a&=0xffff;return uint32_t(ram[a])<<24|ram[a+1]<<16|ram[a+2]<<8|ram[a+3];};
+    if(mem_.readWord(0xffff00)!=0x16||mem_.readByte(0xfffa00)!=ram[0xfa00])return;
+    uint32_t regs[17];exchangeCpuState(regs,false);
+    if(regs[15]!=r[15]||mem_.readLong(regs[15])!=ramLong(r[15]))return;
+    done=true;
+    std::copy_n(f.data()+at,65536,mem_.state.ram);at+=65536;
+    std::copy_n(f.data()+at,65536,state_.vram_);at+=65536;
+    for(auto &c:state_.cram_)c=m_word(u16());
+    for(auto &v:state_.vsram_)v=m_word(u16());
+    std::copy_n(f.data()+at,24,state_.regs_);at+=24;
+    state_.address_=m_word(u16());state_.code_=u8();
+    if(u8())throw std::runtime_error("SOR_STATE_SYNC: control-port write pending");
+    state_.pendingSecondWord_=false;state_.dmaFillPending_=false;state_.dmaEndCycle_=0;
+    const int sat=state_.satBase();
+    for(int i=0;i<VDPState::SAT_SIZE;i++)state_.sat_[i]=state_.vram_[(sat+i)&0xffff];
+    const uint8_t *zram=f.data()+at;at+=8192;
+    const uint32_t bank=u32();const uint8_t zstate=u8();
+    uint16_t z[12];for(auto &v:z)v=uint16_t(u16());
+    const uint8_t *misc=f.data()+at;at+=6;
+    if(at!=f.size())throw std::runtime_error("SOR_STATE_SYNC: state file size");
+    audio_.loadZ80(zram,bank,!(zstate&1),(zstate&2)!=0,z,misc);
+    for(int i=0;i<8;i++)regs[i]=r[i];
+    for(int i=0;i<7;i++)regs[8+i]=r[8+i];
+    regs[15]=r[15];regs[16]=sr;
+    exchangeCpuState(regs,true);
+    vintPending_=false;irqHold_=false;
+    if(!replay_load(s.substr(colon+1).c_str()))throw std::runtime_error("SOR_STATE_SYNC: replay");
+    sor_log("STATE_SYNC frame=%lu\n",(unsigned long)frames_);
 }
 static void histogramParse(){
     static bool parsed=false;

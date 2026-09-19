@@ -6,9 +6,12 @@ gate's criteria, the evidence for each and what remains. Evaluation 2026-09-19,
 commit `d3f5c04` and later; original = the ROM in Genesis Plus GX.
 
 **Status: not yet passed.** Everything from power-on to the start of Round 1,
-and Round 1 play for 9,976 frames, matches the original exactly. Weapons, throws
-as a checked category, the boss, finishing the round and continue/game over are
-not yet compared, and physical hardware is untested.
+and Round 1 play for 9,976 frames, matches the original exactly. From shared
+machine states (state-synchronised comparison, below), the rest of Round 1
+matches too: wave 3, a held knife, the boss, the stage clear into Round 2 and
+the last death to the continue prompt. Throws and friendly fire are not yet
+checked as categories, the continue itself and the game-over screen are not
+reached, and physical hardware is untested.
 
 ## Criteria and evidence
 
@@ -16,40 +19,82 @@ not yet compared, and physical hardware is untested.
 | --- | --- | --- |
 | Boot, menus, story and loads last as long as the original, frame for frame | Every game mode equal in both backends (`tools/compare-timeline.py`, two-player replay); decompressor time exact per decode | Met |
 | Movement in all directions, jumps, attacks and combos match the original | Action replay: all 1,481 frames and all object bytes (`phase-aligned-actions.json`) | Met |
-| Round 1 enemies behave as in the original (AI, damage, knockdown) | Round 1 play equal for 9,976 frames: enemy types `$21`–`$25` present; `$21`, `$22` and `$24` hit (32 times) and knocked out (8); Round 1 combat equal for 3,115 frames | Met for waves 0–1 |
-| Grabs and throws | 16 grabs in matched windows (grab fields equal); throws not counted separately | Partly met |
-| Police special | Used twice in matched windows, control lock and stock equal | Met |
-| Player damage, death and respawn | 34 health drops and a death with respawn in the matched Round 1 window | Met |
+| Round 1 enemies behave as in the original (AI, damage, knockdown) | From power-on, Round 1 play equal for 9,976 frames (waves 0–2; types `$21`–`$25`; 32 hits, 8 knockouts). State-synced, wave 3 (`$20`, `$26`) equal for 3,000 frames in each of three windows: 15 hits on `$21`, `$22` and `$26`, 5 knockouts | Met |
+| Grabs and throws | 16 grabs from power-on and 19 in synced windows (grab fields equal); throws not counted separately | Partly met |
+| Police special | Used twice from power-on and once synced; control lock and stock equal | Met |
+| Player damage, death and respawn | 34 health drops and a death with respawn from power-on; synced: 30 health drops and five deaths, three of them to the boss | Met |
 | Two-player play (join, interaction, shared progression) | Two-player encounter: all 761 frames and object bytes; friendly fire, joint grabs and shared continues not isolated | Partly met |
-| Weapons and pickups | No pickup in the matched windows | Not met |
-| Round 1 boss, round completion, continue and game over | Beyond the matched Round 1 window | Not met |
+| Weapons and pickups | Synced: a knife (`$08`) picked up and held for 102 frames, food (`$47`) on the ground; other weapons and eating not isolated | Partly met |
+| Round 1 boss | Synced: Antonio (`$56`) and his boomerang (`$96`) for 4,000 frames, all game RAM equal | Met |
+| Round completion | Synced: Antonio knocked out, stage clear (modes `$18`/`$1A`), Round 2 intro and its first wave; all settled frames equal | Met |
+| Continue and game over | Synced: last life lost to the boss, the continue object `$0F` for 2,632 and 2,853 frames in two windows, equal; continuing and the game-over screen not reached | Partly met |
 | Original audio in step with the game | Effect and music channels match the driver state; drum driver writes match the original's in count and value (AUDIO.md, CADENCE.md) | Met |
 | Full speed on the target | Flycast gameplay 1,611 flips over 1,616 VBlanks with audio; one stream underrun at round start (TODO.md); hardware untested | Partly met |
 
 Coverage figures: `reference/results/behaviour-coverage-2026-09-19.json`
 (`tools/behaviour-coverage.py`); comparisons:
-`reference/results/behaviour-round1-2026-09-19.json`.
+`reference/results/behaviour-round1-2026-09-19.json` (from power-on) and
+`reference/results/state-sync-2026-09-19.json` (synced).
 
-## What blocks the remaining items
+## Why comparisons from power-on stop at 9,976 frames
 
 A comparison stays exact only while every gameplay update finishes on the same
 side of its VBlank as the original's. Round 1 play diverges at relative frame
 9,977, where the original's update ends 79 cycles before the VBlank and native's
-a few hundred cycles later. Native timing now tracks the original to an RMS of
+a few hundred cycles later. Native timing tracks the original to an RMS of
 about 490 cycles per update (CADENCE.md), so long runs meet such near-ties.
 
-Two ways forward:
+## State-synchronised comparison
 
-1. **Shorter scenarios for the missing behaviour** (weapons and pickups,
-   throws, friendly fire, continue), each reaching its event within the frames
-   that stay exact.
-2. **State-synchronised comparisons** for content far into the round (the boss,
-   completion): start both backends from the same machine state (68000
-   registers, work RAM, VDP, Z80 and sound state) at a VBlank wait and compare
-   the following window. This isolates behaviour from accumulated timing
-   differences; it would be labelled as a comparison technique, not play.
+This is a comparison technique, not play: it shows that from the same machine
+state the port behaves as the original, independent of timing differences
+accumulated before it (`tools/state-sync.py`, REFERENCE.md).
 
-Closing the timing gap further (exact per-path costs for the remaining
-hand-written routines, DIV and register-shift timing, YM2612 busy from the Z80's
-own writes) extends every exact window but will not by itself reach the end of
-the round.
+1. The original's machine state is exported at the end of a frame (68000
+   registers, work RAM, VDP registers and memories, Z80 RAM and registers; the
+   YM2612 and PSG are not read by the game and are not transferred). The frame
+   must be one where the 68000 waits for VBlank in the main loop and no
+   incremental Nemesis stream is in flight, whose decoder the port keeps in host
+   state.
+2. The native port plays the scenario from power-on to its first matching
+   VBlank wait in Round 1, loads that state and plays the original's inputs
+   from the export frame on.
+3. Work RAM is compared frame by frame. RAM the port represents differently is
+   left out (incremental Nemesis registers, the Nemesis code table, stack below
+   the main loop's frame). Frames where both captures were taken while an update
+   or a load was still running (mailbox `$FFFA00` zero) are listed separately:
+   each such difference is the other side's RAM one frame earlier or later, and
+   the next settled frame matches.
+
+| Window (original frame) | Content | Frames | Result |
+| --- | --- | --- | --- |
+| `round1-full` 10,384 | wave 2 | 3,000 | diverges at 977 (the known near-tie at 9,977) |
+| `round1-full` 18,685 | wave 3: Garcia `$20`, Nora `$26` | 3,000 | equal (2 unsettled frames) |
+| `round1-full` 20,584 | wave 3, knife held, food | 3,000 | equal (1 unsettled) |
+| `round1-full` 23,485 | wave 3, last death, continue object `$0F` | 3,000 | equal |
+| `round1-bot` 11,497 | Antonio fight, two deaths | 4,000 | equal |
+| `round1-bot-clear` 14,900 | Antonio knocked out, stage clear, Round 2 start | 3,000 | equal (29 unsettled, during the two loads) |
+| `round1-bot` 16,900 | last death, continue object `$0F` | 3,000 | equal |
+
+No recorded replay survives to the boss, so the last three windows come from
+`tools/bot-play.py`: a scripted policy plays the original, and until a set frame
+RAM writes keep the player standing and hold ordinary enemies at one hit point.
+The writes stop well before the export (frame 11,000 and 14,800), so every
+compared frame is the game playing the recorded inputs on its own. The bot's
+inputs are saved as ordinary scenarios (`reference/scenarios/round1-bot*.json`).
+
+The round-clear window found one difference: the Z80 driver loader (`$1061C`)
+decompresses the driver into work RAM at `$FF7000` before copying it to the Z80,
+and the port decoded it in host memory only. The port now leaves the same bytes
+in RAM.
+
+## What remains
+
+- **Throws and friendly fire** as checked categories, and joint two-player play
+  beyond the encounter replay.
+- **Continue and game over**: a run that presses Start on the continue prompt,
+  and one that lets it run out.
+- **Timing**: exact per-path costs for the remaining hand-written routines, DIV
+  and register-shift timing and YM2612 busy from the Z80's own writes would
+  extend every exact window from power-on.
+- **Hardware**: a run on a physical console.
