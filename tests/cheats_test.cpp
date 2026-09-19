@@ -63,7 +63,10 @@ int main() {
     menu.apply(memory); assert(memory.readByte(0xffff23) == 0); // Never resurrect absent P2.
     memory.writeWord(0xffff02, 7); memory.writeByte(0xffff21, 0);
     menu.apply(memory); assert(memory.readByte(0xffff21) == 0); // No police in Round 8.
+    down(menu); right(menu); // Graphics.
+    assert(menu.settings().enhancedGraphics);
     down(menu); tap(menu, &PlayerControlsState::c); // Restore defaults.
+    assert(!menu.settings().enhancedGraphics);
     assert(menu.settings().round == 1 && menu.settings().lives == 3);
     assert(!menu.settings().infiniteLives && !menu.settings().infiniteHealth && !menu.settings().infiniteSpecials);
     uint8_t before[65536]; std::memcpy(before, memory.state.ram, sizeof(before));

@@ -32,6 +32,7 @@ void refill(SystemMemory &memory, uint32_t address, unsigned count, uint32_t hud
 }
 
 void Menu::input(const PlayerControlsState &pad) {
+    constexpr unsigned rows = 8;
     const unsigned held = buttons(pad), pressed = held & ~previous_;
     previous_ = held;
     if (!pad.connected) return;
@@ -41,7 +42,7 @@ void Menu::input(const PlayerControlsState &pad) {
     }
     if (pressed & (32 | 64 | 128)) { visible_ = false; return; }
     if (pressed & 3) {
-        row_ = (row_ + ((pressed & 1) ? 6 : 1)) % 7;
+        row_ = (row_ + ((pressed & 1) ? rows - 1 : 1)) % rows;
         return;
     }
     const bool confirm = pressed & 16;
@@ -53,10 +54,11 @@ void Menu::input(const PlayerControlsState &pad) {
     case 2: settings_.infiniteLives = !settings_.infiniteLives; break;
     case 3: settings_.infiniteHealth = !settings_.infiniteHealth; break;
     case 4: settings_.infiniteSpecials = !settings_.infiniteSpecials; break;
-    case 5:
+    case 5: settings_.enhancedGraphics = !settings_.enhancedGraphics; break;
+    case 6:
         if (confirm) { settings_ = {}; overrideRound_ = overrideLives_ = true; }
         break;
-    case 6: if (confirm) visible_ = false; break;
+    case 7: if (confirm) visible_ = false; break;
     }
 }
 

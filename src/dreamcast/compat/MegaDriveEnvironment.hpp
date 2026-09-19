@@ -88,6 +88,11 @@ public:
     void pcHistogram(unsigned,unsigned){}
 #endif
     void waitForInterrupt(); void debugState();
+    // Enhanced rendering: record which SAT records each object emits
+    // (src/render/sprite_probe.hpp). Host bookkeeping only; no emulated time.
+    void spriteProbeBuild();
+    void spriteProbeObject(uint32_t object,uint32_t mapping,bool flip,uint16_t x,uint16_t y,uint32_t sat);
+    void spriteProbeEnd(uint32_t sat);
 #ifdef SOR_PC_HISTOGRAM
     // Host analysis: SOR_STATE_SYNC=state:replay replaces the machine state with
     // the reference's (genesis_reference.py --export-state) at the first VBlank

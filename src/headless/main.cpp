@@ -8,6 +8,9 @@
 #include <string>
 #include <cstdlib>
 #include "vdp_scene.hpp"
+#include "extract_frames.hpp"
+#include "art_catalog.hpp"
+#include <vector>
 
 namespace {
 struct ReplayFinished {};
@@ -17,11 +20,77 @@ std::unique_ptr<sor::VdpScene> scene;
 VDPState *sceneState=nullptr;
 unsigned sceneFrames=0;
 sor::TitleCaption sceneTitle;
+// Enhanced-rendering preview (SOR_ENHANCED_CAPTURE=dir:first:last:step, art
+// from SOR_ART): original at 2x on the left, enhanced on the right.
+struct EnhancedCapture {
+    std::string directory;unsigned first=0,last=0,step=1,frame=0;bool pending=false;
+    std::vector<uint8_t> package;sor::ArtCatalog art;
+    std::unique_ptr<sor::VdpScene> scene;std::vector<uint16_t> image;int width=0,height=0;
+} capture;
+void capture_setup(){
+    static bool done=false;if(done)return;done=true;
+    if(const char *path=std::getenv("SOR_ART")){
+        FILE *f=fopen(path,"rb");if(!f)throw std::runtime_error("SOR_ART open failed");
+        int c;while((c=fgetc(f))!=EOF)capture.package.push_back(uint8_t(c));fclose(f);
+        if(!capture.art.load(capture.package.data(),capture.package.size()))throw std::runtime_error("SOR_ART package invalid");
+        printf("ART %zu frames in %zu pages\n",capture.art.frames().size(),capture.art.pages().size());
+    }
+    if(const char *spec=std::getenv("SOR_ENHANCED_CAPTURE")){
+        std::string s(spec);const auto a=s.rfind(':'),b=s.rfind(':',a-1),c=s.rfind(':',b-1);
+        capture.directory=s.substr(0,c);capture.first=std::stoul(s.substr(c+1,b-c-1));
+        capture.last=std::stoul(s.substr(b+1,a-b-1));capture.step=std::max(1ul,std::stoul(s.substr(a+1)));
+        capture.scene=std::make_unique<sor::VdpScene>();
+    }
+}
+void capture_enhanced(VDPState &state,VDPRenderer &renderer){
+    capture_setup();
+    capture.frame++;capture.pending=false;
+    if(!capture.scene||capture.frame<capture.first||capture.frame>capture.last||(capture.frame-capture.first)%capture.step)return;
+    const auto status=state.status_;   // scene building sets sprite status bits; keep the game's
+    capture.scene->enhanced=true;capture.scene->art=&capture.art;
+    const bool ok=capture.scene->build(state,renderer);
+    state.status_=status;
+    if(!ok)return;
+    capture.width=capture.scene->width*2;capture.height=capture.scene->height*2;
+    capture.image.assign(size_t(capture.width)*capture.height,0);
+    sor::raster_enhanced(*capture.scene,state,capture.image.data(),capture.width);
+    capture.pending=true;
+}
+void capture_write(const Framebuffer &fb,int width,int height){
+    if(!capture.pending)return;
+    capture.pending=false;
+    char name[32];snprintf(name,sizeof name,"/frame-%06u.ppm",capture.frame);
+    FILE *out=fopen((capture.directory+name).c_str(),"wb");if(!out)throw std::runtime_error("Enhanced capture open failed");
+    const int w=width*2+capture.width,h=std::max(height*2,capture.height);
+    fprintf(out,"P6\n%d %d\n255\n",w,h);
+    const auto *b=static_cast<const uint8_t*>(fb.getRawPointer());
+    std::vector<uint8_t> row(size_t(w)*3);
+    for(int y=0;y<h;y++){
+        std::fill(row.begin(),row.end(),0);
+        for(int x=0;x<width*2&&y<height*2;x++){const auto *p=b+(y/2)*Framebuffer::PITCH+(x/2)*3;
+            for(int k=0;k<3;k++)row[x*3+k]=uint8_t(p[2-k]*255/7);}
+        for(int x=0;x<capture.width&&y<capture.height;x++){const uint16_t c=capture.image[y*capture.width+x];
+            const int o=(width*2+x)*3;row[o]=uint8_t((c>>10&31)*255/31);row[o+1]=uint8_t((c>>5&31)*255/31);row[o+2]=uint8_t((c&31)*255/31);}
+        fwrite(row.data(),1,row.size(),out);
+    }
+    fclose(out);
+    // The art drawn in this frame, for checking what replaced what.
+    snprintf(name,sizeof name,"/frame-%06u.txt",capture.frame);
+    if(FILE *list=fopen((capture.directory+name).c_str(),"w")){
+        const auto &scene=*capture.scene;
+        for(size_t i=0;i<scene.artCount;i++){const auto &d=scene.artDraws[i];const auto &f=capture.art.frames()[d.frame];
+            fprintf(list,"art %06X p%d anchor %d,%d layer %d order %d%s size %dx%d\n",f.mapping,f.palette,d.x,d.y,d.layer,d.order,d.flip?" flip":"",f.w,f.h);}
+        fprintf(list,"sprite cells %zu\n",scene.spriteTileCount);fclose(list);
+    }
+}
 }
 const uint8_t *platform_embedded_rom(size_t &size){size=0;return nullptr;}
 void platform_video_init(){}
 void platform_video_shutdown(){}
 bool platform_render_vdp(VDPState &state,VDPRenderer &renderer,const sor::TitleCaption &title){
+    static unsigned presented=0;
+    sor::extract_frames(state,++presented);
+    capture_enhanced(state,renderer);
     if(std::getenv("SOR_VALIDATE_GPU_SCENE")){
         if(!scene)scene=std::make_unique<sor::VdpScene>();
         sceneState=scene->buildCached(state,renderer)?&state:nullptr;
@@ -30,6 +99,7 @@ bool platform_render_vdp(VDPState &state,VDPRenderer &renderer,const sor::TitleC
     return false;
 }
 void platform_video_present(const Framebuffer &fb,int width,int height){
+    capture_write(fb,width,height);
     if(!sceneState)return;
     uint16_t expected[320*240];sor::raster_scene(*scene,*sceneState,expected);
     sceneTitle.draw([&](int x,int y,unsigned r,unsigned g,unsigned b){expected[y*320+x]=sor::VdpScene::rgb1555(r,g,b);});

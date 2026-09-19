@@ -1,5 +1,7 @@
 #include "vdp_scene.hpp"
 #include "equal_bytes.hpp"
+#include "art_catalog.hpp"
+#include "sprite_probe.hpp"
 #include <algorithm>
 #include <cstring>
 #include <stdexcept>
@@ -38,7 +40,7 @@ uint16_t VdpScene::rgb1555(unsigned r,unsigned g,unsigned b){
 }
 bool VdpScene::buildCached(VDPState &s,VDPRenderer &){
     // VRAM: no write since the cached frame (a write of equal bytes rebuilds).
-    reused=cacheValid && same_render_regs(s,previous)
+    reused=cacheValid && enhanced==builtEnhanced_ && same_render_regs(s,previous)
         && s.vramGeneration_==previous.vramGeneration_
         && equal_bytes(s.cram_,previous.cram_,sizeof(s.cram_))
         && equal_bytes(s.vsram_,previous.vsram_,sizeof(s.vsram_))
@@ -57,6 +59,7 @@ bool VdpScene::buildCached(VDPState &s,VDPRenderer &){
         && unchanged_region(s,previous,s.windowBase(),(s.h40Mode()?64:32)*32*2)
         && unchanged_region(s,previous,s.hscrollBase(),s.hscrollMode()==0?4:s.activeHeight()*4);
     const auto status=s.status_;s.status_&=~0x60;
+    builtEnhanced_=enhanced;
     cacheValid=buildImpl(s,geometrySame);spriteFlags=s.status_&0x60;s.status_|=status;
     if(cacheValid)previous=s;
     return cacheValid;
@@ -81,6 +84,7 @@ bool VdpScene::buildImpl(VDPState &s,bool keepPlanes){
     if(!s.displayEnabled())return true;
     if(!keepPlanes){plane(s,1);plane(s,0);window(s);}
     spriteLayers(s);
+    if(enhanced)enhancedSprites(s);
     s.vCounter_=height-1;
     return true;
 }
@@ -143,6 +147,46 @@ void VdpScene::spriteLayers(VDPState &s){
         index=link;
     }
 }
+void VdpScene::enhancedSprites(const VDPState &s){
+    spriteTileCount=0;artCount=0;
+    const int base=s.satBase();
+    const auto record=[&](int index){return s.vram_+((base+index*8)&0xFFFF);};
+    // SAT records owned by objects that have replacement art.
+    int16_t owner[VDPState::SAT_MAX_SPRITES];std::fill_n(owner,VDPState::SAT_MAX_SPRITES,int16_t(-1));
+    uint32_t frameOf[SpriteBuild::MAX_OBJECTS]{};
+    const SpriteBuild *build=art&&!art->empty()?sprite_probe().displayed(s):nullptr;
+    if(build)for(unsigned o=0;o<build->count;o++){
+        const auto &obj=build->objects[o];
+        if(obj.first+obj.count>VDPState::SAT_MAX_SPRITES)continue;
+        const ArtFrame *f=art->find(obj.mapping,record(obj.first)[4]>>5&3);
+        if(!f)continue;
+        frameOf[o]=uint32_t(f-art->frames().data());
+        for(int r=obj.first;r<obj.first+obj.count;r++)owner[r]=int16_t(o);
+    }
+    int index=0;
+    for(int ordinal=0;ordinal<VDPState::SAT_MAX_SPRITES;ordinal++){
+        const uint8_t *e=record(index);
+        const int link=e[3]&127,attr=e[4]<<8|e[5],layer=attr>>15&1;
+        if(owner[index]>=0){
+            const auto &obj=build->objects[owner[index]];
+            if(index==obj.first)
+                artDraws[artCount++]={frameOf[owner[index]],int16_t(obj.x-128),int16_t(obj.y-128),uint8_t(layer),uint8_t(ordinal),obj.flip};
+        }else{
+            const int y=((e[0]&3)<<8|e[1])-128,x=((e[6]&1)<<8|e[7])-128;
+            const int cellsW=(e[2]>>2&3)+1,cellsH=(e[2]&3)+1;
+            const bool hf=attr&0x800,vf=attr&0x1000;
+            if(x<width&&y<height&&x+cellsW*8>0&&y+cellsH*8>0)
+                for(int cx=0;cx<cellsW;cx++)for(int cy=0;cy<cellsH;cy++){
+                    if(spriteTileCount==MAX_SPRITE_TILES)break;
+                    const int dx=(hf?cellsW-1-cx:cx)*8,dy=(vf?cellsH-1-cy:cy)*8;
+                    spriteTiles[spriteTileCount++]={uint16_t((attr+cx*cellsH+cy)&2047),int16_t(x+dx),int16_t(y+dy),
+                        uint8_t(attr>>13&3),uint8_t(layer),uint8_t(ordinal),hf,vf};
+                }
+        }
+        if(!link||link>=VDPState::SAT_MAX_SPRITES)break;
+        index=link;
+    }
+}
 void VdpScene::add(uint16_t e,int x,int y,int w,int h,int px,int py,int lowDepth){
     if(count==MAX_QUADS)throw std::runtime_error("VDP scene quad bound exceeded");
     auto &q=quads[count++];q.tile=e&2047;q.palette=(e>>13)&3;q.depth=lowDepth+((e&0x8000)?3:0);
@@ -192,6 +236,47 @@ void raster_scene(const VdpScene &scene,const VDPState &s,uint16_t *out){
                 int u=q.u1>q.u0?q.u0+x:q.u0-1-x,v=q.v1>q.v0?q.v0+y:q.v0-1-y;
                 uint8_t b=s.vram_[q.tile*32+v*4+u/2];unsigned c=(u&1)?b&15:b>>4;
                 if(c)out[(q.y+y)*320+q.x+x]=scene.colors[q.palette*16+c];
+            }
+        }
+    }
+}
+void raster_enhanced(const VdpScene &scene,const VDPState &s,uint16_t *out,int pitch){
+    const int w=scene.width*2,h=scene.height*2;
+    for(int y=0;y<h;y++)std::fill_n(out+y*pitch,w,scene.background);
+    const auto plot=[&](int x,int y,uint16_t c){if(x>=0&&y>=0&&x<w&&y<h)out[y*pitch+x]=c;};
+    const auto tileTexel=[&](int tile,int u,int v){uint8_t b=s.vram_[(tile*32+v*4+u/2)&0xFFFF];return (u&1)?b&15:b>>4;};
+    for(int depth=1;depth<=6;depth++){
+        if(depth==3||depth==6){
+            const int layer=depth==6;
+            // Back to front: the last sprite in link order is drawn first.
+            for(int ordinal=VDPState::SAT_MAX_SPRITES-1;ordinal>=0;ordinal--){
+                for(size_t i=0;i<scene.spriteTileCount;i++){const auto &t=scene.spriteTiles[i];
+                    if(t.layer!=layer||t.order!=ordinal)continue;
+                    for(int v=0;v<8;v++)for(int u=0;u<8;u++){
+                        const int c=tileTexel(t.tile,t.hflip?7-u:u,t.vflip?7-v:v);
+                        if(!c)continue;
+                        const uint16_t color=scene.colors[t.palette*16+c];
+                        for(int k=0;k<4;k++)plot((t.x+u)*2+(k&1),(t.y+v)*2+(k>>1),color);
+                    }
+                }
+                for(size_t i=0;i<scene.artCount;i++){const auto &d=scene.artDraws[i];
+                    if(d.layer!=layer||d.order!=ordinal||!scene.art)continue;
+                    const auto &f=scene.art->frames()[d.frame];const auto &page=scene.art->pages()[f.page];
+                    const int left=d.x*2-(d.flip?f.w-f.anchorX:f.anchorX),top=d.y*2-f.anchorY;
+                    for(int v=0;v<f.h;v++)for(int u=0;u<f.w;u++){
+                        const uint16_t c=page.pixels[(f.v+v)*page.width+f.u+(d.flip?f.w-1-u:u)];
+                        if(c&0x8000)plot(left+u,top+v,c);
+                    }
+                }
+            }
+        }
+        for(size_t i=0;i<scene.count;i++){const auto &q=scene.quads[i];if(q.depth!=depth)continue;
+            for(int y=0;y<q.h;y++)for(int x=0;x<q.w;x++){
+                const int u=q.u1>q.u0?q.u0+x:q.u0-1-x,v=q.v1>q.v0?q.v0+y:q.v0-1-y;
+                const int c=tileTexel(q.tile,u,v);
+                if(!c)continue;
+                const uint16_t color=scene.colors[q.palette*16+c];
+                for(int k=0;k<4;k++)plot((q.x+x)*2+(k&1),(q.y+y)*2+(k>>1),color);
             }
         }
     }

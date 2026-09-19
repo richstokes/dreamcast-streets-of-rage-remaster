@@ -165,7 +165,10 @@ transitions, original audio and one-/two-player coverage; simply reaching it is 
 
 ## 4. Graphical remaster — after the first-section fidelity gate
 
-- [ ] Make original and enhanced rendering selectable using the same simulation.
+- [x] Make original and enhanced rendering selectable using the same simulation.
+  (2026-09-19: options menu GRAPHICS row; sprite probe, enhanced scene, art catalog and
+  Dreamcast path at full speed with placeholder art; docs/REMASTER.md.)
+- [ ] Apply palette effects (fades, flashes) to replacement art (PowerVR vertex colour).
 - [ ] Establish gritty neon-city art direction, distinctive silhouettes and readable combat.
 - [x] Establish initial 4:3 640×480 output without widening the gameplay area.
 - [ ] Validate the final output/performance configuration on the retail target.
@@ -206,8 +209,11 @@ transitions, original audio and one-/two-player coverage; simply reaching it is 
 
 ## 5. Console asset pipeline
 
-- [ ] Build repeatable reference-data extraction tools.
+- [x] Build repeatable reference-data extraction tools. (Object frames with anchors:
+  SOR_EXTRACT_FRAMES; side-by-side previews: SOR_ENHANCED_CAPTURE; docs/REMASTER.md.)
 - [ ] Build replacement-art import, texture packing and animation-metadata validation tools.
+  (Packing and the runtime format exist for placeholders, tools/make-placeholder-art.py;
+  import and validation of real art remain.)
 - [ ] Select practical texture formats, palettes and compression using measured costs.
 - [ ] Implement stage-specific loading/residency; never preload the entire enhanced game.
 - [ ] Budget every enhancement, including the 4× pixel-storage cost of doubling both dimensions.

@@ -19,6 +19,7 @@ for f in D.glob('SoR-*'):
 sys.path.insert(0,str(R/'tools'))
 from game_patches import patch as patch_game
 from cheat_patches import patch_generated as patch_cheats
+from sprite_probe_patches import patch_generated as patch_sprite_probe
 for f in ['CPU68K.hpp','SoRCheats.hpp','SoRCheats.cpp','SoRControls.cpp','SoRManualFunctions.cpp','SoRInteractions.cpp','SoRMainMenus.cpp','SoRDecompress.cpp','SoRSound.cpp']:
     text=patch_game(f,(S/f).read_text());target=D/f
     if not target.exists() or target.read_text()!=text:target.write_text(text)
@@ -52,6 +53,7 @@ for f in (S/'generated').glob('SoR*'):
     text=f.read_text()
     if f.suffix=='.cpp':
         text=patch_cheats(text)
+        text=patch_sprite_probe(text)
         def charge(m):
             n=m68k_cycles(int(m.group(2),16),m.group(3))
             if not 4<=n<=200:raise SystemExit(f'Implausible 68000 time {n} for {m.group(3)!r} in {f.name}')
@@ -156,6 +158,9 @@ if '--dreamcast' in sys.argv:
     pcframes=os.environ.get('SOR_PC_PROFILE_FRAMES','0:0')
     if not re.fullmatch(r'\d+:\d+',pcframes):raise SystemExit('SOR_PC_PROFILE_FRAMES must be FIRST:LAST')
     pcfirst,pclast=pcframes.split(':')
+    # Start in enhanced graphics (the options menu still switches); benchmarks.
+    enhanced=os.environ.get('SOR_ENHANCED','0')
+    if enhanced not in ('0','1'):raise SystemExit('SOR_ENHANCED must be 0 or 1')
     config=D/'sor_audio_config.hpp'
-    text='#pragma once\n#define SOR_ENABLE_EXPERIMENTAL_AUDIO '+audio+'\n#define SOR_ENABLE_NATIVE_DAC '+native+'\n#define SOR_ENABLE_AICA_DAC '+split+'\n#define SOR_ENABLE_AUDIO_PROFILE '+profile+'\n#define SOR_ENABLE_PC_PROFILE '+pcprofile+'\n#define SOR_PC_PROFILE_FIRST '+pcfirst+'\n#define SOR_PC_PROFILE_LAST '+pclast+'\n'
+    text='#pragma once\n#define SOR_ENABLE_EXPERIMENTAL_AUDIO '+audio+'\n#define SOR_ENABLE_NATIVE_DAC '+native+'\n#define SOR_ENABLE_AICA_DAC '+split+'\n#define SOR_ENABLE_AUDIO_PROFILE '+profile+'\n#define SOR_ENABLE_PC_PROFILE '+pcprofile+'\n#define SOR_PC_PROFILE_FIRST '+pcfirst+'\n#define SOR_PC_PROFILE_LAST '+pclast+'\n#define SOR_DEFAULT_ENHANCED '+enhanced+'\n'
     if not config.exists() or config.read_text()!=text:config.write_text(text)

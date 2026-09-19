@@ -60,23 +60,24 @@ void draw(const Menu &model, Framebuffer &fb) {
     text(&fb, pixel, 192, 29, "SESSION ONLY", 4, 5, 6);
     const auto &s = model.settings();
     const char *labels[] = {"START ROUND", "STARTING LIVES", "INFINITE LIVES", "INFINITE HEALTH",
-                            "INFINITE SPECIALS", "RESTORE DEFAULTS", "RETURN TO GAME"};
+                            "INFINITE SPECIALS", "GRAPHICS", "RESTORE DEFAULTS", "RETURN TO GAME"};
     const char round[] = {char('0' + s.round), ' ', '/', ' ', '8', 0};
     const char lives[] = {char('0' + s.lives), 0};
     const char *values[] = {round, lives, s.infiniteLives ? "ON" : "OFF", s.infiniteHealth ? "ON" : "OFF",
-                           s.infiniteSpecials ? "ON" : "OFF", "", ""};
-    for (unsigned row = 0; row < 7; ++row) {
-        const int y = 53 + row * 17;
+                           s.infiniteSpecials ? "ON" : "OFF", s.enhancedGraphics ? "ENHANCED" : "ORIGINAL", "", ""};
+    for (unsigned row = 0; row < 8; ++row) {
+        const int y = 51 + row * 15;
         if (model.row() == row) {
-            rect(fb, 23, y - 4, 275, 15, 0, 3, 4);
+            rect(fb, 23, y - 3, 275, 13, 0, 3, 4);
             text(&fb, pixel, 28, y, ">", 7, 7, 7);
         }
         text(&fb, pixel, 40, y, labels[row], 7, 7, 7);
-        text(&fb, pixel, 247, y, values[row], 7, 6, 2);
+        text(&fb, pixel, row == 5 ? 243 : 247, y, values[row], 7, 6, 2);
     }
     const char *help[] = {"ROUND AND LIVES: NEXT NEW GAME", "ROUND AND LIVES: NEXT NEW GAME",
         "BOTH PLAYERS / REFILLS TO 9", "BOTH PLAYERS / FALLS STILL COUNT",
-        "BOTH PLAYERS / ROUNDS 1-7 ONLY", "A: RESET ALL CHEAT SETTINGS", "A: RETURN / SETTINGS APPLY"};
+        "BOTH PLAYERS / ROUNDS 1-7 ONLY", "PRESENTATION ONLY / SAME GAME",
+        "A: RESET ALL CHEAT SETTINGS", "A: RETURN / SETTINGS APPLY"};
     text(&fb, pixel, 23, 183, help[model.row()], 5, 6, 7);
     text(&fb, pixel, 23, 199, "UP/DOWN: SELECT  LEFT/RIGHT: CHANGE", 5, 6, 7);
     text(&fb, pixel, 23, 211, "A: CHANGE  B/START: RETURN", 5, 6, 7);

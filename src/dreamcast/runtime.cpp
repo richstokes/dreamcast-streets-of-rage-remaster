@@ -4,6 +4,7 @@
 #include "Logger.hpp"
 #include "replay.hpp"
 #include "cheats.hpp"
+#include "sprite_probe.hpp"
 #include <cstdlib>
 #include <cstring>
 #include <stdexcept>
@@ -41,7 +42,7 @@ void MegaDriveEnvironment::loadROM(const std::string &path){
     rom_=static_cast<uint8_t*>(malloc(524288)); if(!rom_){fclose(f);throw std::runtime_error("ROM allocation failed");}
     if(fread(rom_,1,524288,f)!=524288 || fgetc(f)!=EOF){fclose(f);throw std::runtime_error("ROM size mismatch");}
     fclose(f); mem_.state.rom=rom_; mem_.state.rom_size=524288;audio_.setROM(mem_.state.rom,mem_.state.rom_size);
-    sor_log("SOR native: ROM loaded; %s audio; no enhanced art\n",audio_.enabled?"experimental":"disabled");
+    sor_log("SOR native: ROM loaded; %s audio\n",audio_.enabled?"experimental":"disabled");
 }
 uint32_t MegaDriveEnvironment::readBus(void *ctx,uint32_t a,unsigned w){
     auto &e=*static_cast<MegaDriveEnvironment*>(ctx);
@@ -131,6 +132,12 @@ void MegaDriveEnvironment::present(){
     if(frames_%600==0){auto stats=platform_memory_stats();sor_log("SOR frame=%lu mode=%04x raster_us=%llu render_us=%llu heap_used=%lu vram_free=%lu faults=%lu last=%06lx\n",(unsigned long)frames_,mem_.readWord(0xffff00),(unsigned long long)(renderDone-start),(unsigned long long)(platform_time_us()-start),(unsigned long)stats.heap_used,(unsigned long)stats.vram_free,(unsigned long)mem_.state.faults,(unsigned long)last_);}
 
 }
+void MegaDriveEnvironment::spriteProbeBuild(){sor::sprite_probe().beginBuild();}
+void MegaDriveEnvironment::spriteProbeObject(uint32_t object,uint32_t mapping,bool flip,uint16_t x,uint16_t y,uint32_t sat){
+    sor::sprite_probe().beginObject(uint16_t(object),uint8_t(mem_.readByte(object)),mapping,flip,int16_t(x),int16_t(y),
+                                    uint16_t(mem_.readWord(object+0x0E)),sat);
+}
+void MegaDriveEnvironment::spriteProbeEnd(uint32_t sat){sor::sprite_probe().endObject(sat,mem_.state.ram);}
 void MegaDriveEnvironment::syncAudio(){
     audio_.sync68k(uint32_t(cycles_-frameCycles_));
     cycles_+=audio_.takeBusStall();

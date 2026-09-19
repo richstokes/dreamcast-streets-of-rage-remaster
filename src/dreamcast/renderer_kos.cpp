@@ -9,6 +9,9 @@
 #include "equal_bytes.hpp"
 #include "cheats.hpp"
 #include "title_caption.hpp"
+#include "art_catalog.hpp"
+#include "sor_audio_config.hpp"
+#include <vector>
 namespace {
 std::unique_ptr<sor::VdpScene> scene;
 pvr_ptr_t tiles=nullptr,spriteTexture[2]{};
@@ -28,7 +31,16 @@ constexpr size_t maxTileQuads=6000;
 static_assert(sizeof(Packet)==160);
 Packet packets[maxTileQuads+2];
 size_t packetCount=0;
-bool packetsValid=false;
+bool packetsValid=false,packetsEnhanced=false;
+// Enhanced graphics: hardware sprite cells and replacement-art frames, one
+// quad each, rebuilt when the scene changes (docs/REMASTER.md).
+constexpr size_t maxSpritePackets=sor::VdpScene::MAX_SPRITE_TILES+80;
+Packet spritePackets[maxSpritePackets];
+size_t spritePacketCount=0;
+sor::ArtCatalog art;
+std::vector<uint8_t> artPackage;
+std::vector<pvr_ptr_t> artTextures;
+std::vector<pvr_poly_hdr_t> artHeaders;
 int uploadedTop[2]{256,256},uploadedBottom[2]{};
 void header(pvr_poly_hdr_t &h,pvr_ptr_t texture,int w,int hgt,bool linear,int palette=-1){
     pvr_poly_cxt_t c;
@@ -42,6 +54,30 @@ void quad(Packet &packet,const pvr_poly_hdr_t &h,float x,float y,float w,float h
     const float xx[]={x,x+w,x,x+w},yy[]={y,y,y+hgt,y+hgt};
     for(int i=0;i<4;i++){auto &v=packet.vertices[i];v.z=z;v.argb=0xffffffff;v.flags=i==3?PVR_CMD_VERTEX_EOL:PVR_CMD_VERTEX;v.x=xx[i];v.y=yy[i];v.u=(i&1)?u1:u0;v.v=(i&2)?v1:v0;}
 
+}
+}
+namespace {
+void load_art(){
+    const auto start=timer_us_gettime64();
+    FILE *f=fopen("/cd/SORART.PAK","rb");
+    if(!f){sor_log("Enhanced art: no /cd/SORART.PAK (original sprites drawn per cell)\n");return;}
+    fseek(f,0,SEEK_END);const long size=ftell(f);fseek(f,0,SEEK_SET);
+    artPackage.resize(size_t(size));
+    const bool read=fread(artPackage.data(),1,artPackage.size(),f)==artPackage.size();fclose(f);
+    if(!read||!art.load(artPackage.data(),artPackage.size())){sor_log("Enhanced art: invalid package\n");art=sor::ArtCatalog();return;}
+    size_t bytes=0;
+    for(const auto &page:art.pages()){
+        const size_t n=size_t(page.width)*page.height*2;
+        pvr_ptr_t t=pvr_mem_malloc(n);
+        if(!t){sor_log("Enhanced art: PowerVR memory exhausted after %zu bytes\n",bytes);art=sor::ArtCatalog();return;}
+        pvr_txr_load(page.pixels,t,n);bytes+=n;
+        artTextures.push_back(t);artHeaders.emplace_back();
+        header(artHeaders.back(),t,page.width,page.height,true);
+    }
+    // Pixels now live in PowerVR memory; the catalog keeps sizes and frames.
+    artPackage.clear();artPackage.shrink_to_fit();
+    sor_log("Enhanced art: %zu frames, %zu pages, %zu PowerVR bytes; free %lu; loaded in %llu ms\n",art.frames().size(),art.pages().size(),bytes,
+            (unsigned long)pvr_mem_available(),(unsigned long long)((timer_us_gettime64()-start)/1000));
 }
 }
 void dc_renderer_init(){
@@ -67,17 +103,23 @@ void dc_renderer_init(){
         header(titleHeaders[i],titleTextures[i],r.textureWidth,r.textureHeight,true);
     }
     sor_log("PowerVR indexed tile cache: 65536 bytes; sprite layers: 524288 bytes\n");
+    load_art();
+    sor::cheats::menu.setEnhancedGraphics(SOR_DEFAULT_ENHANCED);
 }
 void dc_renderer_shutdown(){
     if(tiles)pvr_mem_free(tiles);
     for(auto p:spriteTexture)if(p)pvr_mem_free(p);
     if(cheatHintTexture)pvr_mem_free(cheatHintTexture);
     for(auto p:titleTextures)if(p)pvr_mem_free(p);
+    for(auto p:artTextures)pvr_mem_free(p);
+    artTextures.clear();artHeaders.clear();art=sor::ArtCatalog();
     scene.reset();
 }
 bool dc_render_vdp(VDPState &state,VDPRenderer &renderer,const sor::TitleCaption &title){
     const auto begin=timer_us_gettime64();
+    scene->enhanced=sor::cheats::menu.settings().enhancedGraphics;scene->art=&art;
     if(!scene->buildCached(state,renderer)||scene->count>maxTileQuads)return false;
+    const bool enhanced=scene->enhanced;
     const bool same=scene->reused;
     const auto compiled=timer_us_gettime64();
     pvr_wait_ready();
@@ -109,15 +151,16 @@ bool dc_render_vdp(VDPState &state,VDPRenderer &renderer,const sor::TitleCaption
         }
     }
     alignas(32) uint16_t decoded[16];
-    if(!same || !frames)for(size_t i=0;i<scene->count;i++){
-        const auto &q=scene->quads[i];int t=q.tile;
-        if(!opaque[t] || valid[t])continue;
+    const auto uploadTile=[&](int t){
+        if(!opaque[t] || valid[t])return;
         sor::pack_pvr_tile4(state.vram_+t*32,decoded);
         pvr_txr_load(decoded,static_cast<uint8_t*>(tiles)+t*32,32);
         valid[t]=1;
-    }
+    };
+    if(!same || !frames)for(size_t i=0;i<scene->count;i++)uploadTile(scene->quads[i].tile);
+    if(enhanced && (!same || !frames))for(size_t i=0;i<scene->spriteTileCount;i++)uploadTile(scene->spriteTiles[i].tile);
     unsigned spriteBytes=0;
-    if(!same || !frames)for(int p=0;p<2;p++){
+    if(!enhanced && (!same || !frames))for(int p=0;p<2;p++){
         // Include the previous extent to erase pixels vacated by moving sprites.
         const int top=frames?std::min(uploadedTop[p],scene->spriteTop[p]):0;
         const int bottom=frames?std::max(uploadedBottom[p],scene->spriteBottom[p]):256;
@@ -129,7 +172,7 @@ bool dc_render_vdp(VDPState &state,VDPRenderer &renderer,const sor::TitleCaption
         uploadedTop[p]=scene->spriteTop[p];uploadedBottom[p]=scene->spriteBottom[p];
     }
     const auto uploaded=timer_us_gettime64();
-    if(!packetsValid || !scene->planesReused || opacityChanged){
+    if(!packetsValid || !scene->planesReused || opacityChanged || packetsEnhanced!=enhanced){
         packetCount=0;
         std::fill_n(planeTiles,2048,false);
         float sx=640.f/scene->width,sy=480.f/scene->height;
@@ -139,13 +182,32 @@ bool dc_render_vdp(VDPState &state,VDPRenderer &renderer,const sor::TitleCaption
             if(!opaque[q.tile])continue;
             quad(packets[packetCount++],tileHeaders[q.palette*2048+q.tile],q.x*sx,q.y*sy,q.w*sx,q.h*sy,q.depth,q.u0/8.f,q.v0/8.f,q.u1/8.f,q.v1/8.f);
         }
-        for(int p=0;p<2;p++)quad(packets[packetCount++],spriteHeaders[p],0,0,640,480,p?6:3,0,0,scene->width/512.f,scene->height/256.f);
-        packetsValid=true;
+        if(!enhanced)for(int p=0;p<2;p++)quad(packets[packetCount++],spriteHeaders[p],0,0,640,480,p?6:3,0,0,scene->width/512.f,scene->height/256.f);
+        packetsValid=true;packetsEnhanced=enhanced;
+    }
+    if(enhanced && (!same || !frames)){
+        // Depth: the sprite's layer (3 low, 6 high priority), then its link
+        // order, earlier sprites in front as on the VDP.
+        spritePacketCount=0;
+        const float sx=640.f/scene->width,sy=480.f/scene->height;
+        for(size_t i=0;i<scene->spriteTileCount;i++){
+            const auto &t=scene->spriteTiles[i];
+            quad(spritePackets[spritePacketCount++],tileHeaders[t.palette*2048+t.tile],t.x*sx,t.y*sy,8*sx,8*sy,
+                 (t.layer?6:3)+(79-t.order)*0.01f,t.hflip?1:0,t.vflip?1:0,t.hflip?0:1,t.vflip?0:1);
+        }
+        for(size_t i=0;i<scene->artCount;i++){
+            const auto &d=scene->artDraws[i];const auto &f=art.frames()[d.frame];const auto &page=art.pages()[f.page];
+            // Art is at twice the original resolution; its anchor sits on the object's.
+            const float ax=d.flip?f.w-f.anchorX:f.anchorX,u0=f.u/float(page.width),u1=(f.u+f.w)/float(page.width);
+            quad(spritePackets[spritePacketCount++],artHeaders[f.page],(d.x*2-ax)*sx/2,(d.y*2-f.anchorY)*sy/2,f.w*sx/2,f.h*sy/2,
+                 (d.layer?6:3)+(79-d.order)*0.01f,d.flip?u1:u0,f.v/float(page.height),d.flip?u0:u1,(f.v+f.h)/float(page.height));
+        }
     }
     const auto commands=timer_us_gettime64();
     auto bg=scene->background;pvr_set_bg_color(((bg>>10)&31)/31.f,((bg>>5)&31)/31.f,(bg&31)/31.f);
     pvr_scene_begin();pvr_list_begin(PVR_LIST_PT_POLY);
     pvr_prim(packets,packetCount*sizeof(Packet));
+    if(enhanced && spritePacketCount)pvr_prim(spritePackets,spritePacketCount*sizeof(Packet));
     if(sor::cheats::hintVisible()){
         alignas(32) Packet hint;
         const float sx=640.f/scene->width,sy=480.f/scene->height;

@@ -9,6 +9,8 @@ namespace sor::cheats {
 struct Settings {
     unsigned round = 1, lives = 3;
     bool infiniteLives = false, infiniteHealth = false, infiniteSpecials = false;
+    // Presentation only: the simulation is the same in both modes.
+    bool enhancedGraphics = false;
 };
 
 // Session settings live outside game RAM so stage loads and attract mode cannot
@@ -23,6 +25,7 @@ public:
     unsigned startingLives(unsigned original) const;
     void apply(SystemMemory &) const;
     bool protectsHealth(uint32_t object, SystemMemory &) const;
+    void setEnhancedGraphics(bool on) { settings_.enhancedGraphics = on; }
 private:
     Settings settings_{};
     bool overrideRound_ = false, overrideLives_ = false, visible_ = false;

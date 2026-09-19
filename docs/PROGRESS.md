@@ -1,5 +1,23 @@
 # Progress
 
+## 2026-09-19 — enhanced rendering path (placeholder art)
+
+- Original and enhanced graphics are selectable at any time on the same
+  simulation (options menu, GRAPHICS). While the game builds its sprite table, a
+  probe records which records each object emitted, its frame mapping and its
+  anchor; enhanced drawing replaces an object with art in its own depth slot and
+  draws every other sprite as 8x8 cells (docs/REMASTER.md).
+- Asset plumbing: every object frame drawn in a replay can be extracted with its
+  anchor (SOR_EXTRACT_FRAMES), packed into a runtime package
+  (tools/make-placeholder-art.py) and previewed side by side
+  (SOR_ENHANCED_CAPTURE). Placeholder art is the original doubled with an outline
+  and anchor cross; it is derived from the ROM and stays in build/.
+- Flycast with 149 placeholder frames: both benchmarks at every VBlank, no
+  underruns. The package costs 3 MB of PowerVR memory (952 KB left) and 25.7 s
+  to load from CD: real art needs VQ or palettes and per-stage loading.
+- Simulation unchanged: replays, state-synced windows and GPU scene checks pass;
+  new test tests/enhanced_scene_test.cpp.
+
 ## 2026-09-19 — fidelity gate met in emulation
 
 - Three more state-synced windows match the original in all game RAM: the bat
