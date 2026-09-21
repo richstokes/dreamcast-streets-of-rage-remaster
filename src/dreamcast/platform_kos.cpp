@@ -105,6 +105,16 @@ void platform_observe_frame(uint32_t frame,const sor_memory &memory,const Frameb
     // Interactive runs: drain diagnostics regularly so a session can be watched
     // live. Replays keep them deferred until their measured window ends.
     if(!replay_active() && samples && samples%600==0)sor_flush_log();
+    // Interactive runs: every 600 emulated frames (10 s), in any mode, report
+    // refresh and drain the log. Comparing these lines' arrival with the wall
+    // clock separates a slow host emulator from a slow guest.
+    if(!replay_active() && frame && frame%600==0){
+        static pvr_stats_t last{};pvr_stats_t now{};pvr_get_stats(&now);
+        sor_log("HEARTBEAT frame=%lu vblanks=%lu flips=%lu enhanced=%d mode=%02x%02x\n",(unsigned long)frame,
+            (unsigned long)(now.vbl_count-last.vbl_count),(unsigned long)(now.frame_count-last.frame_count),
+            int(sor::cheats::menu.settings().enhancedGraphics),memory.ram[0xff00],memory.ram[0xff01]);
+        last=now;sor_flush_log();
+    }
     // Drain first: a full buffer would otherwise drop the completion marker
     // that tools/bench-flycast.sh waits for, and the reports after it.
     if(finished){reported=true;sor_flush_log();sor_log("BENCHMARK replay complete; subsequent serial drain is outside the measured window\n");platform_audio_report();pc_profile_report();sor_flush_log();}

@@ -11,18 +11,33 @@ struct Reader {
 };
 }
 bool ArtCatalog::load(const uint8_t *data,size_t size){
-    frames_.clear();pages_.clear();
+    frames_.clear();pages_.clear();palette_.clear();
     Reader r{data,data+size};
-    if(!r.has(16)||std::memcmp(data,"SORART01",8))return false;
+    if(!r.has(16))return false;
+    const bool indexed=!std::memcmp(data,"SORART02",8);
+    if(!indexed&&std::memcmp(data,"SORART01",8))return false;
     r.p+=8;
     const uint32_t pages=r.u32(),frames=r.u32();
+    if(indexed){
+        if(!r.has(4))return false;
+        const uint32_t colours=r.u32();
+        if(!colours||colours>256||!r.has(colours*2))return false;
+        palette_.assign(256,0);
+        for(uint32_t i=0;i<colours;i++)palette_[i]=r.u16();
+        palette_[0]=0;
+    }
     for(uint32_t i=0;i<pages;i++){
         if(!r.has(4))return false;
-        ArtPage page{r.u16(),r.u16(),nullptr};
-        const size_t bytes=size_t(page.width)*page.height*2;
-        // Pixel data must be 2-byte aligned to be read in place.
-        if(!r.has(bytes)||(uintptr_t(r.p)&1))return false;
-        page.pixels=reinterpret_cast<const uint16_t*>(r.p);r.p+=bytes;
+        ArtPage page{r.u16(),r.u16(),nullptr,nullptr};
+        const size_t bytes=size_t(page.width)*page.height*(indexed?1:2);
+        if(!r.has(bytes))return false;
+        if(indexed)page.indices=r.p;
+        else {
+            // Pixel data must be 2-byte aligned to be read in place.
+            if(uintptr_t(r.p)&1)return false;
+            page.pixels=reinterpret_cast<const uint16_t*>(r.p);
+        }
+        r.p+=bytes;
         pages_.push_back(page);
     }
     for(uint32_t i=0;i<frames;i++){

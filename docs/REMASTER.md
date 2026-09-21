@@ -4,8 +4,11 @@ Status (2026-09-19): **the rendering path and asset plumbing work, with
 placeholder art only.** Original and enhanced graphics are selectable on the same
 simulation, objects can be drawn with replacement art at twice the original
 resolution, and frames can be extracted, packed, previewed and measured. No
-redrawn art exists yet; the placeholders are the original frames doubled, with a
-cyan outline and a magenta anchor cross, and do not count towards the remaster.
+redrawn art exists yet; the placeholders are the original frames doubled with
+Scale2x (rounded diagonals), with a cyan outline and a magenta anchor cross, and
+do not count towards the remaster. They cover the frames seen in the Round 1
+replays: all three characters (bot runs selecting each), Round 1 enemies,
+items and effects; anything else is drawn as the original pieces.
 
 ## How objects become replacement art
 
@@ -38,16 +41,22 @@ object's screen anchor (its feet) and emits one table record per visible piece.
   every frame's RAM equal (2026-09-21). VDP per-line sprite limits do not apply
   to enhanced drawing (no sprite dropout).
 - **Art catalog** (`src/render/art_catalog.*`, package format in the header):
-  pages of ARGB1555 texels plus frames `{mapping, palette, page, rect, anchor}`,
-  art pixels at 2x. On the Dreamcast the pages go to PowerVR memory at start.
+  pages of texels plus frames `{mapping, palette, page, rect, anchor}`, art
+  pixels at 2x. `SORART02` stores one palette of up to 256 colours and 8-bit
+  pages (`SORART01`: ARGB1555). On the Dreamcast the pages go to PowerVR memory
+  at start as 8-bit paletted textures in palette bank 1 (the 4-bit tile
+  palettes use entries 0-63 of bank 0).
 
 ## Using it
 
 ```sh
-# 1. Extract every object frame drawn in a replay (host build).
+# 1. Extract every object frame drawn in a replay (host build). The current set
+#    uses round1-full, two-player-bot and one bot run per other character
+#    (round1-full's prologue with RIGHT or LEFT on the select screen).
 SOR_EXTRACT_FRAMES=$PWD/build/frames-round1-full build/headless/sor-headless "$SOR_ROM" REPLAY.bin build/r.ram
 # 2. Placeholder package (derived from the ROM: stays in build/) and budget report.
-build/tools-venv/bin/python3 tools/make-placeholder-art.py build/frames-round1-full --out build/art/SORART.PAK
+build/tools-venv/bin/python3 tools/make-placeholder-art.py build/frames-round1-full \
+  build/frames-two-bot build/frames-bot-right build/frames-bot-left --out build/art/SORART.PAK
 # 3. Side-by-side previews: original at 2x (left), enhanced (right), plus a list of art drawn.
 SOR_ART=$PWD/build/art/SORART.PAK SOR_ENHANCED_CAPTURE=$PWD/build/cap:1500:2700:100 \
   build/headless/sor-headless "$SOR_ROM" REPLAY.bin build/r.ram
@@ -91,6 +100,12 @@ per-stage loading, as the brief requires. Adam's 47 frames seen in Round 1 are
 about half a full player set: a full character at 2x is roughly 2 MB in
 ARGB1555, 1 MB with an 8-bit palette, 0.25 MB with VQ.
 
+Current set (2026-09-21): 231 frames, 45 colours, 10 pages of 512x512; the
+package is 2,626,212 bytes (SORART02) and takes 2,621,440 bytes of PowerVR
+memory, leaving 1,476,808 free. As ARGB1555 it needed 5.2 MB, more than was
+free, and embedded in the test ELF it overran the Dreamcast's 16 MB of RAM
+(Flycast rejected the ELF and rebooted in a loop).
+
 ## Known limits of the prototype
 
 - Palette effects (screen fades, hit flashes, the police special's flash) do
@@ -100,6 +115,6 @@ ARGB1555, 1 MB with an 8-bit palette, 0.25 MB with VQ.
   whole frame is drawn and clipped by the screen).
 - Placeholder frames come from what the replays showed; frames never drawn in
   a replay have no placeholder and fall back to the original pieces.
-- Everything is uncompressed ARGB1555 and loaded at boot.
+- Everything is loaded at boot, uncompressed (8-bit palette indices).
 - Output is 640x480 from 320x224, so art is scaled 1:1 horizontally and by
   480/448 vertically, like the planes.

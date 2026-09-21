@@ -4,7 +4,8 @@
 The enhanced renderer draws objects with replacement art at twice the original
 resolution (src/render/art_catalog.hpp). Until real art exists, this makes a
 package from the original frames (SOR_EXTRACT_FRAMES, src/headless/
-extract_frames.cpp): each frame is doubled with nearest-neighbour scaling, then
+extract_frames.cpp): each frame is doubled with Scale2x (--nearest: plain
+pixel doubling), then
 given a cyan outline and a magenta cross at its anchor, so alignment is easy to
 check and nobody mistakes it for finished art. It is derived from the ROM:
 keep it under build/, out of git.
@@ -30,18 +31,35 @@ def load_pam(path):
     return w, h, data
 
 
-def placeholder(frame, data):
+def scale2x(src, fw, fh):
+    """Scale2x (AdvMAME2x): doubles pixel art, rounding diagonal edges.
+    Transparent pixels (None) take part like any colour."""
+    at = lambda x, y: src[y][x] if 0 <= x < fw and 0 <= y < fh else None
+    out = [[None] * (fw * 2) for _ in range(fh * 2)]
+    for y in range(fh):
+        for x in range(fw):
+            b, d, e, f, hh = at(x, y - 1), at(x - 1, y), at(x, y), at(x + 1, y), at(x, y + 1)
+            e0 = e1 = e2 = e3 = e
+            if b != hh and d != f:
+                e0 = d if d == b else e
+                e1 = f if b == f else e
+                e2 = d if d == hh else e
+                e3 = f if hh == f else e
+            out[y * 2][x * 2], out[y * 2][x * 2 + 1] = e0, e1
+            out[y * 2 + 1][x * 2], out[y * 2 + 1][x * 2 + 1] = e2, e3
+    return out
+
+
+def placeholder(frame, data, smooth=True):
     """2x frame with a 1-pixel outline: (width, height, anchor, rgba rows)."""
-    w, h = frame['width'] * 2 + 2, frame['height'] * 2 + 2
+    fw, fh = frame['width'], frame['height']
+    w, h = fw * 2 + 2, fh * 2 + 2
+    src = [[tuple(data[(y * fw + x) * 4:(y * fw + x) * 4 + 3]) if data[(y * fw + x) * 4 + 3] else None
+            for x in range(fw)] for y in range(fh)]
+    big = scale2x(src, fw, fh) if smooth else [[src[y // 2][x // 2] for x in range(fw * 2)] for y in range(fh * 2)]
     px = [[None] * w for _ in range(h)]
-    for y in range(frame['height']):
-        for x in range(frame['width']):
-            o = (y * frame['width'] + x) * 4
-            if data[o + 3]:
-                c = tuple(data[o:o + 3])
-                for dy in (0, 1):
-                    for dx in (0, 1):
-                        px[1 + y * 2 + dy][1 + x * 2 + dx] = c
+    for y in range(fh * 2):
+        px[1 + y][1:1 + fw * 2] = big[y]
     for y in range(h):
         for x in range(w):
             if px[y][x] is None and any(0 <= y + dy < h and 0 <= x + dx < w and px[y + dy][x + dx] not in (None, OUTLINE)
@@ -90,6 +108,7 @@ def main():
     ap.add_argument('--out', type=Path, required=True)
     ap.add_argument('--page', type=int, default=512)
     ap.add_argument('--types', help='comma-separated hex object types (default: playfield objects)')
+    ap.add_argument('--nearest', action='store_true', help='double pixels instead of Scale2x')
     a = ap.parse_args()
     types = {int(t, 16) for t in a.types.split(',')} if a.types else WORLD_TYPES
     frames = {}
@@ -105,16 +124,26 @@ def main():
     for key in keys:
         f, d = frames[key]
         _, _, data = load_pam(d / ('%s_p%d.pam' % (f['mapping'], f['palette'])))
-        images.append(placeholder(f, data))
+        images.append(placeholder(f, data, smooth=not a.nearest))
     places, pages = pack(images, a.page)
     pixels = [[[None] * a.page for _ in range(a.page)] for _ in range(pages)]
     for (w, h, _, px), (p, x0, y0) in zip(images, places):
         for y in range(h):
             pixels[p][y0 + 1 + y][x0 + 1:x0 + 1 + w] = px[y]
-    out = bytearray(b'SORART01' + struct.pack('<II', pages, len(keys)))
-    for page in pixels:
-        out += struct.pack('<HH', a.page, a.page)
-        out += b''.join(struct.pack('<H', argb1555(c)) for row in page for c in row)
+    # SORART02 (one palette, 8-bit pages) when the set has at most 255 colours.
+    colours = sorted({argb1555(c) for page in pixels for row in page for c in row} - {0})
+    if len(colours) <= 255:
+        index = {c: i + 1 for i, c in enumerate(colours)}; index[0] = 0
+        out = bytearray(b'SORART02' + struct.pack('<III', pages, len(keys), len(colours) + 1))
+        out += struct.pack('<%dH' % (len(colours) + 1), 0, *colours)
+        for page in pixels:
+            out += struct.pack('<HH', a.page, a.page)
+            out += bytes(index[argb1555(c)] for row in page for c in row)
+    else:
+        out = bytearray(b'SORART01' + struct.pack('<II', pages, len(keys)))
+        for page in pixels:
+            out += struct.pack('<HH', a.page, a.page)
+            out += b''.join(struct.pack('<H', argb1555(c)) for row in page for c in row)
     for key, (w, h, (ax, ay), _), (p, x0, y0) in zip(keys, images, places):
         out += struct.pack('<IHHHHHHhh', key[0], key[1], p, x0 + 1, y0 + 1, w, h, ax, ay)
     a.out.parent.mkdir(parents=True, exist_ok=True)
@@ -127,13 +156,13 @@ def main():
             if t in types:
                 entry = by_type.setdefault(t, [0, 0]); entry[0] += 1; entry[1] += w * h
     texels = sum(w * h for w, h, _, _ in images)
-    report = dict(frames=len(keys), pages=pages, page_size=a.page, packed_bytes=len(out),
+    report = dict(frames=len(keys), pages=pages, page_size=a.page, packed_bytes=len(out), colours=len(colours),
                   texels=texels, page_fill=round(texels / (pages * a.page * a.page), 3),
                   bytes={'argb1555_pages': pages * a.page * a.page * 2, 'argb1555_tight': texels * 2,
                          'pal8_tight': texels, 'pal4_tight': texels // 2, 'vq_estimate': texels // 4 + 2048 * pages},
                   by_type={'%02x' % t: dict(frames=n, texels=px, argb1555_bytes=px * 2) for t, (n, px) in sorted(by_type.items())})
     a.out.with_suffix('.json').write_text(json.dumps(report, indent=1) + '\n')
-    print(json.dumps({k: report[k] for k in ('frames', 'pages', 'texels', 'page_fill', 'bytes')}))
+    print(json.dumps({k: report[k] for k in ('frames', 'pages', 'colours', 'packed_bytes', 'texels', 'page_fill', 'bytes')}))
 
 
 if __name__ == '__main__':

@@ -58,10 +58,24 @@ int main(){
     assert(out[(66*2-4)*640+48*2+2]!=0xFC00);              // art is 4 pixels wide
     assert(out[(60*2)*640+100*2]==scene->colors[1]);       // unowned sprite cell
 
+    // The same frame as SORART02 (palette + 8-bit page) draws the same pixels.
+    std::vector<uint8_t> pak2(std::begin("SORART02"),std::end("SORART02")-1);
+    put32(pak2,1);put32(pak2,1);put32(pak2,2);put16(pak2,0);put16(pak2,0xFC00);
+    put16(pak2,8);put16(pak2,8);
+    for(int i=0;i<64;i++)pak2.push_back(i<8*4&&i%8<4?1:0);
+    put32(pak2,0x054206);put16(pak2,0);put16(pak2,0);put16(pak2,0);put16(pak2,0);put16(pak2,4);put16(pak2,4);put16(pak2,2);put16(pak2,4);
+    sor::ArtCatalog art2;assert(art2.load(pak2.data(),pak2.size()));
+    assert(art2.palette().size()==256&&art2.pages()[0].indices&&!art2.pages()[0].pixels);
+    scene->art=&art2;assert(scene->build(state,renderer)&&scene->artCount==1);
+    std::vector<uint16_t> out2(640*448);
+    sor::raster_enhanced(*scene,state,out2.data(),640);
+    assert(out2==out);
+    scene->art=&art;
+
     // VRAM's table no longer matches the build: the object's pieces come back.
     state.vram_[state.satBase()+7]^=1;
     assert(!probe.displayed(state));
     assert(scene->build(state,renderer));
     assert(scene->artCount==0&&scene->spriteTileCount==5);
-    puts("Enhanced scene: art replaces a probed object in its SAT slot; other sprites stay cells; stale builds fall back");
+    puts("Enhanced scene: art replaces a probed object in its SAT slot (ARGB and indexed packages); other sprites stay cells; stale builds fall back");
 }

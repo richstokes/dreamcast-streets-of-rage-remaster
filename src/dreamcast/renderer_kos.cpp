@@ -46,7 +46,11 @@ std::vector<pvr_poly_hdr_t> artHeaders;
 int uploadedTop[2]{256,256},uploadedBottom[2]{};
 void header(pvr_poly_hdr_t &h,pvr_ptr_t texture,int w,int hgt,bool linear,int palette=-1){
     pvr_poly_cxt_t c;
-    pvr_poly_cxt_txr(&c,PVR_LIST_PT_POLY,palette<0 ? (PVR_TXRFMT_ARGB1555|(linear?PVR_TXRFMT_NONTWIDDLED:0)) : (PVR_TXRFMT_PAL4BPP|PVR_TXRFMT_4BPP_PAL(palette)),w,hgt,texture,PVR_FILTER_NONE);
+    // palette: -1 ARGB1555, -2 8-bit indices into bank 1 (art), else a 4-bit bank.
+    const int format=palette==-1 ? (PVR_TXRFMT_ARGB1555|(linear?PVR_TXRFMT_NONTWIDDLED:0))
+                    : palette==-2 ? (PVR_TXRFMT_PAL8BPP|PVR_TXRFMT_8BPP_PAL(1))
+                    : (PVR_TXRFMT_PAL4BPP|PVR_TXRFMT_4BPP_PAL(palette));
+    pvr_poly_cxt_txr(&c,PVR_LIST_PT_POLY,format,w,hgt,texture,PVR_FILTER_NONE);
     c.gen.culling=PVR_CULLING_NONE;
     c.depth.comparison=PVR_DEPTHCMP_GEQUAL;
     pvr_poly_compile(&h,&c);
@@ -73,18 +77,48 @@ void load_art(){
     const size_t size=artPackage.empty()?embedded:artPackage.size();
     if(!data||!size){sor_log("Enhanced art: no package (original sprites drawn per cell)\n");return;}
     if(!art.load(data,size)){sor_log("Enhanced art: invalid package\n");art=sor::ArtCatalog();return;}
+    // Indexed art (SORART02, or SORART01 with at most 255 colours) is stored
+    // with 8-bit indices into palette bank 1 (entries 256-511; the 4-bit tile
+    // palettes use entries 0-63 of bank 0): half the memory of ARGB1555.
+    static uint8_t colourIndex[32768];
+    unsigned colours=1;
+    if(!art.palette().empty()){
+        colours=256;
+        for(unsigned i=0;i<256;i++)pvr_set_pal_entry(256+i,art.palette()[i]);
+    }else{
+        std::fill_n(colourIndex,32768,0);
+        for(const auto &page:art.pages()){
+            const size_t n=size_t(page.width)*page.height;
+            for(size_t i=0;i<n && colours<=256;i++){
+                const uint16_t v=page.pixels[i];
+                if((v&0x8000) && !colourIndex[v&0x7FFF]){
+                    if(colours<256)pvr_set_pal_entry(256+colours,v);
+                    colourIndex[v&0x7FFF]=uint8_t(colours++);
+                }
+            }
+        }
+        if(colours<=256)pvr_set_pal_entry(256,0);   // index 0: transparent
+    }
+    const bool indexed=colours<=256;
     size_t bytes=0;
+    std::vector<uint8_t> indices;
     for(const auto &page:art.pages()){
-        const size_t n=size_t(page.width)*page.height*2;
+        const size_t texels=size_t(page.width)*page.height,n=indexed?texels:texels*2;
         pvr_ptr_t t=pvr_mem_malloc(n);
         if(!t){sor_log("Enhanced art: PowerVR memory exhausted after %zu bytes\n",bytes);art=sor::ArtCatalog();return;}
-        pvr_txr_load(page.pixels,t,n);bytes+=n;
+        if(page.indices)pvr_txr_load_ex(page.indices,t,page.width,page.height,PVR_TXRLOAD_8BPP);
+        else if(indexed){
+            indices.resize(texels);
+            for(size_t i=0;i<texels;i++){const uint16_t v=page.pixels[i];indices[i]=(v&0x8000)?colourIndex[v&0x7FFF]:0;}
+            pvr_txr_load_ex(indices.data(),t,page.width,page.height,PVR_TXRLOAD_8BPP);
+        }else pvr_txr_load(page.pixels,t,n);
+        bytes+=n;
         artTextures.push_back(t);artHeaders.emplace_back();
-        header(artHeaders.back(),t,page.width,page.height,true);
+        header(artHeaders.back(),t,page.width,page.height,true,indexed?-2:-1);
     }
     // Pixels now live in PowerVR memory; the catalog keeps sizes and frames.
     artPackage.clear();artPackage.shrink_to_fit();
-    sor_log("Enhanced art: %zu frames, %zu pages, %zu PowerVR bytes; free %lu; loaded in %llu ms\n",art.frames().size(),art.pages().size(),bytes,
+    sor_log("Enhanced art: %zu frames, %zu pages, %u colours, %zu PowerVR bytes; free %lu; loaded in %llu ms\n",art.frames().size(),art.pages().size(),indexed?unsigned(art.palette().empty()?colours-1:256):0u,bytes,
             (unsigned long)pvr_mem_available(),(unsigned long long)((timer_us_gettime64()-start)/1000));
 }
 }

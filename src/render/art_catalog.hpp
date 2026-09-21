@@ -11,10 +11,15 @@ namespace sor {
 // resolution: w, h and the anchor (the object's origin, at its feet) are in
 // art pixels.
 //
-// Package ("SORART01", little-endian):
+// Package, little-endian. "SORART01": ARGB1555 pages.
 //   u8[8] magic, u32 pages, u32 frames
 //   per page:  u16 width, u16 height, u16 pixels[width*height] (ARGB1555)
 //   per frame: u32 mapping, u16 palette, u16 page, u16 u, v, w, h, s16 anchorX, anchorY
+// "SORART02": one shared palette and 8-bit pages (half the size).
+//   u8[8] magic, u32 pages, u32 frames, u32 colours (<= 256; index 0 transparent)
+//   u16 palette[colours] (ARGB1555)
+//   per page:  u16 width, u16 height, u8 indices[width*height]
+//   per frame: as SORART01
 struct ArtFrame {
     uint32_t mapping;
     uint16_t palette,page,u,v,w,h;
@@ -22,7 +27,8 @@ struct ArtFrame {
 };
 struct ArtPage {
     uint16_t width,height;
-    const uint16_t *pixels;
+    const uint16_t *pixels;    // SORART01, else null
+    const uint8_t *indices;    // SORART02, else null
 };
 class ArtCatalog {
 public:
@@ -31,9 +37,14 @@ public:
     const ArtFrame *find(uint32_t mapping,int palette) const;
     const std::vector<ArtFrame> &frames() const {return frames_;}
     const std::vector<ArtPage> &pages() const {return pages_;}
+    // SORART02's palette (empty for SORART01); entry 0 is transparent.
+    const std::vector<uint16_t> &palette() const {return palette_;}
+    uint16_t texel(const ArtPage &page,size_t index) const
+        {return page.indices?palette_[page.indices[index]]:page.pixels[index];}
     bool empty() const {return frames_.empty();}
 private:
     std::vector<ArtFrame> frames_;   // sorted by (mapping, palette)
     std::vector<ArtPage> pages_;
+    std::vector<uint16_t> palette_;
 };
 }

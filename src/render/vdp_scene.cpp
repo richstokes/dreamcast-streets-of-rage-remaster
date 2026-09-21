@@ -267,7 +267,7 @@ void raster_enhanced(const VdpScene &scene,const VDPState &s,uint16_t *out,int p
                     const auto &f=scene.art->frames()[d.frame];const auto &page=scene.art->pages()[f.page];
                     const int left=d.x*2-(d.flip?f.w-f.anchorX:f.anchorX),top=d.y*2-f.anchorY;
                     for(int v=0;v<f.h;v++)for(int u=0;u<f.w;u++){
-                        const uint16_t c=page.pixels[(f.v+v)*page.width+f.u+(d.flip?f.w-1-u:u)];
+                        const uint16_t c=scene.art->texel(page,size_t(f.v+v)*page.width+f.u+(d.flip?f.w-1-u:u));
                         if(c&0x8000)plot(left+u,top+v,c);
                     }
                 }
