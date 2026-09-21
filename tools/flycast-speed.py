@@ -29,7 +29,8 @@ while True:
             if not m:
                 continue
             frame, vblanks, flips, enhanced, mode = int(m[1]), int(m[2]), int(m[3]), m[4], m[5]
-            host = f'{FRAME_S / (now - last):.2f}' if last is not None else '  - '
+            # Lines read in one batch (the log's backlog) have no arrival time.
+            host = f'{FRAME_S / (now - last):.2f}' if last is not None and now - last > 1 else '  - '
             print(f'frame {frame:6d}  host {host}  guest {flips / max(1, vblanks):.2f}  '
                   f'{"enhanced" if enhanced == "1" else "original"}  mode {mode}', flush=True)
             last = now

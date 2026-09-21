@@ -22,7 +22,7 @@ void platform_poll_controllers(PlayersControlState &current){
         *out[i]={}; auto dev=maple_enum_dev(i,0);
         if(!dev || !(dev->info.functions&MAPLE_FUNC_CONTROLLER))continue;
         auto s=static_cast<cont_state_t*>(maple_dev_status(dev)); if(!s)continue;
-        if(i==0){bool toggle=s->buttons&CONT_B;if(toggle&&!previousToggle&&!sor::cheats::menu.visible()){useGpu=!useGpu;sor_log("Renderer: %s\n",useGpu?"PowerVR":"software comparison");}previousToggle=toggle;}
+        if(SOR_SOFTWARE_TOGGLE && i==0){bool toggle=s->buttons&CONT_B;if(toggle&&!previousToggle&&!sor::cheats::menu.visible()){useGpu=!useGpu;sor_log("Renderer: %s\n",useGpu?"PowerVR":"software comparison");}previousToggle=toggle;}
         auto &p=*out[i]; p.connected=true;
         p.up=s->buttons&CONT_DPAD_UP; p.down=s->buttons&CONT_DPAD_DOWN;
         p.left=s->buttons&CONT_DPAD_LEFT; p.right=s->buttons&CONT_DPAD_RIGHT;

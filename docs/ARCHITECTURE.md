@@ -95,7 +95,7 @@ renderer, including crowded lines, invalid links and tile spans beyond VRAM.
 This is still an intermediate renderer; sprite pixels are composed on the CPU. Shadow/highlight,
 interlace, two-cell vertical scrolling, or more than 6,000 tile quads use the
 software fallback. These cases need further native work before full-game
-performance claims. Dreamcast B toggles the fallback for visual comparison.
+performance claims. In builds made with `SOR_SOFTWARE_TOGGLE=1`, Dreamcast B toggles the fallback for visual comparison (it is about 85 ms a frame, so it is off by default).
 
 Actual allocations: 1 MiB tile VRAM, 512 KiB sprite VRAM, 256 KiB software fallback
 VRAM, plus KOS frame/list buffers. Observed free VRAM is 3,136,104 bytes. CPU scene
