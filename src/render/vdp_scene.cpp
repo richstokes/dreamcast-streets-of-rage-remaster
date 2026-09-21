@@ -83,8 +83,11 @@ bool VdpScene::buildImpl(VDPState &s,bool keepPlanes){
     }
     if(!s.displayEnabled())return true;
     if(!keepPlanes){plane(s,1);plane(s,0);window(s);}
-    spriteLayers(s);
+    // Enhanced drawing needs no software sprite layers. Those also produce the
+    // VDP's sprite overflow and collision status bits, but the game never acts
+    // on them: replays with both bits forced clear keep every frame's RAM equal.
     if(enhanced)enhancedSprites(s);
+    else spriteLayers(s);
     s.vCounter_=height-1;
     return true;
 }

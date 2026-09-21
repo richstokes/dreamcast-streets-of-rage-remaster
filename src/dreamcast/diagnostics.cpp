@@ -2,7 +2,9 @@
 #include <cstdarg>
 #include <algorithm>
 namespace {
-char buffer[64*1024];unsigned used=0,dropped=0;
+// Replays defer serial output to the end of their measured window; a long
+// replay's slow-frame lines need more than 64 KiB.
+char buffer[256*1024];unsigned used=0,dropped=0;
 }
 int sor_log(const char *format,...){
     va_list args;va_start(args,format);

@@ -250,3 +250,36 @@ Benchmarks now run from an immutable copy in `build/flycast-run/`. Rebuilding a
 CDI that Flycast is reading can mix sectors from two builds; one failed replay
 was discarded for this reason. The launcher records the image SHA-256 in
 `build/logs/flycast-run.json`. It still uses background launch flags.
+
+## Busy two-player fights (2026-09-21)
+
+Interactive play reported "the frame rate drops off a cliff after about 30 s".
+The two-player bot replay (`reference/scenarios/two-player-bot.json`, 8,402
+frames) reproduces it: missed refreshes cluster in busy fights, where audio
+synthesis alone takes 9-14 ms of the 16.7 ms frame. A profile of gameplay frames
+4,000-7,000: FM synthesis about 32% of CPU, software sprite layers 5% (original
+graphics only), PSG 4.6%, DAC 2.8%, texture copies and clears about 8%.
+
+- Enhanced graphics no longer builds the software sprite layers. Their only other
+  product is the VDP's sprite overflow/collision status; the VBlank handler
+  reads the status register and discards it, and the Round 1, two-player and
+  action replays with both bits forced clear keep every frame's RAM equal.
+  Scene build 1.9-2.1 → 0.4-0.6 ms per frame.
+- FM channels with LFO vibrato use the channel-major fast path, recomputing a
+  dynamic phase step only when the LFO's PM value changes. Exact:
+  `tools/test-ymfm-output.sh` and both full-replay audio captures are
+  bit-identical. SoR's busy fights use SSG-EG rather than vibrato, so this is
+  not where their time goes.
+
+| Two-player bot replay | VBlanks / flips | Slow intervals | Underruns |
+| --- | --- | --- | --- |
+| Original graphics | 7,195 / 7,133 | 231 | 13 |
+| Enhanced graphics | 7,143 / 7,133 | 89 | 3 |
+
+Original graphics still miss 0.9% of refreshes in these fights. Next exact
+candidates: SSG-EG operators in the fast FM path, span-rendered PSG, and the
+sprite-layer clears and uploads.
+
+Diagnostics: long replays overflowed the 64 KiB deferred log, dropping the
+completion marker, so `tools/bench-flycast.sh` waited out its timeout on runs
+that had finished. The buffer is now 256 KiB and is drained before the marker.

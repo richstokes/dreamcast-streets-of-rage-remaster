@@ -50,11 +50,15 @@ PY
     )
     # FLYCAST_VSYNC=0 disables host vsync; presentation otherwise blocks while the
     # host display sleeps. Guest timing (all FRAME_STATS/AICA counters) is emulated.
+    # FLYCAST_MUTE=0 plays sound on the host; muting sets the output gain only
+    # (aica.Volume), so the emulated AICA and its counters are unchanged.
     : > "$root/build/logs/flycast.log"
     : > "$root/build/logs/flycast-errors.log"
     exec /usr/bin/open -g -j -n -a "$app" \
         --stdout "$root/build/logs/flycast.log" --stderr "$root/build/logs/flycast-errors.log" \
-        --args -config 'config:Debug.SerialConsoleEnabled=yes' ${FLYCAST_VSYNC:+-config "config:rend.vsync=$( [ "$FLYCAST_VSYNC" = 0 ] && echo no || echo yes )"} "$image"
+        --args -config 'config:Debug.SerialConsoleEnabled=yes' \
+        -config "config:aica.Volume=$( [ "${FLYCAST_MUTE:-1}" = 0 ] && echo 100 || echo 0 )" \
+        ${FLYCAST_VSYNC:+-config "config:rend.vsync=$( [ "$FLYCAST_VSYNC" = 0 ] && echo no || echo yes )"} "$image"
 fi
 echo 'Automatic launch is configured only for background macOS app bundles.' >&2
 exit 1

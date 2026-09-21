@@ -81,7 +81,7 @@ def patch(name, text):
         text=replace_once(text,old,old+'\n\ttemplate<int Algorithm> inline __attribute__((always_inline)) void output_4op_fixed(output_data &output, uint32_t rshift, int32_t clipmax, uint32_t am_offset) const;'
             '\n\ttemplate<int Algorithm> void sor_render_span(int32_t *__restrict acc, uint32_t n, uint32_t env, const int8_t *pm, const uint8_t *am, bool output_enabled);'
             '\n\tbool sor_light() const;'
-            '\n\ttemplate<int Algorithm, bool AM, bool Output> uint32_t sor_render_fast(int32_t *__restrict acc, uint32_t n, uint32_t env, const uint8_t *am);'
+            '\n\ttemplate<int Algorithm, bool AM, bool Output, bool PM> uint32_t sor_render_fast(int32_t *__restrict acc, uint32_t n, uint32_t env, const int8_t *pm, const uint8_t *am);'
             '\n\tuint8_t sor_algorithm() const { return m_sor_algorithm; }')
         text=replace_once(text,'\tmutable int16_t m_feedback_in;',
             '\tbool m_sor_silent_active=false;\n\tuint8_t m_sor_algorithm=0, m_sor_feedback=0, m_sor_pan=0, m_sor_am_shift=7;\n\tmutable int16_t m_feedback_in;')

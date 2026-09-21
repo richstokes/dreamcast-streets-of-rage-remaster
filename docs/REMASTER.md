@@ -31,10 +31,12 @@ object's screen anchor (its feet) and emits one table record per visible piece.
   first record's slot. Depth is the piece's priority layer (3 or 6, as in the
   original renderer) plus its link order, so replacement art keeps the original
   front-to-back order among sprites and priority against the planes. The
-  original sprite layers are still composited, because they also produce the
-  VDP's sprite overflow and collision status bits the game can read; they are
-  not uploaded. VDP per-line sprite limits do not apply to enhanced drawing (no
-  sprite dropout).
+  software sprite layers are not built in enhanced mode. They also produce the
+  VDP's sprite overflow and collision status bits, but the game never acts on
+  them: the VBlank handler reads the status register only to discard it, and
+  the Round 1, two-player and action replays with both bits forced clear keep
+  every frame's RAM equal (2026-09-21). VDP per-line sprite limits do not apply
+  to enhanced drawing (no sprite dropout).
 - **Art catalog** (`src/render/art_catalog.*`, package format in the header):
   pages of ARGB1555 texels plus frames `{mapping, palette, page, rect, anchor}`,
   art pixels at 2x. On the Dreamcast the pages go to PowerVR memory at start.
@@ -52,6 +54,11 @@ SOR_ART=$PWD/build/art/SORART.PAK SOR_ENHANCED_CAPTURE=$PWD/build/cap:1500:2700:
 # 4. Dreamcast: package.sh puts build/art/SORART.PAK (or $SOR_ART) on the disc;
 #    SOR_ENHANCED=1 starts in enhanced graphics.
 FLYCAST_VSYNC=0 SOR_ENHANCED=1 tools/bench-flycast.sh enh-actions
+# 5. Development ELF: build-and-run.sh embeds the same package in the
+#    executable (there is no disc) and starts in enhanced graphics
+#    (SOR_ENHANCED=0 to start in the original). Flycast starts muted
+#    (FLYCAST_MUTE=0 for sound).
+./build-and-run.sh
 ```
 
 In game, L + R opens the options menu; GRAPHICS switches ORIGINAL / ENHANCED at

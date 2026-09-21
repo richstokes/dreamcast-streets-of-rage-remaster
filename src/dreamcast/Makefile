@@ -23,8 +23,10 @@ $(OBJS): Makefile
 -include $(OBJS:.o=.d)
 $(TARGET): $(OBJS)
 	kos-c++ -O3 -flto -o $@ $(OBJS) -lm
-$(ROOT)/build/native/sor-test.elf: $(OBJS) $(ROOT)/build/native/embedded-rom.o
-	kos-c++ -O3 -flto -o $@ $(OBJS) $(ROOT)/build/native/embedded-rom.o -lm
+# build-and-run.sh embeds the ROM and, when built, the replacement-art package.
+EMBEDDED := $(ROOT)/build/native/embedded-rom.o $(wildcard $(ROOT)/build/native/embedded-art.o)
+$(ROOT)/build/native/sor-test.elf: $(OBJS) $(EMBEDDED)
+	kos-c++ -O3 -flto -o $@ $(OBJS) $(EMBEDDED) -lm
 $(ROOT)/build/native/memory.o: $(ROOT)/src/core/memory.c
 	kos-cc -c $< -o $@
 $(ROOT)/build/native/save.o: $(ROOT)/src/core/save.c

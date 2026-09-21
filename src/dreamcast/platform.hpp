@@ -8,6 +8,9 @@ extern "C" {
 #include "sor/memory.h"
 }
 const uint8_t *platform_embedded_rom(size_t &size);
+// Replacement art built into the executable (build-and-run.sh), for runs
+// without a disc; the Dreamcast renderer prefers /cd/SORART.PAK.
+const uint8_t *platform_embedded_art(size_t &size);
 struct PlatformMemoryStats { uint32_t heap_used, vram_free; };
 void platform_poll_controllers(PlayersControlState &);
 void platform_video_init();

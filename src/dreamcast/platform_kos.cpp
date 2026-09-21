@@ -102,14 +102,25 @@ void platform_observe_frame(uint32_t frame,const sor_memory &memory,const Frameb
     }
     previous=now;wasPlaying=playing;
     pc_profile_phase(playing && (!SOR_PC_PROFILE_LAST || (samples>=SOR_PC_PROFILE_FIRST && samples<=SOR_PC_PROFILE_LAST)));
-    if(finished){reported=true;sor_log("BENCHMARK replay complete; subsequent serial drain is outside the measured window\n");platform_audio_report();pc_profile_report();sor_flush_log();}
+    // Interactive runs: drain diagnostics regularly so a session can be watched
+    // live. Replays keep them deferred until their measured window ends.
+    if(!replay_active() && samples && samples%600==0)sor_flush_log();
+    // Drain first: a full buffer would otherwise drop the completion marker
+    // that tools/bench-flycast.sh waits for, and the reports after it.
+    if(finished){reported=true;sor_flush_log();sor_log("BENCHMARK replay complete; subsequent serial drain is outside the measured window\n");platform_audio_report();pc_profile_report();sor_flush_log();}
 }
 
 extern "C" {
 extern const unsigned char sor_embedded_rom[] __attribute__((weak));
 extern const unsigned char sor_embedded_rom_end[] __attribute__((weak));
+extern const unsigned char sor_embedded_art[] __attribute__((weak));
+extern const unsigned char sor_embedded_art_end[] __attribute__((weak));
 }
 const uint8_t *platform_embedded_rom(size_t &size){
     if(!sor_embedded_rom||!sor_embedded_rom_end){size=0;return nullptr;}
     size=uintptr_t(sor_embedded_rom_end)-uintptr_t(sor_embedded_rom);return sor_embedded_rom;
+}
+const uint8_t *platform_embedded_art(size_t &size){
+    if(!sor_embedded_art||!sor_embedded_art_end){size=0;return nullptr;}
+    size=uintptr_t(sor_embedded_art_end)-uintptr_t(sor_embedded_art);return sor_embedded_art;
 }

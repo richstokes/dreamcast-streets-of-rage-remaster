@@ -10,6 +10,8 @@
 #include "cheats.hpp"
 #include "title_caption.hpp"
 #include "art_catalog.hpp"
+#include "platform.hpp"
+#include "replay.hpp"
 #include "sor_audio_config.hpp"
 #include <vector>
 namespace {
@@ -59,12 +61,18 @@ void quad(Packet &packet,const pvr_poly_hdr_t &h,float x,float y,float w,float h
 namespace {
 void load_art(){
     const auto start=timer_us_gettime64();
-    FILE *f=fopen("/cd/SORART.PAK","rb");
-    if(!f){sor_log("Enhanced art: no /cd/SORART.PAK (original sprites drawn per cell)\n");return;}
-    fseek(f,0,SEEK_END);const long size=ftell(f);fseek(f,0,SEEK_SET);
-    artPackage.resize(size_t(size));
-    const bool read=fread(artPackage.data(),1,artPackage.size(),f)==artPackage.size();fclose(f);
-    if(!read||!art.load(artPackage.data(),artPackage.size())){sor_log("Enhanced art: invalid package\n");art=sor::ArtCatalog();return;}
+    size_t embedded=0;const uint8_t *built_in=platform_embedded_art(embedded);
+    if(FILE *f=fopen("/cd/SORART.PAK","rb")){
+        fseek(f,0,SEEK_END);const long size=ftell(f);fseek(f,0,SEEK_SET);
+        artPackage.resize(size_t(size));
+        const bool read=fread(artPackage.data(),1,artPackage.size(),f)==artPackage.size();fclose(f);
+        if(!read){sor_log("Enhanced art: /cd/SORART.PAK unreadable\n");artPackage.clear();}
+    }
+    // A package built into the executable is read where it lies, with no copy.
+    const uint8_t *data=artPackage.empty()?built_in:artPackage.data();
+    const size_t size=artPackage.empty()?embedded:artPackage.size();
+    if(!data||!size){sor_log("Enhanced art: no package (original sprites drawn per cell)\n");return;}
+    if(!art.load(data,size)){sor_log("Enhanced art: invalid package\n");art=sor::ArtCatalog();return;}
     size_t bytes=0;
     for(const auto &page:art.pages()){
         const size_t n=size_t(page.width)*page.height*2;
@@ -105,6 +113,7 @@ void dc_renderer_init(){
     sor_log("PowerVR indexed tile cache: 65536 bytes; sprite layers: 524288 bytes\n");
     load_art();
     sor::cheats::menu.setEnhancedGraphics(SOR_DEFAULT_ENHANCED);
+    if(!replay_active())sor_flush_log();   // show start-up (art loading) at once
 }
 void dc_renderer_shutdown(){
     if(tiles)pvr_mem_free(tiles);

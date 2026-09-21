@@ -68,7 +68,13 @@ This uses the supplied ROM in `original_rom`, builds `dist/sor-test.elf`, and st
 it in Flycast. An explicit ROM path can be passed as the first argument. The test
 ELF embeds the ROM for direct boot; it needs no CDI. Full debug symbols remain in
 `dist/sor-test.debug.elf`. Both files contain your game data and stay out of git.
-Repeated runs replace this project's previous emulator instance.
+Repeated runs replace this project's previous emulator instance. Flycast starts
+muted; `FLYCAST_MUTE=0 ./build-and-run.sh` plays sound.
+
+When a replacement-art package exists (`build/art/SORART.PAK`, see
+[docs/REMASTER.md](docs/REMASTER.md)), the test ELF embeds it and starts in enhanced
+graphics; `SOR_ENHANCED=0` starts in the original. L + R opens the options menu,
+where GRAPHICS switches between the two at any time.
 
 To regenerate the latest game code and build a self-booting CDI image, run:
 

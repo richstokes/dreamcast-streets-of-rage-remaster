@@ -27,13 +27,13 @@ inline __attribute__((always_inline)) void fm_operator<RegisterType>::sor_span_s
 }
 
 // True when every operator needs only its phase advance and ordinary
-// envelope steps: no SSG-EG, inversion or LFO PM. Those states cannot begin
-// inside a constant-register span.
+// envelope steps: no SSG-EG or inversion. Those states cannot begin inside a
+// constant-register span. LFO PM is handled by the fast path (PM = true).
 template<class RegisterType>
 bool fm_channel<RegisterType>::sor_light() const
 {
     for (auto *op : m_op)
-        if (op->m_sor_ssg || op->m_ssg_inverted || op->m_cache.phase_step == opdata_cache::PHASE_STEP_DYNAMIC)
+        if (op->m_sor_ssg || op->m_ssg_inverted)
             return false;
     return true;
 }
@@ -42,9 +42,12 @@ bool fm_channel<RegisterType>::sor_light() const
 // operator state held in locals. Envelope steps fall on samples whose counter
 // has low bits 0 and are due when (T & mask) == 0; the stepped operator's
 // cached attenuation and power table are then reloaded. Arithmetic is identical.
+// With PM, operators whose phase step follows the LFO (PHASE_STEP_DYNAMIC)
+// recompute it only when the LFO's PM value changes: compute_phase_step()
+// depends on nothing else that can change inside a span.
 template<class RegisterType>
-template<int Algorithm, bool AM, bool Output>
-uint32_t fm_channel<RegisterType>::sor_render_fast(int32_t *__restrict acc, uint32_t n, uint32_t env, const uint8_t *am)
+template<int Algorithm, bool AM, bool Output, bool PM>
+uint32_t fm_channel<RegisterType>::sor_render_fast(int32_t *__restrict acc, uint32_t n, uint32_t env, const int8_t *pm, const uint8_t *am)
 {
     static_assert(RegisterType::WAVEFORMS == 1 && Algorithm >= 0 && Algorithm < 8);
     static_assert(RegisterType::EG_CLOCK_DIVIDER == 3);
@@ -68,8 +71,13 @@ uint32_t fm_channel<RegisterType>::sor_render_fast(int32_t *__restrict acc, uint
     for (unsigned k = 0; k < 4; k++) { lane[k].op = m_op[k]; reload(lane[k]); }
     const uint16_t *const wave = m_op[0]->m_cache.waveform;
     uint32_t ph0 = m_op[0]->m_phase, ph1 = m_op[1]->m_phase, ph2 = m_op[2]->m_phase, ph3 = m_op[3]->m_phase;
-    const uint32_t st0 = m_op[0]->m_cache.phase_step, st1 = m_op[1]->m_cache.phase_step,
-                   st2 = m_op[2]->m_cache.phase_step, st3 = m_op[3]->m_cache.phase_step;
+    uint32_t st0 = m_op[0]->m_cache.phase_step, st1 = m_op[1]->m_cache.phase_step,
+             st2 = m_op[2]->m_cache.phase_step, st3 = m_op[3]->m_cache.phase_step;
+    constexpr uint32_t dynamic = opdata_cache::PHASE_STEP_DYNAMIC;
+    const bool dyn0 = PM && st0 == dynamic, dyn1 = PM && st1 == dynamic, dyn2 = PM && st2 == dynamic, dyn3 = PM && st3 == dynamic;
+    int32_t last_pm = INT32_MIN;
+    auto step = [&](fm_operator<RegisterType> *op, int32_t lfo_raw_pm)
+        { return op->m_regs.compute_phase_step(op->m_choffs, op->m_opoffs, op->m_cache, lfo_raw_pm); };
     const uint32_t am_shift = m_sor_am_shift, feedback = m_sor_feedback, pan = m_sor_pan;
     int32_t fb0 = m_feedback[0], fb1 = m_feedback[1], fbin = m_feedback_in;
     auto volume = [&](const Lane &l, uint32_t phase, uint32_t am_offset) -> int32_t
@@ -99,6 +107,14 @@ uint32_t fm_channel<RegisterType>::sor_render_fast(int32_t *__restrict acc, uint
         // fm_channel::clock_fast(): feedback history, then each operator's phase
         fb0 = fb1;
         fb1 = int16_t(fbin);
+        if (PM && pm[i] != last_pm)
+        {
+            last_pm = pm[i];
+            if (dyn0) st0 = step(m_op[0], last_pm);
+            if (dyn1) st1 = step(m_op[1], last_pm);
+            if (dyn2) st2 = step(m_op[2], last_pm);
+            if (dyn3) st3 = step(m_op[3], last_pm);
+        }
         ph0 += st0; ph1 += st1; ph2 += st2; ph3 += st3;
         if (!Output)
             continue;
@@ -150,15 +166,27 @@ void fm_channel<RegisterType>::sor_render_span(int32_t *__restrict acc, uint32_t
     const uint32_t am_shift = m_sor_am_shift;
     if (sor_light())
     {
-        if (!output_enabled)
-            sor_render_fast<Algorithm, false, false>(acc, n, env, am);
+        bool dynamic = false;
+        for (auto *op : m_op)
+            dynamic |= op->m_cache.phase_step == opdata_cache::PHASE_STEP_DYNAMIC;
+        if (dynamic)
+        {
+            if (!output_enabled)
+                sor_render_fast<Algorithm, false, false, true>(acc, n, env, pm, am);
+            else if (am_shift == 7)
+                sor_render_fast<Algorithm, false, true, true>(acc, n, env, pm, am);
+            else
+                sor_render_fast<Algorithm, true, true, true>(acc, n, env, pm, am);
+        }
+        else if (!output_enabled)
+            sor_render_fast<Algorithm, false, false, false>(acc, n, env, pm, am);
         else if (am_shift == 7)
-            sor_render_fast<Algorithm, false, true>(acc, n, env, am);
+            sor_render_fast<Algorithm, false, true, false>(acc, n, env, pm, am);
         else
-            sor_render_fast<Algorithm, true, true>(acc, n, env, am);
+            sor_render_fast<Algorithm, true, true, false>(acc, n, env, pm, am);
         return;
     }
-    // SSG-EG, inversion or LFO PM: the full per-sample operator clock.
+    // SSG-EG or inversion: the full per-sample operator clock.
     for (uint32_t i = 0; i < n; i++)
     {
         // Same envelope-counter sequence as fm_engine_base::clock().

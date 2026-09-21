@@ -28,6 +28,7 @@ bool replay_load(const char *path){
  return count!=0;
 }
 bool replay_finished(){return count && index==count;}
+bool replay_active(){return count!=0;}
 bool replay_poll(PlayersControlState &p,const uint8_t *ram){
  if(!count)return false;
  while(index<count && segments[index].flags &&
