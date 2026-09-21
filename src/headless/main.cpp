@@ -25,6 +25,7 @@ sor::TitleCaption sceneTitle;
 // from SOR_ART): original at 2x on the left, enhanced on the right.
 // SOR_SMOOTH=1: smooth animation (in-between poses; needs a step of 1).
 // SOR_LIGHTING=1: dynamic lighting (shadows, light from the backdrop and from fire).
+unsigned gameRound=0;   // 1-8, from the runtime
 struct EnhancedCapture {
     std::string directory;unsigned first=0,last=0,step=1,frame=0;bool pending=false;
     std::vector<uint8_t> package;sor::ArtCatalog art;
@@ -54,7 +55,7 @@ void capture_enhanced(VDPState &state,VDPRenderer &renderer){
     static const bool smooth=std::getenv("SOR_SMOOTH")&&std::getenv("SOR_SMOOTH")[0]=='1';
     capture.scene->smooth=smooth;
     static const bool lighting=std::getenv("SOR_LIGHTING")&&std::getenv("SOR_LIGHTING")[0]=='1';
-    capture.scene->lighting=lighting;
+    capture.scene->lighting=lighting;capture.scene->round=gameRound;
     const bool ok=capture.scene->build(state,renderer);
     state.status_=status;
     if(!ok)return;
@@ -91,7 +92,8 @@ void capture_write(const Framebuffer &fb,int width,int height){
                 fprintf(list," ground %d",d.ground);
                 for(const auto &shadow:d.light.shadow)fprintf(list," shadow %d/%d@%d",shadow.lean,shadow.length,shadow.alpha);
                 fputs(" light",list);
-                for(const auto &c:d.light.corner)fprintf(list," %d,%d,%d+%d,%d,%d",c.scale[0],c.scale[1],c.scale[2],c.offset[0],c.offset[1],c.offset[2]);
+                for(int i=0;i<4;i++){const auto &c=d.light.corner(i);fprintf(list," %d,%d,%d+%d,%d,%d",c.scale[0],c.scale[1],c.scale[2],c.offset[0],c.offset[1],c.offset[2]);}
+                for(const auto &rim:d.light.rim)fprintf(list," rim@%d",rim.alpha);
             }
             if(f.from)fprintf(list," in-between from %06X",f.from);
             fputc('\n',list);}
@@ -110,13 +112,15 @@ void capture_write(const Framebuffer &fb,int width,int height){
                 fputc('\n',list);
             }
         }
+        {unsigned covering=0;for(size_t i=0;i<scene.particleCount;i++)covering+=!scene.particleDraws[i].additive;
+         fprintf(list,"particles %zu (covering %u)\n",scene.particleCount,covering);}
         fprintf(list,"sprite cells %zu\n",scene.spriteTileCount);fclose(list);
     }
 }
 }
 const uint8_t *platform_embedded_rom(size_t &size){size=0;return nullptr;}
 const uint8_t *platform_embedded_art(size_t &size){size=0;return nullptr;}
-void platform_game_state(unsigned round,unsigned,bool playing){sor::extract_frames_round(playing?round:0);}
+void platform_game_state(unsigned round,unsigned,bool playing){gameRound=round;sor::extract_frames_round(playing?round:0);}
 void platform_video_init(){}
 void platform_video_shutdown(){}
 bool platform_render_vdp(VDPState &state,VDPRenderer &renderer,const sor::TitleCaption &title){

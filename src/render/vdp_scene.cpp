@@ -41,7 +41,7 @@ uint16_t VdpScene::rgb1555(unsigned r,unsigned g,unsigned b){
 }
 bool VdpScene::buildCached(VDPState &s,VDPRenderer &){
     // VRAM: no write since the cached frame (a write of equal bytes rebuilds).
-    reused=cacheValid && enhanced==builtEnhanced_ && lighting==builtLighting_ && !inbetween_ && same_render_regs(s,previous)
+    reused=cacheValid && enhanced==builtEnhanced_ && lighting==builtLighting_ && round==builtRound_ && !inbetween_ && same_render_regs(s,previous)
         && s.vramGeneration_==previous.vramGeneration_
         && equal_bytes(s.cram_,previous.cram_,sizeof(s.cram_))
         && equal_bytes(s.vsram_,previous.vsram_,sizeof(s.vsram_))
@@ -62,7 +62,7 @@ bool VdpScene::buildCached(VDPState &s,VDPRenderer &){
         && unchanged_region(s,previous,s.windowBase(),(s.h40Mode()?64:32)*32*2)
         && unchanged_region(s,previous,s.hscrollBase(),s.hscrollMode()==0?4:s.activeHeight()*4);
     const auto status=s.status_;s.status_&=~0x60;
-    builtEnhanced_=enhanced;builtLighting_=lighting;
+    builtEnhanced_=enhanced;builtLighting_=lighting;builtRound_=round;
     cacheValid=buildImpl(s,geometrySame);spriteFlags=s.status_&0x60;s.status_|=status;
     if(cacheValid)previous=s;
     return cacheValid;
@@ -197,9 +197,11 @@ void VdpScene::enhancedSprites(const VDPState &s){
     // Lighting: objects of the world are lit, whether drawn as art or as their
     // pieces; objects that are light shine on the others and on the ground.
     const bool lightOn=lighting&&build;
+    light_.setRound(round);
     LightEmitter emitters[16];unsigned emitterCount=0;
     int16_t pieces[VDPState::SAT_MAX_SPRITES];std::fill_n(pieces,VDPState::SAT_MAX_SPRITES,int16_t(-1));
-    const auto inWorld=[](const ProbedObject &obj){return !obj.screen&&(in_playfield(obj.type)||light_kind(obj.type,obj.mapping)!=LightKind::NONE);};
+    // Standing in the playfield (lit, casting shadows), not a light itself.
+    const auto inWorld=[](const ProbedObject &obj){return !obj.screen&&in_playfield(obj.type)&&light_kind(obj.type,obj.mapping)==LightKind::NONE;};
     if(lighting)particlesStep(s,build);else{particles_.clear();particleCount=0;}
     if(lightOn){
         // The backdrop's light changes when it scrolls or its colours do; tiles
@@ -213,9 +215,9 @@ void VdpScene::enhancedSprites(const VDPState &s){
         int16_t best=0;unsigned bestCount=0;
         for(unsigned o=0;o<build->count;o++){
             const auto &obj=build->objects[o];
-            if(!inWorld(obj)||!in_playfield(obj.type))continue;
+            if(!inWorld(obj))continue;
             unsigned same=0;
-            for(unsigned k=0;k<build->count;k++)same+=inWorld(build->objects[k])&&in_playfield(build->objects[k].type)&&build->objects[k].level==obj.level;
+            for(unsigned k=0;k<build->count;k++)same+=inWorld(build->objects[k])&&build->objects[k].level==obj.level;
             if(same>bestCount||(same==bestCount&&obj.level>best)){best=obj.level;bestCount=same;}
         }
         const int16_t levelWas=groundLevel_;const bool knownWas=groundKnown_;
@@ -227,7 +229,7 @@ void VdpScene::enhancedSprites(const VDPState &s){
         if(!knownWas||levelWas!=groundLevel_)horizon_=32767;        // another round, another ground
         for(unsigned o=0;o<build->count;o++){
             const auto &obj=build->objects[o];
-            if(!inWorld(obj)||!in_playfield(obj.type)||obj.level!=groundLevel_)continue;
+            if(!inWorld(obj)||obj.level!=groundLevel_)continue;
             const int line=obj.y-128;
             if(line>64&&line<height)horizon_=int16_t(std::min<int>(horizon_,horizon_==32767?line-24:line));
         }
@@ -235,19 +237,22 @@ void VdpScene::enhancedSprites(const VDPState &s){
         light_.collect(horizon_==32767?height*5/8:horizon_-WALL_ABOVE_LANES);
         for(unsigned o=0;o<build->count&&emitterCount<16;o++){
             const auto &obj=build->objects[o];
-            if(!inWorld(obj)||!emits_light(obj.type,obj.mapping)||obj.first+obj.count>VDPState::SAT_MAX_SPRITES)continue;
+            if(obj.screen||!emits_light(obj.type,obj.mapping)||obj.first+obj.count>VDPState::SAT_MAX_SPRITES)continue;
             // Fire (the police's napalm) reaches far and lights the ground; fireballs less; sparks are small.
-            const bool fire=obj.type==0x0E,ball=obj.type==0x05;
+            const bool fire=obj.type==0x0E,ball=!fire&&obj.type!=0x49;
             LightEmitter e{int16_t(obj.x-128),int16_t(obj.y-128-(fire?24:8)),int16_t(fire?112:ball?80:48),{},uint8_t(fire?120:ball?110:80)};
             const bool hasArt=owner[obj.first]==int16_t(o);
             emitter_colour(s.cram_+(record(obj.first)[4]>>5&3)*16,hasArt?art->frames()[frameOf[o]].mask:0xFFFE,e.colour);
             emitters[emitterCount++]=e;
-            if(obj.type!=0x49&&glowCount<16)
+            // It lights the wall behind it too: a wide faint glow around the flame itself.
+            if(obj.type!=0x49&&glowCount<32)
+                glows[glowCount++]={e.x,e.y,int16_t(e.radius*3/4),int16_t(e.radius*3/4),{e.colour[0],e.colour[1],e.colour[2]},uint8_t(fire?26:60)};
+            if(obj.type!=0x49&&glowCount<32)
                 glows[glowCount++]={int16_t(obj.x-128),int16_t(obj.y-128+std::max(0,groundLevel_-obj.level)),int16_t(e.radius),int16_t(e.radius*3/8),{e.colour[0],e.colour[1],e.colour[2]},uint8_t(e.strength/3)};
         }
         for(unsigned o=0;o<build->count;o++){
             const auto &obj=build->objects[o];
-            if(obj.first+obj.count>VDPState::SAT_MAX_SPRITES||owner[obj.first]==int16_t(o)||!inWorld(obj)||!in_playfield(obj.type))continue;
+            if(obj.first+obj.count>VDPState::SAT_MAX_SPRITES||owner[obj.first]==int16_t(o)||!inWorld(obj))continue;
             for(int r=obj.first;r<obj.first+obj.count;r++)pieces[r]=int16_t(o);
         }
     }
@@ -290,13 +295,13 @@ void VdpScene::enhancedSprites(const VDPState &s){
                 if(to>from){
                     ArtDraw &d=artDraws[artCount++];
                     d={frameOf[owner[index]],int16_t(obj.x-128),int16_t(obj.y-128),uint8_t(layer),uint8_t(ordinal),obj.flip,tintOf[owner[index]],int16_t(from),int16_t(to),obj.type};
-                    if(lightOn&&!obj.screen&&in_playfield(obj.type)){
+                    if(lightOn&&inWorld(obj)){
                         const int left=d.x-((obj.flip?f.w-f.anchorX:f.anchorX)+1)/2;
                         d.ground=int16_t(d.y+std::max(0,groundLevel_-obj.level));
                         lightOf(left,top,left+(f.w+1)/2,bottom,d.ground,d.tint,d.light);
                         d.lit=true;
                         // A fading object's shadows fade with it.
-                        d.shadow=true;
+                        d.shadow=from==-32768&&to==32767;   // dropping in behind the HUD (a sprite mask): none
                         for(auto &shadow:d.light.shadow)shadow.alpha=uint8_t(shadow.alpha*(d.tint.scale[0]+d.tint.scale[1]+d.tint.scale[2])/765);
                     }
                 }
@@ -319,7 +324,7 @@ void VdpScene::enhancedSprites(const VDPState &s){
                         const auto &obj=build->objects[pieces[index]];
                         if(shadeOwner!=pieces[index]){
                             CornerLight c;lightOf(obj.x-128-16,obj.y-128-64,obj.x-128+16,obj.y-128,obj.y-128+std::max(0,groundLevel_-obj.level),ArtTint{},c);
-                            for(int k=0;k<3;k++)shade[k]=uint8_t((c.corner[0].scale[k]+c.corner[1].scale[k]+c.corner[2].scale[k]+c.corner[3].scale[k])/4);
+                            for(int k=0;k<3;k++)shade[k]=uint8_t((c.column[2][0].scale[k]+c.column[2][1].scale[k])/2);
                             shadeOwner=pieces[index];
                         }
                         std::copy(shade,shade+3,spriteTiles[spriteTileCount-1].shade);
@@ -334,7 +339,7 @@ void VdpScene::particlesStep(const VDPState &s,const SpriteBuild *build){
     // A tick of theirs per sprite-table build of the game's; emitters feed them.
     // They stop with the game (no build displayed: a menu, a cutscene).
     const uint32_t elapsed=build?build->serial-particleSerial_:0;
-    if(!build||elapsed>30){particles_.clear();particleCount=0;if(build)particleSerial_=build->serial;return;}
+    if(!build||elapsed>30){particles_.clear();particleCount=0;trackedCount_=0;if(build)particleSerial_=build->serial;return;}
     particleSerial_=build->serial;
     const unsigned ticks=std::min<uint32_t>(elapsed,3);
     const int camera=-scroll(s,0,std::min(height-1,std::max(0,int(light_.horizon())+8)));
@@ -358,7 +363,32 @@ void VdpScene::particlesStep(const VDPState &s,const SpriteBuild *build){
             if(sparkCount<16)sparks[sparkCount++]=obj.slot;
         }
     }
-    if(ticks){std::copy(sparks,sparks+sparkCount,sparkSlots_);sparkSlotCount_=sparkCount;}
+    if(ticks){
+        std::copy(sparks,sparks+sparkCount,sparkSlots_);sparkSlotCount_=sparkCount;
+        // Feet coming down raise dust; a prop that was on screen and is gone has broken; rain lands.
+        const auto prop=[](unsigned type){return type==0x11||type==0x18||type==0x19||type==0x1B||type==0x1F||type==0x41;};
+        bool rain=false;
+        for(unsigned o=0;o<build->count;o++){
+            const auto &obj=build->objects[o];
+            rain|=obj.type==0x17;
+            if(obj.screen||!in_playfield(obj.type)||prop(obj.type)||obj.level!=groundLevel_||!groundKnown_)continue;
+            for(unsigned i=0;i<trackedCount_;i++)
+                if(tracked_[i].slot==obj.slot&&tracked_[i].type==obj.type&&tracked_[i].level<groundLevel_-3)particles_.dust(obj.x-128,obj.y-128,camera);
+        }
+        for(unsigned i=0;i<trackedCount_;i++){
+            const Tracked &was=tracked_[i];
+            if(!prop(was.type)||was.x<16||was.x>=width-16)continue;
+            bool there=false;
+            for(unsigned o=0;o<build->count;o++)there|=build->objects[o].slot==was.slot&&build->objects[o].type==was.type;
+            if(!there)particles_.debris(was.x,was.y-16,camera);
+        }
+        if(rain)for(unsigned t=0;t<ticks*2;t++){
+            const int top=std::min(height-8,light_.horizon()+20);
+            particles_.splash(int(particleRandom()%unsigned(width)),top+int(particleRandom()%unsigned(height-4-top)),camera);
+        }
+        trackedCount_=0;
+        for(unsigned o=0;o<build->count;o++){const auto &obj=build->objects[o];tracked_[trackedCount_++]={obj.slot,int16_t(obj.x-128),int16_t(obj.y-128),obj.level,obj.type};}
+    }
     particleCount=particles_.draw(camera,width,height,particleDraws);
 }
 void VdpScene::add(uint16_t e,int x,int y,int w,int h,int px,int py,int lowDepth){
@@ -504,6 +534,18 @@ void raster_enhanced(const VdpScene &scene,const VDPState &s,uint16_t *out,int p
                     if(d.layer!=layer||d.order!=ordinal||!scene.art)continue;
                     const auto &f=scene.art->frames()[d.frame];const auto &page=scene.art->pages()[f.page];
                     const int left=d.x*2-(d.flip?f.w-f.anchorX:f.anchorX),top=d.y*2-f.anchorY;
+                    // Rim light: the art again in the light's colour, moved towards the
+                    // lights, behind the art: what shows is a thin lit edge.
+                    if(d.lit)for(int g=0;g<2;g++){
+                        const auto &rim=d.light.rim[g];
+                        if(!rim.alpha)continue;
+                        const int add[3]={rim.colour[0]*rim.alpha/255*31/255,rim.colour[1]*rim.alpha/255*31/255,rim.colour[2]*rim.alpha/255*31/255};
+                        for(int v=0;v<f.h;v++)for(int u=0;u<f.w;u++){
+                            if(top+v<d.lineFrom*2||top+v>=d.lineTo*2)continue;
+                            const uint16_t c=scene.art->texel(page,size_t(f.v+v)*page.width+f.u+(d.flip?f.w-1-u:u));
+                            if(c&0x8000)blend(left+u+(g?VdpScene::RIM_SHIFT:-VdpScene::RIM_SHIFT),top+v-1,add,255-rim.alpha);
+                        }
+                    }
                     for(int v=0;v<f.h;v++)for(int u=0;u<f.w;u++){
                         if(top+v<d.lineFrom*2||top+v>=d.lineTo*2)continue;   // sprite mask
                         const uint16_t c=scene.art->texel(page,size_t(f.v+v)*page.width+f.u+(d.flip?f.w-1-u:u));
@@ -512,14 +554,16 @@ void raster_enhanced(const VdpScene &scene,const VDPState &s,uint16_t *out,int p
                         // As the PowerVR does: texture * vertex colour + offset colour,
                         // both interpolated between the quad's corners when it is lit.
                         uint16_t out=0x8000;
-                        const int fx=f.w>1?u*256/(f.w-1):0,fy=f.h>1?v*256/(f.h-1):0;
+                        // Between the two columns of vertices around u, and top and bottom.
+                        const int across=f.w>1?u*256*(CornerLight::COLUMNS-1)/(f.w-1):0,column=std::min(across>>8,CornerLight::COLUMNS-2);
+                        const int fx=across-column*256,fy=f.h>1?v*256/(f.h-1):0;
                         for(int ch=0;ch<3;ch++){
                             const int shift=10-ch*5,value=(c>>shift&31)*255/31;
                             int scale=d.tint.scale[ch],offset=d.tint.offset[ch];
                             if(d.lit){
-                                const auto &k=d.light.corner;
-                                scale=((k[0].scale[ch]*(256-fx)+k[1].scale[ch]*fx)*(256-fy)+(k[2].scale[ch]*(256-fx)+k[3].scale[ch]*fx)*fy)>>16;
-                                offset=((k[0].offset[ch]*(256-fx)+k[1].offset[ch]*fx)*(256-fy)+(k[2].offset[ch]*(256-fx)+k[3].offset[ch]*fx)*fy)>>16;
+                                const auto &a=d.light.column[column],&b=d.light.column[column+1];
+                                scale=((a[0].scale[ch]*(256-fx)+b[0].scale[ch]*fx)*(256-fy)+(a[1].scale[ch]*(256-fx)+b[1].scale[ch]*fx)*fy)>>16;
+                                offset=((a[0].offset[ch]*(256-fx)+b[0].offset[ch]*fx)*(256-fy)+(a[1].offset[ch]*(256-fx)+b[1].offset[ch]*fx)*fy)>>16;
                             }
                             out|=uint16_t(std::min(255,value*scale/255+offset)*31/255<<shift);
                         }

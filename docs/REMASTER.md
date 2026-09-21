@@ -223,12 +223,30 @@ computes, in integers, the same values for the Dreamcast and the host preview
 - **The whole scene lights an object** (`SceneLight::shade`): every light
   counts, by its distance over the ground (a screen line is about three of the
   ground; the object's distance from the wall comes from its ground line), into
-  a left and a right group (a light right behind the object is both). Each
-  side's corners of the quad get a scale (a little of the screen's hue, more of
-  that side's light, brighter the more reaches it; the feet darker and in the
-  ground's colour) and an offset (added light). Exposure is fixed (`EXPOSURE`).
-  The game's fade or flash tint is folded in.
-- **Shadows**: away from each group's centre of power, the object's art again,
+  a left and a right group (a light right behind the object is both).
+- **Form, not a flat card** (`CornerLight::column`): the art's quad is a strip
+  of 5 columns of vertices. Each column takes the light a cylinder's surface
+  there would take from lights 60 degrees to each side (`facing`), plus a fifth
+  of all the light as fill: bright towards the lights, a core of shade, the far
+  edge in shade. Each vertex gets a scale (a little of the screen's hue and of
+  the round's sky, more of the light's, brighter the more reaches it; the feet
+  darker and in the ground's colour) and an offset (added light). The game's
+  fade or flash tint is folded in. No texture memory: a normal map or a second
+  shaded copy of the art would not fit (the art already overflows in rounds 5,
+  6 and 8).
+- **Rim light** (`RimLight`): the art again as a flat colour (vertex colour
+  black, offset colour the light's, towards white), translucent, moved
+  `RIM_SHIFT` art pixels towards a side's lights and drawn just behind the
+  art (depth - 0.004): what shows is a thin lit edge on the side facing the
+  lights, stronger the more that side outshines the other. No texture memory.
+- **Rounds** (`light_profile`): exposure, shadow darkness, spill, tints, rim
+  and the *sky* per round: the sky tints everything a little and casts a third
+  shadow with a fixed direction that takes a share of the darkness. Round 1 is
+  all shop windows; the beach (3) is the moon, up on the left, and no spill;
+  the bridge (4) and the lift (7) have no wall to spill from; the factory (6)
+  is harsh; the ship (5) and the headquarters (8) are warm rooms. The runtime
+  passes the round (`VdpScene::round`).
+- **Shadows**: away from each group's centre of power (and the sky's, above), the object's art again,
   black, bilinear, sheared from the ground line towards the viewer (the lights
   are behind the playfield): lean and length follow (object - light) / the
   lights' height, so shadows swing round as a character passes a shop window,
@@ -245,11 +263,17 @@ computes, in integers, the same values for the Dreamcast and the host preview
 - **Objects that are light** (`light_kind`): the police's napalm (`$0E`), the
   bazooka's flame (type `$05`, frames `$070C1F`- except the grey smoke
   `$070C47`-`$070C5B`; the car is `$070B20`-) and hit sparks (`$49`). Their
-  colour (the bright entries of their CRAM line) is added to the corners of
-  objects near them; fire and flame put a pool of light on the ground.
+  The fire the round 6 bosses breathe is frames `$02F3B2`-`$02F42F` of their
+  own type (`$57`/`$97`). Their colour (the bright entries of their CRAM line)
+  is added to the vertices of objects near them; fire and flame put a pool of
+  light on the ground and a wide faint glow on the wall behind them. (Mr. X's
+  gun flash could not be told from his other frames in the extracted art: not
+  a light.)
 - **Particles** (`scene_particles.*`): embers rise from fire, the bazooka's
   flame throws embers and sparks and its smoke lingers, a hit spark bursts
-  into sparks. Up to 96, their own random numbers, a tick per sprite-table
+  into sparks, feet that land (a jump, a knockdown: `+$18` back at the ground's
+  value) raise dust, a prop that was on screen and is gone has broken and
+  throws pieces, rain (type `$17` on screen) glints on the ground. Up to 96, their own random numbers, a tick per sprite-table
   build, x kept in the world (plane A's scroll is the camera), not drawn over
   the HUD; additive (or covering, for smoke) quads of one 32 x 32 radial
   texture. They move without invalidating the cached scene
@@ -280,7 +304,9 @@ Limits: light is per corner, so there is no shading by the art's form (the
 PowerVR's bump mapping would need a 16-bit normal map per page, and art
 already fills its memory); the light is only what the backdrop's pixels say;
 shadows are darker where two cross; a sprite mask (dropping in behind the HUD)
-clips the art but not its shadow; backdrops themselves are not relit.
+has no shadow; backdrops are relit only by spill and by fire's glow; steam
+and other scenery effects that are part of the planes have no particles
+(nothing in the sprite table says where they are).
 
 Check it on the host: `SOR_LIGHTING=1` with `SOR_ENHANCED_CAPTURE`; each frame's
 text file lists the corners' light, shadows (lean/length@alpha), the ground

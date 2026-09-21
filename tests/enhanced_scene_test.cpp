@@ -220,7 +220,8 @@ int main(){
         assert(d.lit&&d.shadow&&d.ground==66);
         assert(scene->sceneLight().lightCount()>0&&scene->sceneLight().lights()[0].x<48);   // the block is a light
         assert(scene->sceneLight().spill(1).strength>scene->sceneLight().spill(12).strength);   // and spills on the ground below it
-        const auto &k=d.light.corner;
+        const sor::ArtTint k[4]={d.light.corner(0),d.light.corner(1),d.light.corner(2),d.light.corner(3)};
+        assert(d.light.column[1][0].scale[1]>d.light.column[3][0].scale[1]&&d.light.rim[0].alpha>d.light.rim[1].alpha);   // a rounded form, its lit edge
         assert(k[0].scale[1]>k[1].scale[1]&&k[0].offset[1]>k[1].offset[1]);   // the left is towards the light
         assert(k[2].scale[1]<k[0].scale[1]);                                   // the feet are darker
         assert(d.light.shadow[0].alpha>d.light.shadow[1].alpha&&d.light.shadow[0].lean>0&&d.light.shadow[0].length>0);   // the shadow runs away from it, to the right
@@ -230,6 +231,11 @@ int main(){
         bool shadow=false;
         for(int y=66*2;y<66*2+4;y++)for(int x=48*2-4;x<48*2+6;x++)shadow|=lit[y*640+x]!=unlit[y*640+x];
         assert(shadow);                                                        // darkened ground below the feet
+        // A round's profile: the beach has the moon (its own shadow, leaning right) and no spill.
+        assert(!d.light.shadow[2].alpha);
+        scene->round=3;assert(scene->build(state,renderer));
+        assert(scene->artDraws[0].light.shadow[2].alpha>0&&scene->artDraws[0].light.shadow[2].lean>0&&!scene->sceneLight().spill(1).strength);
+        scene->round=0;assert(scene->build(state,renderer));
         // In the air (the level is less than the ground's) the shadow stays on the ground
         // line; a lone object's level counts as the ground only once it has been kept.
         place(140);
@@ -244,7 +250,7 @@ int main(){
         sor::CornerLight glow;
         sor::LightEmitter fire{100,50,64,{255,128,0},200};
         sor::SceneLight::glow(fire,40,40,90,60,glow);
-        assert(glow.corner[1].offset[0]>glow.corner[0].offset[0]&&glow.corner[1].offset[2]==0&&glow.corner[1].offset[0]>glow.corner[1].offset[1]);
+        assert(glow.corner(1).offset[0]>glow.corner(0).offset[0]&&glow.corner(1).offset[2]==0&&glow.corner(1).offset[0]>glow.corner(1).offset[1]);
         // Fire throws embers: particles live in the scene, advance with the game's
         // builds, keep the scene from being reused, and end.
         {
@@ -257,7 +263,12 @@ int main(){
             assert(particles.draw(5000,320,224,draws)==0);                     // scrolled away
             particles.advance(100);assert(!particles.alive());
             particles.burst(50,100,0);assert(particles.draw(0,320,224,draws)==7);
+            particles.clear();particles.dust(50,100,0);
+            assert(particles.draw(0,320,224,draws)==5&&!draws[0].additive);        // dust covers, light is added
+            particles.clear();particles.debris(50,100,0);assert(particles.draw(0,320,224,draws)==14);
+            particles.clear();particles.splash(50,100,0);assert(particles.draw(0,320,224,draws)==1&&draws[0].additive);
         }
+        assert(sor::light_kind(0x57,0x02F3F3)==sor::LightKind::FIREBALL&&sor::light_kind(0x57,0x02F1A5)==sor::LightKind::NONE);   // a boss's breath, not the boss
         assert(sor::emits_light(0x0E,0)&&!sor::emits_light(0x05,0x070B20)&&sor::emits_light(0x05,0x070C1F)&&sor::light_kind(0x05,0x070C51)==sor::LightKind::ROCKET&&!sor::in_playfield(0x0E)&&sor::in_playfield(0x01)&&sor::in_playfield(0x24)&&!sor::in_playfield(0x54));
         for(int cy=0;cy<3;cy++)for(int cx=0;cx<4;cx++){const int a=state.planeABase()+(cy*state.planeWidthCells()+cx)*2;state.vram_[a+1]=0;}
         state.regs_[0]&=~4;state.regs_[7]=0;place(160);scene->invalidate();

@@ -17,10 +17,23 @@ void hue(const uint8_t *c,int out[3]){
 int towards(int hueChannel,int strength){return 255-(255-hueChannel)*strength/256;}
 // How strongly the light's colour shows, the unlit side's brightness, the
 // feet's, and the most the lit side adds (of 255).
-constexpr int AMBIENT_TINT=24,LIGHT_TINT=52,UNLIT=226,FEET=238,GROUND_TINT=32,ADDED=46;
+constexpr int FEET=238,GROUND_TINT=32,ADDED=46;
 // The backdrop beside an object that counts as lighting it.
-// The power reaching an object at which it is half lit.
-constexpr uint32_t EXPOSURE=900;
+}
+const LightProfile &light_profile(unsigned round){
+    //                       exposure shadow spill ambient light unlit rim   sky              tint lean length share
+    static const LightProfile profiles[9]={
+        /* default */        { 900,    150,  255,  24,     52,   226,  150, {255,255,255},   0,   0,   18,    0},
+        /* 1 street */       { 900,    150,  255,  24,     52,   226,  150, {255,255,255},   0,   0,   18,    0},
+        /* 2 inner city */   { 500,    165,  200,  20,     60,   214,  170, {170,190,255},   24,  10,  16,    60},
+        /* 3 beach */        { 700,    140,  0,    16,     30,   222,  120, {150,180,255},   56,  38,  30,    200},   // the moon, up on the left
+        /* 4 bridge */       { 700,    150,  0,    20,     40,   220,  130, {190,210,255},   36, -24,  24,    150},
+        /* 5 ship */         { 900,    140,  150,  24,     56,   228,  140, {255,225,180},   20,  0,   16,    80},
+        /* 6 factory */      { 600,    185,  120,  18,     64,   204,  200, {255,240,210},   12,  0,   14,    90},    // harsh work lights
+        /* 7 lift */         { 800,    150,  0,    20,     48,   220,  160, {200,215,255},   28,  0,   14,    130},   // no wall to spill from
+        /* 8 headquarters */ { 900,    150,  110,  30,     56,   226,  150, {255,200,170},   24,  0,   16,    90},
+    };
+    return profiles[round<=8?round:0];
 }
 LightKind light_kind(unsigned type,uint32_t mapping){
     // The police's napalm; hit sparks. Type $05 is the police car ($070B20-), the
@@ -29,6 +42,8 @@ LightKind light_kind(unsigned type,uint32_t mapping){
     if(type==0x0E)return LightKind::FIRE;
     if(type==0x49)return LightKind::HIT_SPARK;
     if(type==0x05&&mapping>=0x070C1F&&mapping<0x070D00)return mapping>=0x070C47&&mapping<=0x070C5B?LightKind::ROCKET:LightKind::FIREBALL;
+    // The fire the round 6 bosses (and their return in round 8) breathe: frames of their own type.
+    if((type==0x57||type==0x97)&&mapping>=0x02F3B2&&mapping<=0x02F42F)return LightKind::FIREBALL;
     return LightKind::NONE;
 }
 bool in_playfield(unsigned type){
@@ -165,7 +180,7 @@ void SceneLight::collect(int horizon){
         }
         Spill &out=spill_[boundary];
         for(int k=0;k<3;k++)out.colour[k]=sum[3]?uint8_t(std::min<uint32_t>(255,(sum[k]<<8)/sum[3])):0;
-        out.strength=uint8_t(sum[3]*120/(sum[3]+24000));
+        out.strength=uint8_t(sum[3]*120/(sum[3]+24000)*profile_->spill/255);
     }
 }
 LightSample SceneLight::gather(int x0,int y0,int x1,int y1) const{
@@ -215,55 +230,80 @@ void SceneLight::shade(int x0,int y0,int x1,int y1,int ground,CornerLight &light
             for(int k=0;k<3;k++)colour[g][k]+=share[g]*l.colour[k];
         }
     }
+    const LightProfile &profile=*profile_;
     const LightSample floor=gather(x0-16,ground-8,x1+16,ground+16);
     int around[3],under[3];hue(ambient,around);hue(floor.colour,under);
-    // How lit each side is, 0-255: its own lights, and some of the other side's.
-    int lit[2],from[2][3];
-    for(int g=0;g<2;g++){
-        const uint32_t reaching=power[g]+power[1-g]*3/8;
-        lit[g]=int(reaching*255/(reaching+EXPOSURE));
-        const uint8_t mixed[3]={uint8_t((colour[g][0]+colour[1-g][0]*3/8)/std::max<uint32_t>(reaching,1)),
-                                uint8_t((colour[g][1]+colour[1-g][1]*3/8)/std::max<uint32_t>(reaching,1)),
-                                uint8_t((colour[g][2]+colour[1-g][2]*3/8)/std::max<uint32_t>(reaching,1))};
-        hue(reaching?mixed:ambient,from[g]);
+    // Across the width, as a cylinder's surface takes light from lights 60 degrees
+    // to each side (of 255), plus a fifth of all the light as fill from the scene.
+    static constexpr uint8_t facing[CornerLight::COLUMNS]={222,247,128,0,0};
+    const uint32_t exposure=profile.exposure;
+    int edge[2]{};
+    for(int c=0;c<CornerLight::COLUMNS;c++){
+        const uint32_t w[2]={facing[c],facing[CornerLight::COLUMNS-1-c]};
+        const uint32_t reaching=(power[0]*w[0]+power[1]*w[1])/255+(power[0]+power[1])/5;
+        const int lit=int(reaching*255/(reaching+exposure));
+        int from[3];
+        const uint32_t weight=std::max<uint32_t>(1,(power[0]*(w[0]+51)+power[1]*(w[1]+51))>>8);
+        const uint8_t mixed[3]={uint8_t(std::min<uint32_t>(255,((colour[0][0]>>8)*(w[0]+51)+(colour[1][0]>>8)*(w[1]+51))/weight)),
+                                uint8_t(std::min<uint32_t>(255,((colour[0][1]>>8)*(w[0]+51)+(colour[1][1]>>8)*(w[1]+51))/weight)),
+                                uint8_t(std::min<uint32_t>(255,((colour[0][2]>>8)*(w[0]+51)+(colour[1][2]>>8)*(w[1]+51))/weight))};
+        hue(power[0]+power[1]?mixed:ambient,from);
+        if(c==0)edge[0]=lit;
+        if(c==CornerLight::COLUMNS-1)edge[1]=lit;
+        for(int k=0;k<3;k++){
+            const int scale=towards(around[k],profile.ambientTint)*towards(profile.sky[k],profile.skyTint)/255
+                *towards(from[k],profile.lightTint*lit/255)/255*(profile.unlit+(255-profile.unlit)*lit/255)/255;
+            const int added=from[k]*lit/255*ADDED/255;
+            light.column[c][0].scale[k]=uint8_t(scale);
+            light.column[c][0].offset[k]=uint8_t(added);
+            // The feet: a little darker, in the ground's colour, with half the added light.
+            light.column[c][1].scale[k]=uint8_t(scale*FEET/255*towards(under[k],GROUND_TINT)/255);
+            light.column[c][1].offset[k]=uint8_t(added/2);
+        }
     }
-    for(int g=0;g<2;g++)for(int k=0;k<3;k++){
-        const int scale=towards(around[k],AMBIENT_TINT)*towards(from[g][k],LIGHT_TINT*lit[g]/255)/255*(UNLIT+(255-UNLIT)*lit[g]/255)/255;
-        const int added=from[g][k]*lit[g]/255*ADDED/255;
-        light.corner[g].scale[k]=uint8_t(scale);
-        light.corner[g].offset[k]=uint8_t(added);
-        // The feet: a little darker, in the ground's colour, with half the added light.
-        light.corner[2+g].scale[k]=uint8_t(scale*FEET/255*towards(under[k],GROUND_TINT)/255);
-        light.corner[2+g].offset[k]=uint8_t(added/2);
+    // The edge towards a side's lights catches them: more the more that side outshines the other.
+    for(int g=0;g<2;g++){
+        RimLight &rim=light.rim[g];rim=RimLight{};
+        if(!power[g])continue;
+        const int share=int(uint64_t(power[g])*255/(power[0]+power[1]));
+        rim.alpha=uint8_t(edge[g]*profile.rim/255*(64+share*191/255)/255);
+        if(rim.alpha<28){rim.alpha=0;continue;}
+        int from[3];
+        const uint8_t mixed[3]={uint8_t(colour[g][0]/power[g]),uint8_t(colour[g][1]/power[g]),uint8_t(colour[g][2]/power[g])};
+        hue(mixed,from);
+        for(int k=0;k<3;k++)rim.colour[k]=uint8_t(128+from[k]/2);     // the light's colour, towards white
     }
     // A shadow away from each group's centre of power: per unit of the object's
-    // height it runs (object - light)/(the light's height) over the ground.
+    // height it runs (object - light)/(the light's height) over the ground. The
+    // round's sky casts one of its own, and has its share of the darkness.
     const int total=int(std::min<uint32_t>(power[0]+power[1],0x7FFFFF));
+    const int reach=int(uint64_t(total)*255/(uint64_t(total)+exposure));
+    const bool lights=total>=int(exposure/16);
+    const int skyShare=lights?profile.skyShare:255,alpha=profile.shadowAlpha*(150+reach*105/255)/255;
     for(int g=0;g<2;g++){
         CastShadow &shadow=light.shadow[g];shadow=CastShadow{};
-        if(!power[g]||total<int(EXPOSURE/16))continue;
+        if(!power[g]||!lights)continue;
         const int x=int(place[g]/power[g]),high=int(height[g]/power[g])+40;
         shadow.lean=int8_t(std::clamp((middle-x)*64/high,-72,72));
         shadow.length=uint8_t(std::clamp(depth*64/(3*high),14,44));
-        // The more the scene's lights reach the object, the darker its shadows; they share that.
-        const int reach=total*255/(total+int(EXPOSURE));
-        shadow.alpha=uint8_t(int(SHADOW_ALPHA)*(150+reach*105/255)/255*int(std::min<uint32_t>(power[g],0x7FFFFF))/total);
+        shadow.alpha=uint8_t(alpha*(255-skyShare)/255*int(std::min<uint32_t>(power[g],0x7FFFFF))/total);
         if(shadow.alpha<10)shadow.alpha=0;
     }
-    if(!light.shadow[0].alpha&&!light.shadow[1].alpha)light.shadow[0]={0,18,uint8_t(SHADOW_ALPHA*2/3)};   // no lights: what the sky gives
+    light.shadow[2]={profile.skyLean,profile.skyLength,uint8_t(profile.shadowAlpha*2/3*skyShare/255)};
+    if(light.shadow[2].alpha<10)light.shadow[2].alpha=0;
 }
 void SceneLight::glow(const LightEmitter &e,int x0,int y0,int x1,int y1,CornerLight &light){
-    const int xs[4]={x0,x1,x0,x1},ys[4]={y0,y0,y1,y1};
-    for(int i=0;i<4;i++){
-        const int dx=xs[i]-e.x,dy=ys[i]-e.y,distance=isqrt(dx*dx+dy*dy);
+    for(int c=0;c<CornerLight::COLUMNS;c++)for(int row=0;row<2;row++){
+        const int dx=x0+(x1-x0)*c/(CornerLight::COLUMNS-1)-e.x,dy=(row?y1:y0)-e.y,distance=isqrt(dx*dx+dy*dy);
         if(distance>=e.radius)continue;
         const int near=(e.radius-distance)*255/e.radius,amount=near*near/255*e.strength/255;
-        for(int k=0;k<3;k++)light.corner[i].offset[k]=uint8_t(std::min(255,light.corner[i].offset[k]+e.colour[k]*amount/255));
+        ArtTint &tint=light.column[c][row];
+        for(int k=0;k<3;k++)tint.offset[k]=uint8_t(std::min(255,tint.offset[k]+e.colour[k]*amount/255));
     }
 }
 void SceneLight::apply(const ArtTint &tint,CornerLight &light){
     if(tint.identity())return;
-    for(auto &c:light.corner)for(int k=0;k<3;k++){
+    for(auto &column:light.column)for(auto &c:column)for(int k=0;k<3;k++){
         c.offset[k]=uint8_t(std::min(255,c.offset[k]*tint.scale[k]/255+tint.offset[k]));
         c.scale[k]=uint8_t(c.scale[k]*tint.scale[k]/255);
     }

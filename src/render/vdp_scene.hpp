@@ -72,11 +72,13 @@ public:
     static constexpr unsigned INBETWEEN_TICKS=2;
     // Dynamic lighting of the enhanced drawing: see scene_light.hpp.
     bool lighting=false;
+    unsigned round=0;                            // 1-8 (0: unknown): the round's light profile
+    static constexpr int RIM_SHIFT=2;            // art pixels the rim light's copy of the art is moved towards the lights
     static constexpr int WALL_ABOVE_LANES=16;
     static constexpr unsigned CONTACT_ALPHA=110; // of 255, at the middle of the contact shadow
     // The contact shadow's width, of 256 of the art's, for an object `up` lines above the ground.
     static constexpr int contactScale(int up){return up<=0?150:up>=96?60:150-up*90/96;}
-    GlowDraw glows[16];
+    GlowDraw glows[32];
     size_t glowCount=0;
     ParticleDraw particleDraws[Particles::MAX];
     size_t particleCount=0;
@@ -94,11 +96,18 @@ private:
     bool cacheValid=false;
     uint16_t spriteFlags=0;
     bool builtEnhanced_=false,builtLighting_=false;
+    unsigned builtRound_=0;
     SceneLight light_;
     Particles particles_;
     uint16_t sparkSlots_[16]{};        // hit sparks on screen at the last build: a new one bursts
     unsigned sparkSlotCount_=0;
     uint32_t particleSerial_=0;
+    // What stood where at the last build: a landing raises dust, a prop that is gone has broken.
+    struct Tracked{uint16_t slot;int16_t x,y,level;uint8_t type;};
+    Tracked tracked_[SpriteBuild::MAX_OBJECTS];
+    unsigned trackedCount_=0;
+    uint32_t particleSeed_=0x9E3779B9u;
+    uint32_t particleRandom(){particleSeed_^=particleSeed_<<13;particleSeed_^=particleSeed_>>17;particleSeed_^=particleSeed_<<5;return particleSeed_;}
     void particlesStep(const VDPState &,const SpriteBuild *displayed);
     uint16_t lightColors_[64]{},lightBackground_=0;   // what light_ was built from
     bool lightValid_=false;

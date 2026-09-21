@@ -3,7 +3,8 @@
 #include <cstdint>
 namespace sor {
 // Particles of dynamic lighting (scene_light.hpp; docs/REMASTER.md): embers
-// rising from fire, sparks thrown by hits and by the police's rocket, its smoke.
+// rising from fire, sparks thrown by hits and by the police's rocket, its smoke,
+// dust under feet that land, the pieces of a broken prop, rain on the ground.
 // Drawing only: they live in the scene, advance once per sprite-table build of
 // the game (its tick), use their own random numbers and never touch the game.
 // x is kept in the world (screen x + camera), so that scrolling leaves them
@@ -16,7 +17,7 @@ struct ParticleDraw {
 };
 class Particles {
 public:
-    enum Kind : uint8_t {EMBER,SPARK,SMOKE};
+    enum Kind : uint8_t {EMBER,SPARK,SMOKE,DUST,DEBRIS,SPLASH};
     static constexpr size_t MAX=96;
     void spawn(Kind,int screenX,int screenY,int camera,int vx,int vy,unsigned life);
     // Convenience emitters: all positions on screen, in pixels.
@@ -24,6 +25,9 @@ public:
     void fireball(int x,int y,int camera);             // a falling fireball at x, y
     void rocket(int x,int y,int camera);               // the rocket in flight
     void burst(int x,int y,int camera);                // a hit spark appearing
+    void dust(int x,int y,int camera);                 // feet coming down on the ground at x, y
+    void debris(int x,int y,int camera);               // a prop breaking up
+    void splash(int x,int y,int camera);               // a raindrop on the ground
     void advance(unsigned ticks);
     // What to draw, for a camera. Returns the count written (at most MAX).
     size_t draw(int camera,int width,int height,ParticleDraw *out) const;

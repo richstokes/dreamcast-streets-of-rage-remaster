@@ -27,6 +27,14 @@ void Particles::rocket(int x,int y,int camera){
 void Particles::burst(int x,int y,int camera){
     for(int i=0;i<7;i++)spawn(SPARK,x,y-8,camera,range(-38,38),-range(4,40),unsigned(range(8,16)));
 }
+void Particles::dust(int x,int y,int camera){
+    for(int i=0;i<5;i++)spawn(DUST,x+range(-6,6),y-range(0,3),camera,(i&1?1:-1)*range(6,22),-range(1,5),unsigned(range(12,20)));
+}
+void Particles::debris(int x,int y,int camera){
+    for(int i=0;i<9;i++)spawn(DEBRIS,x+range(-8,8),y-range(0,24),camera,range(-34,34),-range(16,52),unsigned(range(18,30)));
+    dust(x,y+16,camera);
+}
+void Particles::splash(int x,int y,int camera){spawn(SPLASH,x,y,camera,range(-4,4),-range(3,8),unsigned(range(5,8)));}
 void Particles::advance(unsigned ticks){
     for(;ticks;ticks--){
         for(size_t i=0;i<count_;){
@@ -37,6 +45,9 @@ void Particles::advance(unsigned ticks){
             case EMBER:p.vx=int16_t(p.vx+int(random()%5)-2);p.vy=int16_t(p.vy*15/16);break;   // drifts, slows
             case SPARK:p.vy=int16_t(p.vy+3);p.vx=int16_t(p.vx*15/16);break;                     // falls
             case SMOKE:p.vx=int16_t(p.vx*7/8);break;
+            case DUST:p.vx=int16_t(p.vx*13/16);p.vy=int16_t(p.vy*7/8);break;                  // spreads, settles
+            case DEBRIS:p.vy=int16_t(p.vy+4);break;                                             // thrown, falls
+            case SPLASH:p.vy=int16_t(p.vy+2);break;
             }
             i++;
         }
@@ -63,6 +74,17 @@ size_t Particles::draw(int camera,int width,int height,ParticleDraw *out) const{
             d.additive=false;d.radius=uint8_t(5+(255-left)/24);
             d.colour[0]=d.colour[1]=d.colour[2]=uint8_t(120+left/4);
             d.alpha=uint8_t(left*110/255);break;
+        case DUST:    // pale, low, brief
+            d.additive=false;d.radius=uint8_t(4+(255-left)/40);
+            d.colour[0]=190;d.colour[1]=185;d.colour[2]=170;
+            d.alpha=uint8_t(left*90/255);break;
+        case DEBRIS:  // dark pieces, whole until they go
+            d.additive=false;d.radius=3;
+            d.colour[0]=110;d.colour[1]=72;d.colour[2]=40;
+            d.alpha=uint8_t(std::min(255,left*4));break;
+        case SPLASH:  // a glint
+            d.radius=2;d.colour[0]=170;d.colour[1]=200;
+            d.alpha=uint8_t(left*150/255);break;
         }
         out[n++]=d;
     }

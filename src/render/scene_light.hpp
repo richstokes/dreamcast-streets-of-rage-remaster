@@ -33,17 +33,46 @@ struct LightSample {
     uint8_t colour[3];      // bright texels dominate
     uint8_t intensity;      // how much of the region outshines the screen's mean, 0-255
 };
-// A quad's corners: top left, top right, bottom left, bottom right.
 struct CastShadow {
     int8_t lean=0;          // in 1/64 of the art's height: positive to the right
     uint8_t length=0;       // towards the viewer, in 1/64 of the art's height
     uint8_t alpha=0;        // 0: none
 };
-struct CornerLight {
-    ArtTint corner[4];
-    CastShadow shadow[2];   // away from the lights on the left, and on the right
-    bool identity() const {return corner[0].identity()&&corner[1].identity()&&corner[2].identity()&&corner[3].identity();}
+// A thin edge of light on the side of an object that faces the lights: its
+// art drawn again just behind it, in the light's colour, moved towards them.
+struct RimLight {
+    uint8_t colour[3]{};
+    uint8_t alpha=0;        // 0: none
 };
+// The light on an object's quad. Across its width the art is lit as a rounded
+// form would be, not a flat card: COLUMNS columns of vertices, each with the
+// light a cylinder's surface there would take from the lights to the left and
+// to the right (bright towards them, a core of shade between, the far edge in
+// shade), at the top and at the feet.
+struct CornerLight {
+    static constexpr int COLUMNS=5;
+    ArtTint column[COLUMNS][2];   // [left to right][top, bottom]
+    CastShadow shadow[3];   // away from the lights on the left, on the right, and from the round's sky
+    RimLight rim[2];        // on the left edge, on the right edge
+    // The quad's corners: top left, top right, bottom left, bottom right.
+    const ArtTint &corner(int i) const {return column[(i&1)?COLUMNS-1:0][i>>1];}
+    bool identity() const {for(const auto &c:column)if(!c[0].identity()||!c[1].identity())return false;return true;}
+};
+// A round's light: how its backdrop is read and what the sky adds. Round 1's
+// street is lit by its shop windows; the beach by the moon; the lift has no wall.
+struct LightProfile {
+    uint16_t exposure;      // the power reaching an object at which it is half lit
+    uint8_t shadowAlpha;    // of 255, shared between an object's shadows
+    uint8_t spill;          // of 255: the windows' light on the ground
+    uint8_t ambientTint,lightTint;   // of 256: how much of the screen's hue, and of the lights', shows
+    uint8_t unlit;          // of 255: the brightness of what no light reaches
+    uint8_t rim;            // of 255: the edge light's strength
+    uint8_t sky[3];         // the sky's or the room's own light: tints everything a little
+    uint8_t skyTint;        // of 256
+    int8_t skyLean;         // its shadow, as CastShadow
+    uint8_t skyLength,skyShare;      // skyShare of 255: how much of shadowAlpha is the sky's
+};
+const LightProfile &light_profile(unsigned round);
 struct LightEmitter {
     int16_t x,y;            // centre on screen
     int16_t radius;
@@ -52,7 +81,6 @@ struct LightEmitter {
 class SceneLight {
 public:
     static constexpr int CELL=16,COLS=20,ROWS=16;
-    static constexpr unsigned SHADOW_ALPHA=150;  // of 255, shared between an object's shadows
     static constexpr int SPILL_DEPTH=44,SPILL_RISE=14;   // lines of ground the windows' light reaches; its soft upper edge
     // quads [0, endB) are plane B's, [endB, endA) plane A's.
     void build(const TileQuad *quads,size_t endB,size_t endA,const uint16_t *colors,uint16_t background,const VDPState &);
@@ -73,6 +101,8 @@ public:
     // A fade or flash of the game's applies to lit art too.
     static void apply(const ArtTint &,CornerLight &);
     uint8_t ambient[3]{255,255,255};
+    void setRound(unsigned round){profile_=&light_profile(round);}
+    const LightProfile &profile() const {return *profile_;}
     const uint8_t *cell(int row,int column) const {return cell_[row][column];}
 private:
     uint8_t cell_[ROWS][COLS][3]{};
@@ -83,6 +113,7 @@ private:
     unsigned lightCount_=0;
     Spill spill_[COLS+1]{};
     int horizon_=0;
+    const LightProfile *profile_=&light_profile(1);
     int ambientLuminance_=0;
 };
 // Objects that are light, by type (object +$00) and frame, and the types that
