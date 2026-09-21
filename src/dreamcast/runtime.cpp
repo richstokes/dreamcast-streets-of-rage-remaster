@@ -126,7 +126,8 @@ void MegaDriveEnvironment::present(){
             case 0x49AE0:characters|=4;break;   // Axel,
             case 0x5E90A:characters|=8;break;   // Blaze
         }
-        platform_game_state(unsigned(mem_.readWord(0xffff02)&7)+1,characters);
+        // Last argument: in a round (not the title, menus, cutscenes or the ending).
+        platform_game_state(unsigned(mem_.readWord(0xffff02)&7)+1,characters,mem_.readWord(0xffff00)==0x16);
     }
     const sor::TitleCaption title(state_,mem_.readWord(0xffff00));
     if(platform_render_vdp(state_,renderer_,title)){

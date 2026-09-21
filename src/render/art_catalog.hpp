@@ -32,17 +32,32 @@ namespace sor {
 // pages of their own (character bit 7), stored last, and selected only while
 // smooth animation is on: they take what memory the ordinary art leaves.
 //
-// Package "SORART05", little-endian ("SORART04": no `from`):
+// Fades and flashes: the game fades by subtracting a step from each colour
+// channel of a line (clamped at black) and flashes by adding one (clamped at
+// white). A line that is a frame's colours (`line`) changed that way finds the
+// frame with a tint: a scale and an offset per channel, which the renderers
+// apply to the art (PowerVR: vertex colour and offset colour). Anything else
+// (another look whose art is not loaded, a palette swap) finds nothing, and
+// the original pieces are drawn in the game's colours.
+//
+// Package "SORART06", little-endian ("SORART05": no `line`; "SORART04": no `from`):
 //   u8[8] magic, u32 pages, u32 frames, u32 palettes (1-3)
 //   u16 palette[palettes][256] (ARGB1555; index 0 transparent)
 //   per page:  u16 width, u16 height, u16 rounds, u8 palette, u8 character, u32 packed size,
 //              u8 zlib[packed size] -> u8 indices[width*height]
 //   per frame: u32 mapping, u16 colour key, u16 mask (bit i: CRAM entry i counts),
-//              u16 page, u16 u, v, w, h, s16 anchorX, anchorY, u32 from
+//              u16 page, u16 u, v, w, h, s16 anchorX, anchorY, u32 from,
+//              u16 line[16] (the CRAM line the art's colours were made from)
 struct ArtFrame {
     uint32_t mapping,from;
     uint16_t colours,mask,page,u,v,w,h;
     int16_t anchorX,anchorY;
+    uint16_t line[16];       // all zero in older packages: no tinting
+};
+// How art is recoloured to follow a fade or flash: out = art*scale/255 + offset, per channel (r, g, b).
+struct ArtTint {
+    uint8_t scale[3]{255,255,255},offset[3]{0,0,0};
+    bool identity() const {return scale[0]==255&&scale[1]==255&&scale[2]==255&&!offset[0]&&!offset[1]&&!offset[2];}
 };
 struct ArtPage {
     uint16_t width,height,rounds;
@@ -70,9 +85,10 @@ public:
     void setUnloaded(size_t page){wanted_[page]=0;}
     bool wanted(size_t page) const {return wanted_[page];}
     // line: the 16 CRAM words of the sprite's palette line.
-    const ArtFrame *find(uint32_t mapping,const uint16_t *line) const {return find(0,mapping,line);}
+    // tint: set when given; without it only exact colours match.
+    const ArtFrame *find(uint32_t mapping,const uint16_t *line,ArtTint *tint=nullptr) const {return find(0,mapping,line,tint);}
     // The in-between pose from one mapping to another, if there is one.
-    const ArtFrame *between(uint32_t from,uint32_t mapping,const uint16_t *line) const {return from?find(from,mapping,line):nullptr;}
+    const ArtFrame *between(uint32_t from,uint32_t mapping,const uint16_t *line,ArtTint *tint=nullptr) const {return from?find(from,mapping,line,tint):nullptr;}
     bool hasInbetweens() const {return !frames_.empty()&&frames_.back().from;}
     const std::vector<ArtFrame> &frames() const {return frames_;}
     const std::vector<ArtPage> &pages() const {return pages_;}
@@ -82,7 +98,7 @@ public:
     uint16_t texel(const ArtPage &page,size_t index) const {return palette_[page.palette*256+page.indices[index]];}
     bool empty() const {return frames_.empty();}
 private:
-    const ArtFrame *find(uint32_t from,uint32_t mapping,const uint16_t *line) const;
+    const ArtFrame *find(uint32_t from,uint32_t mapping,const uint16_t *line,ArtTint *tint) const;
     std::vector<ArtFrame> frames_;   // sorted by (from, mapping): ordinary frames first
     std::vector<ArtPage> pages_;
     std::vector<uint16_t> palette_;

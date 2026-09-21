@@ -156,7 +156,7 @@ void VdpScene::enhancedSprites(const VDPState &s){
     const auto record=[&](int index){return s.vram_+((base+index*8)&0xFFFF);};
     // SAT records owned by objects that have replacement art.
     int16_t owner[VDPState::SAT_MAX_SPRITES];std::fill_n(owner,VDPState::SAT_MAX_SPRITES,int16_t(-1));
-    uint32_t frameOf[SpriteBuild::MAX_OBJECTS]{};
+    uint32_t frameOf[SpriteBuild::MAX_OBJECTS]{};ArtTint tintOf[SpriteBuild::MAX_OBJECTS];
     const SpriteBuild *build=art&&!art->empty()?sprite_probe().displayed(s):nullptr;
     // Builds since the poses were recorded. After a gap (scenes are not built
     // for every frame in host captures) a pose change is not a transition.
@@ -170,7 +170,8 @@ void VdpScene::enhancedSprites(const VDPState &s){
         const auto &obj=build->objects[o];
         if(obj.first+obj.count>VDPState::SAT_MAX_SPRITES)continue;
         const uint16_t *line=s.cram_+(record(obj.first)[4]>>5&3)*16;
-        const ArtFrame *f=art->find(obj.mapping,line);
+        ArtTint tint;
+        const ArtFrame *f=art->find(obj.mapping,line,&tint);
         if(!f)continue;
         Pose pose{obj.set,obj.mapping,0,obj.slot,0,obj.flip};
         if(smooth)for(unsigned i=0;i<poseCount_;i++){
@@ -181,22 +182,47 @@ void VdpScene::enhancedSprites(const VDPState &s){
             break;
         }
         if(pose.ticks){
-            if(const ArtFrame *between=art->between(pose.from,obj.mapping,line)){f=between;inbetween_=true;}
+            ArtTint betweenTint;
+            if(const ArtFrame *between=art->between(pose.from,obj.mapping,line,&betweenTint)){f=between;tint=betweenTint;inbetween_=true;}
             else pose.ticks=0;
         }
         now[nowCount++]=pose;
-        frameOf[o]=uint32_t(f-art->frames().data());
+        frameOf[o]=uint32_t(f-art->frames().data());tintOf[o]=tint;
         for(int r=obj.first;r<obj.first+obj.count;r++)owner[r]=int16_t(o);
     }
     if(build){std::copy(now,now+nowCount,poses_);poseCount_=nowCount;}
+    // Sprite masking, as in spriteLayers: a sprite at x = 0 blanks every later
+    // sprite on its lines, once a sprite with another x has been on the line.
+    // The game hides whatever passes behind the HUD this way (a player
+    // dropping in at the start of a round).
+    bool seenX[256]{},masked[256]{};
     int index=0;
     for(int ordinal=0;ordinal<VDPState::SAT_MAX_SPRITES;ordinal++){
         const uint8_t *e=record(index);
         const int link=e[3]&127,attr=e[4]<<8|e[5],layer=attr>>15&1;
+        {
+            const int top=((e[0]&3)<<8|e[1])-128,rows=((e[2]&3)+1)*8;
+            const bool zero=!(((e[6]&1)<<8)|e[7]);
+            for(int line=std::max(0,top);line<std::min(height,top+rows);line++){
+                if(!zero)seenX[line]=true;else if(seenX[line])masked[line]=true;
+            }
+        }
         if(owner[index]>=0){
             const auto &obj=build->objects[owner[index]];
-            if(index==obj.first)
-                artDraws[artCount++]={frameOf[owner[index]],int16_t(obj.x-128),int16_t(obj.y-128),uint8_t(layer),uint8_t(ordinal),obj.flip};
+            if(index==obj.first){
+                // The art's longest run of lines that are not blanked.
+                const ArtFrame &f=art->frames()[frameOf[owner[index]]];
+                const int top=obj.y-128-(f.anchorY+1)/2,bottom=top+(f.h+1)/2;
+                int from=0,to=0,run=-1;
+                for(int line=top;line<=bottom;line++){
+                    const bool open=line<bottom&&!(line>=0&&line<height&&masked[line]);
+                    if(open&&run<0)run=line;
+                    if(!open&&run>=0){if(line-run>to-from){from=run;to=line;}run=-1;}
+                }
+                if(from==top)from=-32768;
+                if(to==bottom)to=32767;
+                if(to>from)artDraws[artCount++]={frameOf[owner[index]],int16_t(obj.x-128),int16_t(obj.y-128),uint8_t(layer),uint8_t(ordinal),obj.flip,tintOf[owner[index]],int16_t(from),int16_t(to)};
+            }
         }else{
             const int y=((e[0]&3)<<8|e[1])-128,x=((e[6]&1)<<8|e[7])-128;
             const int cellsW=(e[2]>>2&3)+1,cellsH=(e[2]&3)+1;
@@ -205,6 +231,8 @@ void VdpScene::enhancedSprites(const VDPState &s){
                 for(int cx=0;cx<cellsW;cx++)for(int cy=0;cy<cellsH;cy++){
                     if(spriteTileCount==MAX_SPRITE_TILES)break;
                     const int dx=(hf?cellsW-1-cx:cx)*8,dy=(vf?cellsH-1-cy:cy)*8;
+                    const int middle=y+dy+4;
+                    if(middle>=0&&middle<height&&masked[middle])continue;   // blanked by a sprite mask
                     spriteTiles[spriteTileCount++]={uint16_t((attr+cx*cellsH+cy)&2047),int16_t(x+dx),int16_t(y+dy),
                         uint8_t(attr>>13&3),uint8_t(layer),uint8_t(ordinal),hf,vf};
                 }
@@ -290,8 +318,17 @@ void raster_enhanced(const VdpScene &scene,const VDPState &s,uint16_t *out,int p
                     const auto &f=scene.art->frames()[d.frame];const auto &page=scene.art->pages()[f.page];
                     const int left=d.x*2-(d.flip?f.w-f.anchorX:f.anchorX),top=d.y*2-f.anchorY;
                     for(int v=0;v<f.h;v++)for(int u=0;u<f.w;u++){
+                        if(top+v<d.lineFrom*2||top+v>=d.lineTo*2)continue;   // sprite mask
                         const uint16_t c=scene.art->texel(page,size_t(f.v+v)*page.width+f.u+(d.flip?f.w-1-u:u));
-                        if(c&0x8000)plot(left+u,top+v,c);
+                        if(!(c&0x8000))continue;
+                        if(d.tint.identity()){plot(left+u,top+v,c);continue;}
+                        // As the PowerVR does: texture * vertex colour + offset colour.
+                        uint16_t out=0x8000;
+                        for(int ch=0;ch<3;ch++){
+                            const int shift=10-ch*5,value=(c>>shift&31)*255/31;
+                            out|=uint16_t(std::min(255,value*d.tint.scale[ch]/255+d.tint.offset[ch])*31/255<<shift);
+                        }
+                        plot(left+u,top+v,out);
                     }
                 }
             }

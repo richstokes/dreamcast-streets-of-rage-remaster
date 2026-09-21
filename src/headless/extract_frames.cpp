@@ -120,6 +120,10 @@ void extract_set(const VDPState &s,const sor::ProbedObject &obj,int line,unsigne
         if(!count||count>64)continue;
         for(unsigned f=0;f<count;f++)records.insert(anim+(word(anim+2+f*2)&0x7FFF));
     }
+    // Not every object's +$04 is an animation set (cutscene objects keep other
+    // data there): the frame on screen must be one of the set's, and a set has
+    // at most a couple of hundred.
+    if(!records.count(obj.mapping)||records.size()>240)return;
     for(uint32_t record:records){
         if(record+5>=rom.size()||rom[record]>40)continue;
         const unsigned n=rom[record]+1u;
@@ -158,6 +162,8 @@ void extract_frames_rom(const char *path){
 }
 void extract_frames(const VDPState &s,unsigned frameNumber){
     if(directory.empty()){const char *d=std::getenv("SOR_EXTRACT_FRAMES");if(!d)return;directory=d;}
+    // Rounds only: title, menu and cutscene objects are not replaced.
+    if(!currentRound)return;
     const SpriteBuild *build=sprite_probe().displayed(s);
     if(!build)return;
     const int base=s.satBase();

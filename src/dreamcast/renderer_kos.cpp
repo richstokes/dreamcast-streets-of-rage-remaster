@@ -51,6 +51,7 @@ void header(pvr_poly_hdr_t &h,pvr_ptr_t texture,int w,int hgt,bool linear,int pa
                     : palette<=-2 ? (PVR_TXRFMT_PAL8BPP|PVR_TXRFMT_8BPP_PAL(-1-palette))
                     : (PVR_TXRFMT_PAL4BPP|PVR_TXRFMT_4BPP_PAL(palette));
     pvr_poly_cxt_txr(&c,PVR_LIST_PT_POLY,format,w,hgt,texture,PVR_FILTER_NONE);
+    if(palette<=-2)c.gen.specular=PVR_SPECULAR_ENABLE;   // art: the offset colour carries flashes
     c.gen.culling=PVR_CULLING_NONE;
     c.depth.comparison=PVR_DEPTHCMP_GEQUAL;
     pvr_poly_compile(&h,&c);
@@ -133,6 +134,7 @@ void load_selection(unsigned round,unsigned characters,bool enhanced,bool smooth
 }
 unsigned gameRound=1,gameCharacters=0;
 }
+// Followed outside play too: the round intro is when a round's art should load.
 void dc_renderer_game_state(unsigned round,unsigned characters){gameRound=round;gameCharacters=characters;}
 void dc_renderer_init(){
     scene=std::make_unique<sor::VdpScene>();
@@ -257,8 +259,18 @@ bool dc_render_vdp(VDPState &state,VDPRenderer &renderer,const sor::TitleCaption
             const auto &d=scene->artDraws[i];const auto &f=art.frames()[d.frame];const auto &page=art.pages()[f.page];
             // Art is at twice the original resolution; its anchor sits on the object's.
             const float ax=d.flip?f.w-f.anchorX:f.anchorX,u0=f.u/float(page.width),u1=(f.u+f.w)/float(page.width);
-            quad(spritePackets[spritePacketCount++],artHeaders[f.page],(d.x*2-ax)*sx/2,(d.y*2-f.anchorY)*sy/2,f.w*sx/2,f.h*sy/2,
-                 (d.layer?6:3)+(79-d.order)*0.01f,d.flip?u1:u0,f.v/float(page.height),d.flip?u0:u1,(f.v+f.h)/float(page.height));
+            // Rows (art pixels) left by a sprite mask: the game blanks what passes behind the HUD.
+            const int top=d.y*2-f.anchorY;
+            const int v0=std::max(0,d.lineFrom*2-top),v1=std::min<int>(f.h,d.lineTo*2-top);
+            if(v1<=v0)continue;
+            quad(spritePackets[spritePacketCount++],artHeaders[f.page],(d.x*2-ax)*sx/2,(top+v0)*sy/2,f.w*sx/2,(v1-v0)*sy/2,
+                 (d.layer?6:3)+(79-d.order)*0.01f,d.flip?u1:u0,(f.v+v0)/float(page.height),d.flip?u0:u1,(f.v+v1)/float(page.height));
+            if(!d.tint.identity()){
+                // Fades scale the art's colours; flashes add to them.
+                const uint32_t argb=0xff000000u|uint32_t(d.tint.scale[0])<<16|uint32_t(d.tint.scale[1])<<8|d.tint.scale[2];
+                const uint32_t oargb=uint32_t(d.tint.offset[0])<<16|uint32_t(d.tint.offset[1])<<8|d.tint.offset[2];
+                for(auto &v:spritePackets[spritePacketCount-1].vertices){v.argb=argb;v.oargb=oargb;}
+            }
         }
     }
     const auto commands=timer_us_gettime64();

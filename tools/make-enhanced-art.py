@@ -245,6 +245,7 @@ def main():
         if not mask or mask == 0xFF:
             return 0xFF, 1, 0, between
         return mask, 2, 0, between
+    oversized = []
     images, anchors, sources, overridden = [], [], [], 0
     for key in keys:
         f, d, _ = frames[key]
@@ -270,8 +271,11 @@ def main():
             art = art[ys.min(): ys.max() + 1, xs.min(): xs.max() + 1]; ax -= int(xs.min()); ay -= int(ys.min())
         else:
             art = art[:1, :1]
+        if art.shape[0] + GUTTER > a.page or art.shape[1] + GUTTER > a.page:
+            oversized.append(key); sources.pop(); continue      # wider than a page (cutscene pictures): left to the original
         images.append(art); anchors.append((ax, ay))
 
+    keys = [k for k in keys if k not in set(oversized)]
     # Palettes: farthest-point seeding + k-means over 15-bit colours; no dithering.
     groups = [group(k) for k in keys]
     palettes, indexed, error_sum, error_n, error_max = [], [None] * len(keys), 0.0, 0, 0.0
@@ -309,7 +313,10 @@ def main():
     # out): players, then groups by how long their frames were on screen.
     weight = {}
     for k, g in zip(keys, groups):
-        weight[g] = weight.get(g, 0) + frames[k][0]['seen']
+        # Bosses count for more than their time on screen in the sweeps, where
+        # they fall to one hit.
+        boss = any(0x30 <= t < 0x60 for t in frames[k][0]['types'])
+        weight[g] = weight.get(g, 0) + max(frames[k][0]['seen'], 300 if boss else 0)
     for g in sorted(set(groups), key=lambda g: (g[3], g[2] == 0, -weight[g], g)):
         members = [i for i, x in enumerate(groups) if x == g]
         placed, count = pack([(indexed[i].shape[1], indexed[i].shape[0]) for i in members], a.page)
@@ -325,7 +332,7 @@ def main():
             while height < used: height *= 2
             pages.append((height, g[0], g[1], sheets[p, :height], g[2] | g[3]))
 
-    out = bytearray(b'SORART05' + struct.pack('<III', len(pages), len(keys), 3))
+    out = bytearray(b'SORART06' + struct.pack('<III', len(pages), len(keys), 3))
     for palette in palettes:
         words = [0] + [0x8000 | int(r) << 10 | int(g) << 5 | int(b) for r, g, b in palette]
         out += struct.pack('<256H', *(words + [0] * (256 - len(words))))
@@ -333,7 +340,9 @@ def main():
         packed = zlib.compress(sheet.tobytes(), 9)
         out += struct.pack('<HHHBBI', a.page, height, mask, bank, character, len(packed)) + packed
     for key, im, (ax, ay), (p, x0, y0) in zip(keys, images, anchors, places):
-        out += struct.pack('<IHHHHHHHhhI', key[0], int(key[1], 16), frames[key][0]['mask'], p, x0 + 1, y0 + 1, im.shape[1], im.shape[0], ax, ay, key[2])
+        # The look's CRAM line (an in-between has its pose's), for fades and flashes.
+        line = frames[key][0].get('cram') or frames[(key[0], key[1], 0)][0]['cram']
+        out += struct.pack('<IHHHHHHHhhI16H', key[0], int(key[1], 16), frames[key][0]['mask'], p, x0 + 1, y0 + 1, im.shape[1], im.shape[0], ax, ay, key[2], *line)
     a.out.parent.mkdir(parents=True, exist_ok=True); a.out.write_bytes(out)
 
     if a.sheet:
@@ -366,10 +375,19 @@ def main():
     players = sum(a.page * p[0] for p in pages if p[4] & 0x7F and not p[4] & 0x80)
     per_round = {r + 1: sum(a.page * p[0] for p in pages if p[1] >> r & 1 and not p[4]) + players // 3 for r in range(8)}
     between = {r + 1: sum(a.page * p[0] for p in pages if p[1] >> r & 1 and p[4] & 0x80) for r in range(8)}
-    report = dict(style=a.style, frames=len(keys), colour_sets=len(shown) - len(dropped), transient_colour_sets_dropped=len(dropped), player_frames=sum(1 for g in groups if g[1] == 0 and not g[3]), inbetweens=sum(1 for k in keys if k[2]), overridden=overridden,
+    report = dict(style=a.style, frames=len(keys), oversized_left_to_original=len(oversized), colour_sets=len(shown) - len(dropped), transient_colour_sets_dropped=len(dropped), player_frames=sum(1 for g in groups if g[1] == 0 and not g[3]), inbetweens=sum(1 for k in keys if k[2]), overridden=overridden,
                   pages=len(pages), packed_bytes=len(out), colours=[len(p) for p in palettes],
                   powervr_bytes_per_round_one_player=per_round, powervr_bytes_per_character=players // 3, powervr_bytes_inbetweens_per_round_all_players=between,
                   mean_channel_error=round(error_sum / max(1, error_n), 2), max_channel_error=error_max)
+    # Where each round's memory goes: art texels by object type (largest first).
+    by_type = {}
+    for k, g, im in zip(keys, groups, images):
+        if g[2] or g[2] & 0x80: continue
+        for r in range(8):
+            if g[0] >> r & 1:
+                t = '%02x' % min(frames[k][0]['types'])
+                by_type.setdefault(r + 1, {}); by_type[r + 1][t] = by_type[r + 1].get(t, 0) + im.shape[0] * im.shape[1]
+    report['texels_by_type_per_round'] = {r: dict(sorted(v.items(), key=lambda x: -x[1])[:8]) for r, v in by_type.items()}
     a.out.with_suffix('.json').write_text(json.dumps(report, indent=1) + '\n')
     print(json.dumps(report))
 

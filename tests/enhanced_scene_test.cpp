@@ -91,6 +91,66 @@ int main(){
     state.cram_[9]^=0x0E0;
     assert(scene->build(state,renderer)&&scene->artCount==1);
 
+    // Fades and flashes (SORART06: each frame carries its look's CRAM line).
+    // The game subtracts a step per channel, clamped at black, or adds one,
+    // clamped at white: such a line finds the art with a tint. Other changes
+    // find nothing.
+    {
+        auto pak6=package(key,0xFF,0);pak6[7]='6';
+        put32(pak6,0);for(int i=0;i<16;i++)put16(pak6,state.cram_[i]);     // from, line
+        sor::ArtCatalog fading;assert(fading.load(pak6.data(),pak6.size()));
+        scene->art=&fading;
+        uint16_t saved[16];std::memcpy(saved,state.cram_,sizeof saved);
+        const auto step=[&](int red,int green){
+            for(int i=1;i<16;i++){
+                const int r=saved[i]>>1&7,g=saved[i]>>5&7,b=saved[i]>>9&7;
+                const auto move=[](int v,int k){return std::max(0,std::min(7,v+k));};
+                state.cram_[i]=uint16_t(move(r,red)<<1|move(g,green)<<5|b<<9);
+            }
+        };
+        sor::ArtTint tint;
+        assert(fading.find(0x054206,state.cram_,&tint)&&tint.identity());
+        step(-1,-2);                                        // fading out: red one step, green two
+        assert(!fading.find(0x054206,state.cram_));         // exact colours only, without a tint
+        assert(fading.find(0x054206,state.cram_,&tint)&&tint.scale[0]<255&&tint.scale[1]<=tint.scale[0]&&tint.scale[2]==255&&!tint.offset[0]);
+        assert(scene->build(state,renderer)&&scene->artCount==1&&!scene->artDraws[0].tint.identity());
+        std::vector<uint16_t> faded(640*448);
+        sor::raster_enhanced(*scene,state,faded.data(),640);
+        const uint16_t was=out[(66*2-4)*640+48*2-2],is=faded[(66*2-4)*640+48*2-2];
+        assert((is>>10&31)<(was>>10&31)&&(is&0x8000));      // the red art is darker
+        step(2,0);                                          // a flash: red two steps up
+        assert(fading.find(0x054206,state.cram_,&tint)&&tint.offset[0]==2*255/7&&!tint.offset[1]&&tint.scale[0]==255);
+        state.cram_[1]=uint16_t(saved[1]^0x0E0);            // one colour changed alone: not a fade
+        for(int i=2;i<16;i++)state.cram_[i]=saved[i];
+        assert(!fading.find(0x054206,state.cram_,&tint));
+        std::memcpy(state.cram_,saved,sizeof saved);
+        scene->art=&art;
+    }
+
+    // Sprite masking: after a sprite with another x, a sprite at x = 0 blanks
+    // later sprites on its lines (the game hides what passes behind the HUD).
+    // Art starts below the blanked lines; a blanked cell is left out.
+    {
+        uint8_t saved[24];std::memcpy(saved,state.vram_+state.satBase(),24);
+        record(state,ram.data(),0,128+57,0x00,1,0x0001,128+200);   // a HUD sprite on lines 57-64
+        record(state,ram.data(),1,128+57,0x00,2,0x0001,0);         // the mask, lines 57-64
+        record(state,ram.data(),2,128+50,0x05,3,0x0001,128+40);    // the object's piece, lines 50-65
+        record(state,ram.data(),3,128+58,0x00,0,0x0001,128+100);   // an unowned sprite on blanked lines
+        probe.beginBuild();
+        probe.beginObject(0xB800,1,0x054206,false,128+48,128+66,0,0xFFDA10);
+        probe.endObject(0xFFDA18,ram.data());
+        scene->art=&art;
+        assert(scene->build(state,renderer)&&scene->artCount==1);
+        assert(scene->artDraws[0].lineFrom==65&&scene->artDraws[0].lineTo==32767);   // art spans lines 64-65
+        assert(scene->spriteTileCount==1&&scene->spriteTiles[0].x==200);            // the HUD sprite only
+        for(int i=0;i<4;i++)record(state,ram.data(),i,0,0,0,0,0);
+        std::memcpy(state.vram_+state.satBase(),saved,24);std::memcpy(ram.data()+0xDA00,saved,24);
+        for(int i=0;i<3;i++)std::memcpy(state.sat_+i*8,saved+i*8,4);
+        probe.beginBuild();
+        probe.beginObject(0xB800,1,0x054206,false,128+48,128+66,0,0xFFDA00);
+        probe.endObject(0xFFDA08,ram.data());
+    }
+
     // Smooth animation: a second pose ($054300) and an in-between from the
     // first to it, on a page of its own (character bit 7), green.
     {

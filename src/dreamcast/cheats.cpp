@@ -76,6 +76,27 @@ void Menu::prepareNewGame(SystemMemory &memory) const {
 
 void Menu::apply(SystemMemory &memory) const {
     if (!playing(memory)) return;
+    if (weakenEnemies_) {
+        // Scripted host runs only (SOR_CHEATS). One hit point, never zero: an enemy written dead skips its death
+        // sequence and stays on the field.
+        for (uint32_t object = 0xffb900; object < 0xffc400; object += 0x80) {
+            const unsigned type = memory.readByte(object), health = memory.readWord(object + 0x32);
+            if (type < 0x20 || type >= 0x60) continue;
+            if (health > 1 && health < 0x8000) memory.writeWord(object + 0x32, 1);
+            // An open-loop script cannot line up with enemies: bring awake,
+            // grounded ones into player 1's lane, where its punches land.
+            // and within reach, on the side they are already on.
+            if (memory.readByte(object + 0x30) && memory.readWord(object + 0x18) == memory.readWord(0xffb818)) {   // both on the ground
+                const int player = int16_t(memory.readWord(0xffb810)), x = int16_t(memory.readWord(object + 0x10));
+                memory.writeWord(object + 0x14, memory.readWord(0xffb814));
+                const int camera = int16_t(memory.readWord(0xffe002));
+                int target = x > player + 40 ? player + 40 : x < player - 40 ? player - 40 : x;
+                if (target < camera + 16) target = player + 40;      // never off screen, out of reach
+                if (target > camera + 304) target = player - 40;
+                if (target != x) memory.writeWord(object + 0x10, uint16_t(target));
+            }
+        }
+    }
     for (unsigned player = 0; player < 2; ++player) {
         if (!activePlayer(memory, player)) continue;
         const uint32_t lives = 0xffff20 + player * 3;

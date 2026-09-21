@@ -59,10 +59,21 @@ object's screen anchor (its feet) and emits one table record per visible piece.
   frames and a line while the game loads different colours (green, purple and
   yellow Signals), and replacement art has its colours baked in. Why not the
   whole line: lines also hold colours the object never uses, which stages
-  cycle; keyed on those, one enemy looked like 40 different ones. Consequence:
-  during fades and hit flashes the colours match no art and the object is
-  drawn from its original pieces in the game's colours, which is the correct
-  picture. `tools/art_key.py` computes the same key.
+  cycle; keyed on those, one enemy looked like 40 different ones.
+  `tools/art_key.py` computes the same key.
+- **Fades and flashes** (`fade_of` in `art_catalog.cpp`): the game fades a line
+  by subtracting a step from each colour channel, clamped at black (each
+  channel has its own step: red goes first), and flashes by adding one, clamped
+  at white; 2,044 and 122 of the transient looks seen in the sweeps are exactly
+  that. Each art frame carries the CRAM line it was made from, so when the key
+  does not match, a line that is the frame's colours changed that way still
+  finds the frame, with a tint: a scale per channel for a fade (the ratio of
+  the line's brightness after and before, standing in for the subtraction) or
+  an offset for a flash. The PowerVR applies it as vertex colour and offset
+  colour (art headers enable the offset colour); the host preview does the same
+  arithmetic. Any other change of colours (a palette swap, a look whose art is
+  not loaded) finds nothing, and the object is drawn from its original pieces
+  in the game's colours.
 - **Enhanced scene** (`VdpScene::enhancedSprites`): an object with art becomes
   one quad in its first record's slot; every other sprite piece becomes 8x8
   cells drawn as their own quads. Depth is the piece's priority layer (3 or 6,
@@ -73,6 +84,11 @@ object's screen anchor (its feet) and emits one table record per visible piece.
   never used by the game (the VBlank handler discards the status read, and
   replays with both bits forced clear keep every frame's RAM equal). Per-line
   sprite limits therefore do not apply (no dropout).
+- **Sprite masks**: the game hides what passes behind the HUD (a player
+  dropping in at the start of a round) with a VDP sprite mask: a sprite at
+  x = 0 blanks every later sprite on its lines. The enhanced scene applies the
+  same rule: art is clipped to its longest run of unblanked lines, and blanked
+  cells are left out.
 - **What is loaded** (`load_selection` in `renderer_kos.cpp`): all the art does
   not fit in PowerVR memory (about 4.1 MB free, 4.6 MB while enhanced mode
   frees the two software sprite-layer textures). Each page names its rounds
@@ -85,7 +101,7 @@ object's screen anchor (its feet) and emits one table record per visible piece.
   other constraint (the game leaves 1-2 MB of heap): the package stays
   zlib-compressed in RAM (1.3 MB) and one page is inflated at a time.
 
-Package format `SORART04`: see the header comment of `art_catalog.hpp` (three
+Package format `SORART06` (`04` and `05` still load): see the header comment of `art_catalog.hpp` (three
 255-colour palettes in PowerVR palette banks 1-3; bank 0 holds the tile
 palettes; 8-bit pages 512 wide, 64-512 high).
 
@@ -98,7 +114,15 @@ palettes; 8-bit pages 512 wide, 64-512 high).
 2. **Round sweeps** (native headless, `SOR_CHEATS=ROUND`: start at that round
    with infinite health, lives and specials): an open-loop script walks,
    punches in both lanes and calls the police every sixth cycle; Round 8 runs
-   right to left, so its script is mirrored. `SOR_EXTRACT_FRAMES=dir` saves
+   right to left, so its script is mirrored. Scripted runs also hold every
+   enemy and boss at one hit point and bring awake, grounded ones into player
+   1's lane within reach and on screen (`Menu::apply`, `weakenEnemies_`): an
+   open-loop script cannot line up with enemies, and without this the Round 8
+   sweep stalled at the first juggler. With it every sweep clears its round,
+   and Round 8 runs through Mr. X to the ending. Only frames drawn during
+   rounds are extracted (title, menu and cutscene objects are not replaced),
+   and an object's `+$04` counts as an animation set only if the frame on
+   screen is one of its records (cutscene objects keep other data there). `SOR_EXTRACT_FRAMES=dir` saves
    every object frame drawn, and, because everything but the players keeps its
    art resident in VRAM, **renders the whole animation set** of each object
    that has been on screen for 45 frames. `index.json` records for each frame
@@ -123,7 +147,7 @@ palettes; 8-bit pages 512 wide, 64-512 high).
    - quantises three palettes (players; objects seen in every round; the rest)
      with farthest-point seeding and k-means, no dithering;
    - crops, packs pages per (rounds, palette, character) group, orders them by
-     importance and writes `SORART04`.
+     importance and writes `SORART06`.
    `--style placeholder` (or `ART_STYLE=placeholder`) makes pixel-doubled
    frames with a cyan outline and a magenta anchor cross instead, to check
    alignment and coverage. `--override DIR` (or `ART_OVERRIDE=dir`) takes
@@ -181,24 +205,27 @@ Flycast, two-player bot replay (8,402 frames), enhanced: 7,143 VBlanks / 7,133
 flips, as before the enemy art; audio checksums unchanged. The disc build
 loaded Round 1 plus two characters into 4,456,448 bytes with 165,704 free.
 
-Coverage gaps: Mr. X and whatever else the Round 8 sweep does not reach
-(it gets as far as the returning bosses); weapons in a player's hands are
-separate objects and are covered; the character-select portraits, the HUD and
-cutscene objects are left as they are (HUD types are excluded by
-`WORLD_TYPES`).
+Coverage: every round is swept to its end, Round 8 through Mr. X (types
+`$33`-`$38`). Weapons in a player's hands are separate objects and are covered.
+Left as they are: the character-select portraits, the HUD (excluded by
+`WORLD_TYPES`), title, menu and cutscene objects, and two pictures wider than
+a 512-texel page. Round 8 holds every returning boss and wants 6.6 MB: pages
+are ordered by importance (bosses weighted up, since the sweeps fell them in
+one hit) and what does not fit falls back to the original pieces.
 
 ## Known limits
 
 - Generated art cannot add detail the 16-colour originals never had; thin
   details (hair strands, faces) soften. Hand-made overrides are the way to
   real redrawn art.
-- Art pops in after a fade or flash ends, because those frames are drawn from
-  the original pieces (see the art key). Tinting art through the PowerVR
-  vertex colour would make fades seamless; not done.
-- Pieces the game culls at the screen edge are shown by replacement art (the
-  whole frame is drawn and clipped by the screen).
-- A few set renderings carry stray pixels where an effect's tiles had been
-  rewritten when the set was sampled.
+- A fade's tint multiplies where the game subtracts, so mid-fade art is a
+  little brighter in its dark tones than the original pieces would be; the
+  ends of the fade are exact.
+- Pieces the game culls at the screen edge (tops above y = -32) are shown by
+  replacement art: the whole frame is drawn and clipped by the screen.
+- Tiny detached pixels in a few enemy frames (about 25 of 1,150 in rounds 3 and
+  6) are the original art: sparks and fragments, several confirmed against
+  direct captures. They are not extraction errors.
 - Round changes and a second player joining cost a 0.5-1 s load.
 - Output is 640x480 from 320x224: art is 1:1 horizontally and scaled 480/448
   vertically, like the planes. A two-texel gutter around packed frames stops

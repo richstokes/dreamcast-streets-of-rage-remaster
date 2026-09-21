@@ -34,9 +34,11 @@ public:
     void setScripted(unsigned round) {
         settings_.round = round; overrideRound_ = true;
         settings_.infiniteLives = settings_.infiniteHealth = settings_.infiniteSpecials = true;
+        weakenEnemies_ = true;
     }
 private:
     Settings settings_{};
+    bool weakenEnemies_ = false;   // scripted runs: enemies and bosses fall to one hit
     bool overrideRound_ = false, overrideLives_ = false, visible_ = false;
     unsigned row_ = 0, previous_ = 0;
 };

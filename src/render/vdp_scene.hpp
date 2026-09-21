@@ -1,4 +1,5 @@
 #pragma once
+#include "art_catalog.hpp"
 #include "VDPState.hpp"
 #include "VDPRenderer.hpp"
 #include "sprite_probe.hpp"
@@ -25,6 +26,8 @@ struct ArtDraw {
     int16_t x,y;             // the object's anchor on screen
     uint8_t layer,order;
     bool flip;
+    ArtTint tint;            // follows the game's fades and flashes
+    int16_t lineFrom,lineTo; // screen lines [from, to) not blanked by a sprite mask
 };
 class VdpScene {
 public:

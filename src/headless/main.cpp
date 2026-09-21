@@ -92,7 +92,7 @@ void capture_write(const Framebuffer &fb,int width,int height){
 }
 const uint8_t *platform_embedded_rom(size_t &size){size=0;return nullptr;}
 const uint8_t *platform_embedded_art(size_t &size){size=0;return nullptr;}
-void platform_game_state(unsigned round,unsigned){sor::extract_frames_round(round);}
+void platform_game_state(unsigned round,unsigned,bool playing){sor::extract_frames_round(playing?round:0);}
 void platform_video_init(){}
 void platform_video_shutdown(){}
 bool platform_render_vdp(VDPState &state,VDPRenderer &renderer,const sor::TitleCaption &title){
