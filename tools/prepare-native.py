@@ -161,10 +161,12 @@ if '--dreamcast' in sys.argv:
     # Start in enhanced graphics (the options menu still switches); benchmarks.
     enhanced=os.environ.get('SOR_ENHANCED','0')
     if enhanced not in ('0','1'):raise SystemExit('SOR_ENHANCED must be 0 or 1')
+    smooth=os.environ.get('SOR_SMOOTH','0')
+    if smooth not in ('0','1'):raise SystemExit('SOR_SMOOTH must be 0 or 1')
     # Debug only: Dreamcast B toggles the software comparison renderer (about
     # 85 ms a frame, original graphics). Off by default: B is within reach in play.
     toggle=os.environ.get('SOR_SOFTWARE_TOGGLE','0')
     if toggle not in ('0','1'):raise SystemExit('SOR_SOFTWARE_TOGGLE must be 0 or 1')
     config=D/'sor_audio_config.hpp'
-    text='#pragma once\n#define SOR_ENABLE_EXPERIMENTAL_AUDIO '+audio+'\n#define SOR_ENABLE_NATIVE_DAC '+native+'\n#define SOR_ENABLE_AICA_DAC '+split+'\n#define SOR_ENABLE_AUDIO_PROFILE '+profile+'\n#define SOR_ENABLE_PC_PROFILE '+pcprofile+'\n#define SOR_PC_PROFILE_FIRST '+pcfirst+'\n#define SOR_PC_PROFILE_LAST '+pclast+'\n#define SOR_DEFAULT_ENHANCED '+enhanced+'\n#define SOR_SOFTWARE_TOGGLE '+toggle+'\n'
+    text='#pragma once\n#define SOR_ENABLE_EXPERIMENTAL_AUDIO '+audio+'\n#define SOR_ENABLE_NATIVE_DAC '+native+'\n#define SOR_ENABLE_AICA_DAC '+split+'\n#define SOR_ENABLE_AUDIO_PROFILE '+profile+'\n#define SOR_ENABLE_PC_PROFILE '+pcprofile+'\n#define SOR_PC_PROFILE_FIRST '+pcfirst+'\n#define SOR_PC_PROFILE_LAST '+pclast+'\n#define SOR_DEFAULT_ENHANCED '+enhanced+'\n#define SOR_DEFAULT_SMOOTH '+smooth+'\n#define SOR_SOFTWARE_TOGGLE '+toggle+'\n'
     if not config.exists() or config.read_text()!=text:config.write_text(text)

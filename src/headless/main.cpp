@@ -23,6 +23,7 @@ unsigned sceneFrames=0;
 sor::TitleCaption sceneTitle;
 // Enhanced-rendering preview (SOR_ENHANCED_CAPTURE=dir:first:last:step, art
 // from SOR_ART): original at 2x on the left, enhanced on the right.
+// SOR_SMOOTH=1: smooth animation (in-between poses; needs a step of 1).
 struct EnhancedCapture {
     std::string directory;unsigned first=0,last=0,step=1,frame=0;bool pending=false;
     std::vector<uint8_t> package;sor::ArtCatalog art;
@@ -49,6 +50,8 @@ void capture_enhanced(VDPState &state,VDPRenderer &renderer){
     if(!capture.scene||capture.frame<capture.first||capture.frame>capture.last||(capture.frame-capture.first)%capture.step)return;
     const auto status=state.status_;   // scene building sets sprite status bits; keep the game's
     capture.scene->enhanced=true;capture.scene->art=&capture.art;
+    static const bool smooth=std::getenv("SOR_SMOOTH")&&std::getenv("SOR_SMOOTH")[0]=='1';
+    capture.scene->smooth=smooth;
     const bool ok=capture.scene->build(state,renderer);
     state.status_=status;
     if(!ok)return;
@@ -80,7 +83,9 @@ void capture_write(const Framebuffer &fb,int width,int height){
     if(FILE *list=fopen((capture.directory+name).c_str(),"w")){
         const auto &scene=*capture.scene;
         for(size_t i=0;i<scene.artCount;i++){const auto &d=scene.artDraws[i];const auto &f=capture.art.frames()[d.frame];
-            fprintf(list,"art %06X c%04X anchor %d,%d layer %d order %d%s size %dx%d\n",f.mapping,f.colours,d.x,d.y,d.layer,d.order,d.flip?" flip":"",f.w,f.h);}
+            fprintf(list,"art %06X c%04X anchor %d,%d layer %d order %d%s size %dx%d",f.mapping,f.colours,d.x,d.y,d.layer,d.order,d.flip?" flip":"",f.w,f.h);
+            if(f.from)fprintf(list," in-between from %06X",f.from);
+            fputc('\n',list);}
         fprintf(list,"sprite cells %zu\n",scene.spriteTileCount);fclose(list);
     }
 }

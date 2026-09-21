@@ -88,10 +88,10 @@ void load_art(){
 // loaded. All of the game's art does not fit in PowerVR memory, and one inflated
 // page at a time is all main RAM holds. Enhanced graphics do not use the
 // software sprite layers, so their textures make room for art while it is on.
-unsigned artRound=~0u,artCharacters=~0u;bool artEnhanced=false;
-void load_selection(unsigned round,unsigned characters,bool enhanced){
-    if(round==artRound&&characters==artCharacters&&enhanced==artEnhanced)return;
-    artRound=round;artCharacters=characters;artEnhanced=enhanced;
+unsigned artRound=~0u,artCharacters=~0u;bool artEnhanced=false,artSmooth=false;
+void load_selection(unsigned round,unsigned characters,bool enhanced,bool smooth){
+    if(round==artRound&&characters==artCharacters&&enhanced==artEnhanced&&smooth==artSmooth)return;
+    artRound=round;artCharacters=characters;artEnhanced=enhanced;artSmooth=smooth;
     const auto start=timer_us_gettime64();
     pvr_wait_ready();                         // the frame in flight still samples these textures
     if(scene)scene->invalidate();
@@ -106,7 +106,8 @@ void load_selection(unsigned round,unsigned characters,bool enhanced){
         return;
     }
     for(auto &p:spriteTexture)if(p){pvr_mem_free(p);p=nullptr;}
-    art.select(round,characters);
+    // In-between pages come last: they take only what the ordinary art leaves.
+    art.select(round,characters,smooth);
     for(size_t i=0;i<artTextures.size();i++)
         if(artTextures[i]&&!art.wanted(i)){pvr_mem_free(artTextures[i]);artTextures[i]=nullptr;}
     size_t bytes=0,loaded=0,missing=0;
@@ -158,6 +159,7 @@ void dc_renderer_init(){
     sor_log("PowerVR indexed tile cache: 65536 bytes; sprite layers: 524288 bytes\n");
     load_art();
     sor::cheats::menu.setEnhancedGraphics(SOR_DEFAULT_ENHANCED);
+    sor::cheats::menu.setSmoothAnimation(SOR_DEFAULT_SMOOTH);
     if(!replay_active())sor_flush_log();   // show start-up (art loading) at once
 }
 void dc_renderer_shutdown(){
@@ -171,8 +173,9 @@ void dc_renderer_shutdown(){
 }
 bool dc_render_vdp(VDPState &state,VDPRenderer &renderer,const sor::TitleCaption &title){
     const auto begin=timer_us_gettime64();
-    load_selection(gameRound,gameCharacters,sor::cheats::menu.settings().enhancedGraphics);
-    scene->enhanced=sor::cheats::menu.settings().enhancedGraphics;scene->art=&art;
+    const auto &settings=sor::cheats::menu.settings();
+    load_selection(gameRound,gameCharacters,settings.enhancedGraphics,settings.smoothAnimation);
+    scene->enhanced=settings.enhancedGraphics;scene->smooth=settings.smoothAnimation;scene->art=&art;
     if(!scene->buildCached(state,renderer)||scene->count>maxTileQuads)return false;
     const bool enhanced=scene->enhanced;
     const bool same=scene->reused;

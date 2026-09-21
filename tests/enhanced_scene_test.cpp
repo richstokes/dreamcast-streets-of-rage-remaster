@@ -91,10 +91,56 @@ int main(){
     state.cram_[9]^=0x0E0;
     assert(scene->build(state,renderer)&&scene->artCount==1);
 
+    // Smooth animation: a second pose ($054300) and an in-between from the
+    // first to it, on a page of its own (character bit 7), green.
+    {
+        std::vector<uint8_t> page(64,1);
+        std::vector<uint8_t> z(compressBound(64));uLongf zn=z.size();assert(compress(z.data(),&zn,page.data(),64)==Z_OK);
+        std::vector<uint8_t> pak(std::begin("SORART05"),std::end("SORART05")-1);
+        put32(pak,2);put32(pak,3);put32(pak,2);
+        for(int palette=0;palette<2;palette++)for(int i=0;i<256;i++)put16(pak,palette==1&&i==1?0xFC00:0);
+        for(uint8_t character:{uint8_t(0),uint8_t(0x80)}){
+            put16(pak,8);put16(pak,8);put16(pak,0xFF);pak.push_back(1);pak.push_back(character);put32(pak,uint32_t(zn));pak.insert(pak.end(),z.begin(),z.begin()+zn);
+        }
+        const auto frame=[&](uint32_t mapping,uint16_t page,uint16_t u,uint32_t from){
+            put32(pak,mapping);put16(pak,key);put16(pak,mask);put16(pak,page);put16(pak,u);put16(pak,0);put16(pak,4);put16(pak,4);put16(pak,2);put16(pak,4);put32(pak,from);
+        };
+        frame(0x054300,1,0,0x054206);frame(0x054206,0,0,0);frame(0x054300,0,4,0);
+        sor::ArtCatalog poses;assert(poses.load(pak.data(),pak.size())&&poses.hasInbetweens());
+        const sor::ArtFrame *second=poses.find(0x054300,state.cram_),*between=poses.between(0x054206,0x054300,state.cram_);
+        assert(second&&between&&second!=between&&between->page==1&&!poses.between(0x054300,0x054206,state.cram_));
+        // A new pose brings new tiles: VRAM changes with it, as in the game.
+        uint32_t last=0;
+        const auto drawn=[&](uint32_t mapping){
+            if(mapping!=last)state.vramGeneration_++;
+            last=mapping;
+            probe.beginBuild();
+            probe.beginObject(0xB800,1,mapping,false,128+48,128+66,0,0xFFDA00);
+            probe.endObject(0xFFDA08,ram.data());
+            assert(scene->buildCached(state,renderer)&&scene->artCount==1);
+            return &poses.frames()[scene->artDraws[0].frame];
+        };
+        scene->art=&poses;scene->invalidate();
+        // Off: the new pose at once, and an unchanged frame is reused.
+        drawn(0x054206);assert(drawn(0x054300)==second);
+        drawn(0x054300);assert(scene->reused);
+        // On: the in-between for INBETWEEN_TICKS builds (no reuse meanwhile), then the pose.
+        scene->smooth=true;
+        drawn(0x054206);
+        for(unsigned i=0;i<sor::VdpScene::INBETWEEN_TICKS;i++){assert(drawn(0x054300)==between);assert(!scene->reused);}
+        assert(drawn(0x054300)==second);
+        drawn(0x054300);assert(scene->reused);
+        // No in-between for the way back; nor when its page is not selected.
+        assert(drawn(0x054206)->mapping==0x054206);
+        poses.select(0,0,false);scene->invalidate();
+        assert(drawn(0x054300)==second);
+        scene->smooth=false;scene->art=&art;scene->invalidate();
+    }
+
     // VRAM's table no longer matches the build: the object's pieces come back.
     state.vram_[state.satBase()+7]^=1;
     assert(!probe.displayed(state));
     assert(scene->build(state,renderer));
     assert(scene->artCount==0&&scene->spriteTileCount==5);
-    puts("Enhanced scene: art replaces a probed object in its SAT slot (keyed by colours, per round); other sprites stay cells; stale builds fall back");
+    puts("Enhanced scene: art replaces a probed object in its SAT slot (keyed by colours, per round); other sprites stay cells; stale builds fall back; in-between poses on a pose change");
 }

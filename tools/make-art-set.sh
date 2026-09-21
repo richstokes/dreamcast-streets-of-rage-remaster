@@ -9,13 +9,14 @@
 #     special; Round 8 runs right to left). Whenever an enemy, boss, item or
 #     effect is drawn, the extractor renders its whole animation set.
 #  3. tools/extract-player-frames.py: every player frame, from the ROM.
-#  4. tools/make-enhanced-art.py: redraw, palettes, per-round pages, package.
+#  4. tools/make-inbetweens.py: in-between poses for smooth animation.
+#  5. tools/make-enhanced-art.py: redraw, palettes, per-round pages, package.
 #
 # Needs the headless build, the profiling core (tools/build-profile-core.sh)
 # and numpy + Pillow in build/tools-venv. Everything produced is derived from
 # the ROM and stays under build/.
 #   ART_STYLE=placeholder   outlined pixel-doubled frames, to check alignment
-#   ART_OVERRIDE=dir        hand-made frames (<MAPPING>_c<KEY>.png)
+#   ART_OVERRIDE=dir        hand-made frames (<MAPPING>_c<KEY>.png; in-betweens <FROM>_<MAPPING>_c<KEY>.png)
 #   SWEEP_FRAMES=36000      length of each round sweep
 # Usage: tools/make-art-set.sh [rom]
 set -eu
@@ -77,6 +78,10 @@ for round in 1 2 3 4 5 6 7; do extract "round$round" "$work/sweep.bin" $round & 
 extract round8 "$work/sweep-rtl.bin" 8 &
 wait
 "$py" "$root/tools/extract-player-frames.py" "$rom" "$root/build/frames-players" "$frames"/*
+rm -rf "$root/build/frames-inbetween"
+"$py" "$root/tools/make-inbetweens.py" "$rom" "$root/build/frames-inbetween" "$root/build/frames-players" "$frames"/* \
+    --sheet "$root/build/art/sheets-inbetween"
 "$py" "$root/tools/make-enhanced-art.py" "$root/build/frames-players" "$frames"/* --out "$root/build/art/SORART.PAK" \
+    --inbetweens "$root/build/frames-inbetween" \
     --style "${ART_STYLE:-enhanced}" --sheet "$root/build/art/sheets" --frames "$root/build/art/frames" \
     ${ART_OVERRIDE:+--override "$ART_OVERRIDE"}

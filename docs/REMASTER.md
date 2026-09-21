@@ -25,7 +25,8 @@ tools/make-art-set.sh              # everything below; about 2 minutes -> build/
 Review the result in `build/art/sheets/<character or type-XX>.png` (original
 pixel-doubled above, generated below), `build/art/frames/*.png` (every frame)
 and `build/art/SORART.json` (frame counts, palette error, PowerVR bytes per
-round). L + R in game opens the options menu; GRAPHICS switches modes.
+round). L + R in game opens the options menu; GRAPHICS switches modes and
+ANIMATION turns on in-between poses (see Smooth animation).
 
 Host preview of a replay, original left and enhanced right, with a text file
 per frame listing the art drawn:
@@ -128,6 +129,45 @@ palettes; 8-bit pages 512 wide, 64-512 high).
    alignment and coverage. `--override DIR` (or `ART_OVERRIDE=dir`) takes
    hand-made `<MAPPING>_c<KEY>.png` frames (RGBA, twice the extracted frame's
    size, same anchor; names as in `build/art/frames/`).
+
+## Smooth animation (in-between poses)
+
+The game moves objects every tick (60 Hz) but draws few poses: most player
+animations have 3-4 (a walking pose is held 8-12 ticks, an attack pose 2-4), so
+smoother animation needs new poses. ANIMATION: SMOOTH in the options menu
+(L + R; `SOR_SMOOTH=1` starts with it on), with enhanced graphics, shows them:
+
+- **Run time** (`VdpScene::smooth`): the scene remembers the pose (mapping) of
+  each object with art. When an object's mapping changes from A to B, with the
+  same animation set and facing, and the catalog has an in-between for (A, B)
+  in the line's colours, that art is drawn for the first 2 builds of the sprite
+  table (`INBETWEEN_TICKS`), then B. No in-between: the cut the game always
+  made. Drawing only: the simulation, its timing and the original mode are
+  untouched; the scene is not reused from the cache while one is on screen.
+- **Package**: an in-between is a frame with `from` set (`SORART05`), on pages
+  of their own (page character bit 7) stored last. They are selected only while
+  smooth animation is on, and being last they take only the PowerVR memory the
+  ordinary art leaves: they can never push a pose out.
+- **Generated in-betweens** (`tools/make-inbetweens.py`): every pair of poses
+  that follow one another in an animation record (players' sets, and every
+  other set found in the ROM whose frames were all extracted: 975 pairs with
+  their looks), by dense correspondence at the original resolution and colours,
+  then redrawn like any frame. **It rarely works, and the tool knows:** the
+  poses are too far apart (legs swap sides between walking poses, an arm is
+  thrown out in one step), correspondence invents tangled limbs, and the
+  gates -- similar silhouettes, no part 3 pixels thick present in one pose
+  only, both poses agreeing where they differ -- reject 955 of the 975. The two
+  distinct pairs kept are one enemy's idle sway, there and back. A wider search (20 pixels) did
+  not help. Flow-style interpolation is a dead end for this art.
+- **Hand-made in-betweens** are therefore the way to fill this in. Every pair's
+  draft is in `build/frames-inbetween/<FROM>_<MAPPING>_c<KEY>.pam` (and on the
+  sheets in `build/art/sheets-inbetween`, rejected ones under a red bar); a
+  PNG of that name, RGBA at twice the draft's size with the anchor in the same
+  place, in the `ART_OVERRIDE` directory is packed whatever the gates said.
+  Checked end to end on the host with the rejected drafts standing in: Adam's
+  48 in-betweens are 590 KB of PowerVR memory and are drawn on his pose changes
+  (`SOR_SMOOTH=1` with `SOR_ENHANCED_CAPTURE` at a step of 1; the frame lists
+  name the `from` pose).
 
 ## Current set (2026-09-21)
 

@@ -1,6 +1,7 @@
 #pragma once
 #include "VDPState.hpp"
 #include "VDPRenderer.hpp"
+#include "sprite_probe.hpp"
 #include <cstdint>
 #include <cstddef>
 namespace sor {
@@ -45,6 +46,13 @@ public:
     // limits per line do not apply to the enhanced drawing.
     bool enhanced=false;
     const ArtCatalog *art=nullptr;
+    // Smooth animation: when an object with art changes pose and the art has an
+    // in-between for that change, the in-between is drawn for the first
+    // INBETWEEN_TICKS sprite-table builds of the new pose. Drawing only.
+    // The game holds walking poses 8-12 ticks but attack poses as few as 2-4,
+    // and the hold is not known when a pose starts: 2 keeps attacks readable.
+    bool smooth=false;
+    static constexpr unsigned INBETWEEN_TICKS=2;
     static constexpr size_t MAX_SPRITE_TILES=80*16;
     SpriteTile spriteTiles[MAX_SPRITE_TILES];
     size_t spriteTileCount=0;
@@ -57,6 +65,12 @@ private:
     bool cacheValid=false;
     uint16_t spriteFlags=0;
     bool builtEnhanced_=false;
+    // The pose each object with art was last drawn in.
+    struct Pose{uint32_t set,mapping,from;uint16_t slot;uint8_t ticks;bool flip;};
+    Pose poses_[SpriteBuild::MAX_OBJECTS];
+    unsigned poseCount_=0;
+    uint32_t poseSerial_=0;
+    bool inbetween_=false;       // one is on screen: the next frame differs with the same VDP state
     bool buildImpl(VDPState &,bool keepPlanes);
     void spriteLayers(VDPState &);
     void enhancedSprites(const VDPState &);

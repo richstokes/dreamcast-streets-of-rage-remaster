@@ -27,6 +27,13 @@ colours: players, always-resident others, round-specific others.
 
 Hand-made art overrides the generated frame: put <MAPPING>_c<KEY>.png (RGBA,
 twice the extracted frame's size, same anchor) in an --override directory.
+
+In-between poses for smooth animation (--inbetweens DIR, from
+tools/make-inbetweens.py) are frames with a `from` mapping: shown for a few
+ticks when an object goes from that pose to the frame's. Those the generator
+rejected are left out unless an override <FROM>_<MAPPING>_c<KEY>.png exists.
+They go on pages of their own, last in the package, loaded only while smooth
+animation is on and only into memory the ordinary art leaves free.
 --style placeholder makes pixel-doubled frames with a cyan outline and a
 magenta anchor cross instead, for checking alignment. --sheet writes before/after comparison sheets for review.
 Everything here is derived from the ROM: keep it under build/, out of git.
@@ -175,6 +182,7 @@ def main():
     ap.add_argument('--page', type=int, default=512)
     ap.add_argument('--style', choices=('enhanced', 'placeholder'), default='enhanced')
     ap.add_argument('--override', type=Path, action='append', default=[], help='directory of hand-made frame PNGs')
+    ap.add_argument('--inbetweens', type=Path, action='append', default=[], help='directory from tools/make-inbetweens.py')
     ap.add_argument('--sheet', type=Path, help='write before/after comparison sheets here')
     ap.add_argument('--frames', type=Path, help='write every generated frame as a PNG here (templates for hand-made art)')
     ap.add_argument('--min-seen', type=int, default=8, help='frames some frame of a look must have been on screen (in one run) for the look to get art')
@@ -188,7 +196,7 @@ def main():
         for f in json.loads((d / 'index.json').read_text())['frames']:
             if not set(f['types']) & WORLD_TYPES:
                 continue
-            key = (int(f['mapping'], 16), f['colours'])
+            key = (int(f['mapping'], 16), f['colours'], 0)
             rounds[key] = rounds.get(key, 0) | f.get('rounds', 0)
             # The ROM extraction (players) wins; then whole-set renderings and
             # the captures seen most.
@@ -216,20 +224,31 @@ def main():
                     dropped.add(ka)
     dropped -= {f['colours'] for f, _, _ in frames.values() if 'character' in f}
     frames = {k: v for k, v in frames.items() if k[1] not in dropped}
-    keys = sorted(frames)
+    def file_name(f):
+        return ('%s_' % f['from'] if 'from' in f else '') + '%s_c%s' % (f['mapping'], f['colours'])
+    # In-betweens: both poses must have art, and the generator or a hand must have made one.
+    for d in a.inbetweens:
+        for f in json.loads((d / 'index.json').read_text())['frames']:
+            key = (int(f['mapping'], 16), f['colours'], int(f['from'], 16))
+            if (key[0], key[1], 0) not in frames or (key[2], key[1], 0) not in frames:
+                continue
+            if f['kept'] or any((o / (file_name(f) + '.png')).exists() for o in a.override):
+                frames[key] = (f, d, None); rounds[key] = rounds[(key[0], key[1], 0)] & rounds[(key[2], key[1], 0)] or rounds[(key[0], key[1], 0)]
+    keys = sorted(frames, key=lambda k: (k[2] != 0, k))
     CHARACTERS = {'adam': 1, 'axel': 2, 'blaze': 3}
     def group(key):
-        """(rounds mask, palette, character): what is loaded together."""
+        """(rounds mask, palette, character, in-between): what is loaded together."""
+        between = 0x80 if key[2] else 0
         if 'character' in frames[key][0]:
-            return 0xFF, 0, CHARACTERS[frames[key][0]['character']]
+            return 0xFF, 0, CHARACTERS[frames[key][0]['character']], between
         mask = rounds[key] & 0xFF
         if not mask or mask == 0xFF:
-            return 0xFF, 1, 0
-        return mask, 2, 0
+            return 0xFF, 1, 0, between
+        return mask, 2, 0, between
     images, anchors, sources, overridden = [], [], [], 0
     for key in keys:
         f, d, _ = frames[key]
-        name = '%s_c%s' % (f['mapping'], f['colours'])
+        name = file_name(f)
         source = load_pam(d / (name + '.pam')); sources.append(source)
         art, anchor = None, (f['anchor'][0] * 2, f['anchor'][1] * 2)
         for o in a.override:
@@ -291,7 +310,7 @@ def main():
     weight = {}
     for k, g in zip(keys, groups):
         weight[g] = weight.get(g, 0) + frames[k][0]['seen']
-    for g in sorted(set(groups), key=lambda g: (g[2] == 0, -weight[g], g)):
+    for g in sorted(set(groups), key=lambda g: (g[3], g[2] == 0, -weight[g], g)):
         members = [i for i, x in enumerate(groups) if x == g]
         placed, count = pack([(indexed[i].shape[1], indexed[i].shape[0]) for i in members], a.page)
         sheets = np.zeros((count, a.page, a.page), np.uint8)
@@ -304,9 +323,9 @@ def main():
             used = int(rows.max()) + 2 if len(rows) else 2
             height = 64
             while height < used: height *= 2
-            pages.append((height, g[0], g[1], sheets[p, :height], g[2]))
+            pages.append((height, g[0], g[1], sheets[p, :height], g[2] | g[3]))
 
-    out = bytearray(b'SORART04' + struct.pack('<III', len(pages), len(keys), 3))
+    out = bytearray(b'SORART05' + struct.pack('<III', len(pages), len(keys), 3))
     for palette in palettes:
         words = [0] + [0x8000 | int(r) << 10 | int(g) << 5 | int(b) for r, g, b in palette]
         out += struct.pack('<256H', *(words + [0] * (256 - len(words))))
@@ -314,7 +333,7 @@ def main():
         packed = zlib.compress(sheet.tobytes(), 9)
         out += struct.pack('<HHHBBI', a.page, height, mask, bank, character, len(packed)) + packed
     for key, im, (ax, ay), (p, x0, y0) in zip(keys, images, anchors, places):
-        out += struct.pack('<IHHHHHHHhh', key[0], int(key[1], 16), frames[key][0]['mask'], p, x0 + 1, y0 + 1, im.shape[1], im.shape[0], ax, ay)
+        out += struct.pack('<IHHHHHHHhhI', key[0], int(key[1], 16), frames[key][0]['mask'], p, x0 + 1, y0 + 1, im.shape[1], im.shape[0], ax, ay, key[2])
     a.out.parent.mkdir(parents=True, exist_ok=True); a.out.write_bytes(out)
 
     if a.sheet:
@@ -323,7 +342,7 @@ def main():
         sheets = {}
         for i, key in enumerate(keys):
             f = frames[key][0]
-            sheets.setdefault(f.get('character') or 'type-%02x' % min(f['types']), []).append(i)
+            sheets.setdefault(('inbetween-' if key[2] else '') + (f.get('character') or 'type-%02x' % min(f['types'])), []).append(i)
         for name, members in sheets.items():
             cells = []
             for i in members[:96]:
@@ -344,11 +363,12 @@ def main():
             Image.fromarray(sheet).convert('RGB').save(a.sheet / (name + '.png'))
 
     # One player: a third of the player pages; two different characters: two thirds.
-    players = sum(a.page * p[0] for p in pages if p[4])
+    players = sum(a.page * p[0] for p in pages if p[4] & 0x7F and not p[4] & 0x80)
     per_round = {r + 1: sum(a.page * p[0] for p in pages if p[1] >> r & 1 and not p[4]) + players // 3 for r in range(8)}
-    report = dict(style=a.style, frames=len(keys), colour_sets=len(shown) - len(dropped), transient_colour_sets_dropped=len(dropped), player_frames=sum(1 for g in groups if g[1] == 0), overridden=overridden,
+    between = {r + 1: sum(a.page * p[0] for p in pages if p[1] >> r & 1 and p[4] & 0x80) for r in range(8)}
+    report = dict(style=a.style, frames=len(keys), colour_sets=len(shown) - len(dropped), transient_colour_sets_dropped=len(dropped), player_frames=sum(1 for g in groups if g[1] == 0 and not g[3]), inbetweens=sum(1 for k in keys if k[2]), overridden=overridden,
                   pages=len(pages), packed_bytes=len(out), colours=[len(p) for p in palettes],
-                  powervr_bytes_per_round_one_player=per_round, powervr_bytes_per_character=players // 3,
+                  powervr_bytes_per_round_one_player=per_round, powervr_bytes_per_character=players // 3, powervr_bytes_inbetweens_per_round_all_players=between,
                   mean_channel_error=round(error_sum / max(1, error_n), 2), max_channel_error=error_max)
     a.out.with_suffix('.json').write_text(json.dumps(report, indent=1) + '\n')
     print(json.dumps(report))

@@ -40,7 +40,7 @@ uint16_t VdpScene::rgb1555(unsigned r,unsigned g,unsigned b){
 }
 bool VdpScene::buildCached(VDPState &s,VDPRenderer &){
     // VRAM: no write since the cached frame (a write of equal bytes rebuilds).
-    reused=cacheValid && enhanced==builtEnhanced_ && same_render_regs(s,previous)
+    reused=cacheValid && enhanced==builtEnhanced_ && !inbetween_ && same_render_regs(s,previous)
         && s.vramGeneration_==previous.vramGeneration_
         && equal_bytes(s.cram_,previous.cram_,sizeof(s.cram_))
         && equal_bytes(s.vsram_,previous.vsram_,sizeof(s.vsram_))
@@ -158,14 +158,37 @@ void VdpScene::enhancedSprites(const VDPState &s){
     int16_t owner[VDPState::SAT_MAX_SPRITES];std::fill_n(owner,VDPState::SAT_MAX_SPRITES,int16_t(-1));
     uint32_t frameOf[SpriteBuild::MAX_OBJECTS]{};
     const SpriteBuild *build=art&&!art->empty()?sprite_probe().displayed(s):nullptr;
+    // Builds since the poses were recorded. After a gap (scenes are not built
+    // for every frame in host captures) a pose change is not a transition.
+    const uint32_t elapsed=build?build->serial-poseSerial_:0;
+    Pose now[SpriteBuild::MAX_OBJECTS];unsigned nowCount=0;
+    if(build){
+        if(elapsed>2)poseCount_=0;
+        poseSerial_=build->serial;inbetween_=false;
+    }
     if(build)for(unsigned o=0;o<build->count;o++){
         const auto &obj=build->objects[o];
         if(obj.first+obj.count>VDPState::SAT_MAX_SPRITES)continue;
-        const ArtFrame *f=art->find(obj.mapping,s.cram_+(record(obj.first)[4]>>5&3)*16);
+        const uint16_t *line=s.cram_+(record(obj.first)[4]>>5&3)*16;
+        const ArtFrame *f=art->find(obj.mapping,line);
         if(!f)continue;
+        Pose pose{obj.set,obj.mapping,0,obj.slot,0,obj.flip};
+        if(smooth)for(unsigned i=0;i<poseCount_;i++){
+            const Pose &was=poses_[i];
+            if(was.slot!=obj.slot||was.set!=obj.set||was.flip!=obj.flip)continue;
+            if(was.mapping!=obj.mapping){pose.from=was.mapping;pose.ticks=INBETWEEN_TICKS;}
+            else if(was.ticks>elapsed){pose.from=was.from;pose.ticks=uint8_t(was.ticks-elapsed);}
+            break;
+        }
+        if(pose.ticks){
+            if(const ArtFrame *between=art->between(pose.from,obj.mapping,line)){f=between;inbetween_=true;}
+            else pose.ticks=0;
+        }
+        now[nowCount++]=pose;
         frameOf[o]=uint32_t(f-art->frames().data());
         for(int r=obj.first;r<obj.first+obj.count;r++)owner[r]=int16_t(o);
     }
+    if(build){std::copy(now,now+nowCount,poses_);poseCount_=nowCount;}
     int index=0;
     for(int ordinal=0;ordinal<VDPState::SAT_MAX_SPRITES;ordinal++){
         const uint8_t *e=record(index);

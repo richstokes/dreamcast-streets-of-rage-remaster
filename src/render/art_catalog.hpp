@@ -27,21 +27,27 @@ namespace sor {
 // most important first: a loader that runs out of memory marks the rest
 // unloaded, and their frames fall back to the original pieces.
 //
-// Package "SORART04", little-endian:
+// In-between poses (smooth animation): a frame with `from` set is shown for a
+// few ticks when an object goes from mapping `from` to `mapping`. They are on
+// pages of their own (character bit 7), stored last, and selected only while
+// smooth animation is on: they take what memory the ordinary art leaves.
+//
+// Package "SORART05", little-endian ("SORART04": no `from`):
 //   u8[8] magic, u32 pages, u32 frames, u32 palettes (1-3)
 //   u16 palette[palettes][256] (ARGB1555; index 0 transparent)
 //   per page:  u16 width, u16 height, u16 rounds, u8 palette, u8 character, u32 packed size,
 //              u8 zlib[packed size] -> u8 indices[width*height]
 //   per frame: u32 mapping, u16 colour key, u16 mask (bit i: CRAM entry i counts),
-//              u16 page, u16 u, v, w, h, s16 anchorX, anchorY
+//              u16 page, u16 u, v, w, h, s16 anchorX, anchorY, u32 from
 struct ArtFrame {
-    uint32_t mapping;
+    uint32_t mapping,from;
     uint16_t colours,mask,page,u,v,w,h;
     int16_t anchorX,anchorY;
 };
 struct ArtPage {
     uint16_t width,height,rounds;
-    uint8_t palette,character;
+    uint8_t palette,character;   // character bit 7: in-between poses
+    bool inbetween() const {return character&0x80;}
     const uint8_t *indices;    // inflated by the catalog, else null
     const uint8_t *packed;     // zlib stream
     uint32_t packedSize;
@@ -59,12 +65,15 @@ public:
     bool inflate(const ArtPage &page,uint8_t *out) const;
     // Frames on other pages are not found. round 0: every round; characters:
     // bit c set when character c is in play (ignored with round 0).
-    void select(unsigned round,unsigned characters);
+    void select(unsigned round,unsigned characters,bool inbetweens=true);
     // A selected page the loader could not fit.
     void setUnloaded(size_t page){wanted_[page]=0;}
     bool wanted(size_t page) const {return wanted_[page];}
     // line: the 16 CRAM words of the sprite's palette line.
-    const ArtFrame *find(uint32_t mapping,const uint16_t *line) const;
+    const ArtFrame *find(uint32_t mapping,const uint16_t *line) const {return find(0,mapping,line);}
+    // The in-between pose from one mapping to another, if there is one.
+    const ArtFrame *between(uint32_t from,uint32_t mapping,const uint16_t *line) const {return from?find(from,mapping,line):nullptr;}
+    bool hasInbetweens() const {return !frames_.empty()&&frames_.back().from;}
     const std::vector<ArtFrame> &frames() const {return frames_;}
     const std::vector<ArtPage> &pages() const {return pages_;}
     // 256 entries per palette; entry 0 of each is transparent. The Dreamcast
@@ -73,7 +82,8 @@ public:
     uint16_t texel(const ArtPage &page,size_t index) const {return palette_[page.palette*256+page.indices[index]];}
     bool empty() const {return frames_.empty();}
 private:
-    std::vector<ArtFrame> frames_;   // sorted by mapping
+    const ArtFrame *find(uint32_t from,uint32_t mapping,const uint16_t *line) const;
+    std::vector<ArtFrame> frames_;   // sorted by (from, mapping): ordinary frames first
     std::vector<ArtPage> pages_;
     std::vector<uint16_t> palette_;
     std::vector<std::vector<uint8_t>> inflated_;
