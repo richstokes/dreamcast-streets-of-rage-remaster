@@ -1,14 +1,31 @@
 # Graphical remaster: enhanced rendering path
 
-Status (2026-09-19): **the rendering path and asset plumbing work, with
-placeholder art only.** Original and enhanced graphics are selectable on the same
-simulation, objects can be drawn with replacement art at twice the original
-resolution, and frames can be extracted, packed, previewed and measured. No
-redrawn art exists yet; the placeholders are the original frames doubled with
-Scale2x (rounded diagonals), with a cyan outline and a magenta anchor cross, and
-do not count towards the remaster. They cover the frames seen in the Round 1
-replays: all three characters (bot runs selecting each), Round 1 enemies,
-items and effects; anything else is drawn as the original pieces.
+Status (2026-09-21): **original and enhanced graphics are selectable on the same
+simulation, and the enhanced mode draws every player frame and the Round 1
+enemies, items and effects with generated 2x art.** The art is produced by an
+offline pipeline from the original frames; it is not hand-redrawn. Hand-made
+frames can replace any generated frame (see below).
+
+## The art pipeline
+
+- `tools/extract-player-frames.py`: every animation frame of Adam, Axel and
+  Blaze (67, 65 and 73) straight from the ROM: it walks the animation sets
+  (`$53EFE`, `$49AE0`, `$5E90A`), replays each frame's two player-art DMA
+  records and composes the pieces. The 167 frames that replays also drew match
+  them pixel for pixel, except 4 the replays saw partly culled.
+- `SOR_EXTRACT_FRAMES` (host build): whatever a replay draws; the source for
+  enemies, items and effects.
+- `tools/make-enhanced-art.py`: per frame, Scale2x twice then averaged back to
+  2x (anti-aliased interior edges, rounded silhouette, 1-bit alpha), then an
+  edge-preserving filter that turns the 16-colour originals' stepped ramps and
+  dithering into continuous shading while outlines stay crisp; one 255-colour
+  palette for the set (farthest-point seeding + k-means, no dithering); frames
+  cropped, packed into 512x512 pages and zlib-compressed (`SORART03`).
+  `--sheet` writes before/after sheets, `--frames` every frame as a PNG, and
+  `--override DIR` takes hand-made `<MAPPING>_p<PALETTE>.png` frames (RGBA,
+  twice the extracted frame's size) in place of generated ones.
+- `tools/make-art-set.sh` runs all of it (`ART_STYLE=placeholder` builds the
+  outlined alignment-check set instead; `ART_OVERRIDE=dir`).
 
 ## How objects become replacement art
 
@@ -97,12 +114,12 @@ per-stage loading, as the brief requires. Adam's 47 frames seen in Round 1 are
 about half a full player set: a full character at 2x is roughly 2 MB in
 ARGB1555, 1 MB with an 8-bit palette, 0.25 MB with VQ.
 
-Current set (2026-09-21): 289 frames (Adam 59, Axel 57, Blaze 55, enemies,
-items and effects 118), 42 colours, 12 pages of 512x512; the package is
-3,151,662 bytes (SORART02) and takes 3,145,728 bytes of PowerVR memory, leaving
-952,456 free. As ARGB1555 it needed 5.2 MB, more than was
-free, and embedded in the test ELF it overran the Dreamcast's 16 MB of RAM
-(Flycast rejected the ELF and rebooted in a loop).
+Current set (2026-09-21): 323 frames (205 player frames, 118 others), 255
+colours, 12 pages of 512x512: 3,145,728 bytes of PowerVR memory (952,456 left
+free), but only 444,460 bytes on disc or embedded in the test ELF. The
+Dreamcast inflates and uploads one page at a time (1.1 s at boot), because main
+RAM cannot hold the set: an uncompressed 3.4 MB package left the game too
+little heap (`std::bad_alloc` at start), and a 5.2 MB one overran 16 MB.
 
 ## Known limits of the prototype
 

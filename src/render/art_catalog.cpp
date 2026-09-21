@@ -1,6 +1,7 @@
 #include "art_catalog.hpp"
 #include <algorithm>
 #include <cstring>
+#include <zlib.h>
 namespace sor {
 namespace {
 struct Reader {
@@ -10,11 +11,16 @@ struct Reader {
     uint32_t u32(){uint32_t v=uint32_t(p[0]|p[1]<<8|p[2]<<16|uint32_t(p[3])<<24);p+=4;return v;}
 };
 }
-bool ArtCatalog::load(const uint8_t *data,size_t size){
-    frames_.clear();pages_.clear();palette_.clear();
+bool ArtCatalog::inflate(const ArtPage &page,uint8_t *out) const{
+    uLongf n=uLongf(page.width)*page.height;
+    return page.packed&&uncompress(out,&n,page.packed,page.packedSize)==Z_OK&&n==uLongf(page.width)*page.height;
+}
+bool ArtCatalog::load(const uint8_t *data,size_t size,bool inflatePages){
+    frames_.clear();pages_.clear();palette_.clear();inflated_.clear();
     Reader r{data,data+size};
     if(!r.has(16))return false;
-    const bool indexed=!std::memcmp(data,"SORART02",8);
+    const bool packed=!std::memcmp(data,"SORART03",8);
+    const bool indexed=packed||!std::memcmp(data,"SORART02",8);
     if(!indexed&&std::memcmp(data,"SORART01",8))return false;
     r.p+=8;
     const uint32_t pages=r.u32(),frames=r.u32();
@@ -28,7 +34,20 @@ bool ArtCatalog::load(const uint8_t *data,size_t size){
     }
     for(uint32_t i=0;i<pages;i++){
         if(!r.has(4))return false;
-        ArtPage page{r.u16(),r.u16(),nullptr,nullptr};
+        ArtPage page{r.u16(),r.u16(),nullptr,nullptr,nullptr,0};
+        if(packed){
+            if(!r.has(4))return false;
+            page.packedSize=r.u32();
+            if(!r.has(page.packedSize))return false;
+            page.packed=r.p;r.p+=page.packedSize;
+            if(inflatePages){
+                inflated_.emplace_back(size_t(page.width)*page.height);
+                if(!inflate(page,inflated_.back().data()))return false;
+                page.indices=inflated_.back().data();   // the vector's buffer is stable
+            }
+            pages_.push_back(page);
+            continue;
+        }
         const size_t bytes=size_t(page.width)*page.height*(indexed?1:2);
         if(!r.has(bytes))return false;
         if(indexed)page.indices=r.p;

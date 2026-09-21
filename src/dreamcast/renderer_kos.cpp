@@ -76,7 +76,7 @@ void load_art(){
     const uint8_t *data=artPackage.empty()?built_in:artPackage.data();
     const size_t size=artPackage.empty()?embedded:artPackage.size();
     if(!data||!size){sor_log("Enhanced art: no package (original sprites drawn per cell)\n");return;}
-    if(!art.load(data,size)){sor_log("Enhanced art: invalid package\n");art=sor::ArtCatalog();return;}
+    if(!art.load(data,size,false)){sor_log("Enhanced art: invalid package\n");art=sor::ArtCatalog();return;}
     // Indexed art (SORART02, or SORART01 with at most 255 colours) is stored
     // with 8-bit indices into palette bank 1 (entries 256-511; the 4-bit tile
     // palettes use entries 0-63 of bank 0): half the memory of ARGB1555.
@@ -106,7 +106,12 @@ void load_art(){
         const size_t texels=size_t(page.width)*page.height,n=indexed?texels:texels*2;
         pvr_ptr_t t=pvr_mem_malloc(n);
         if(!t){sor_log("Enhanced art: PowerVR memory exhausted after %zu bytes\n",bytes);art=sor::ArtCatalog();return;}
-        if(page.indices)pvr_txr_load_ex(page.indices,t,page.width,page.height,PVR_TXRLOAD_8BPP);
+        if(page.packed){
+            // One page in main RAM at a time.
+            indices.resize(texels);
+            if(!art.inflate(page,indices.data())){sor_log("Enhanced art: page inflate failed\n");art=sor::ArtCatalog();return;}
+            pvr_txr_load_ex(indices.data(),t,page.width,page.height,PVR_TXRLOAD_8BPP);
+        }else if(page.indices)pvr_txr_load_ex(page.indices,t,page.width,page.height,PVR_TXRLOAD_8BPP);
         else if(indexed){
             indices.resize(texels);
             for(size_t i=0;i<texels;i++){const uint16_t v=page.pixels[i];indices[i]=(v&0x8000)?colourIndex[v&0x7FFF]:0;}

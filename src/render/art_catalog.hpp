@@ -20,6 +20,8 @@ namespace sor {
 //   u16 palette[colours] (ARGB1555)
 //   per page:  u16 width, u16 height, u8 indices[width*height]
 //   per frame: as SORART01
+// "SORART03": as SORART02 with each page's indices zlib-compressed.
+//   per page:  u16 width, u16 height, u32 packed size, u8 zlib[packed size]
 struct ArtFrame {
     uint32_t mapping;
     uint16_t palette,page,u,v,w,h;
@@ -28,12 +30,19 @@ struct ArtFrame {
 struct ArtPage {
     uint16_t width,height;
     const uint16_t *pixels;    // SORART01, else null
-    const uint8_t *indices;    // SORART02, else null
+    const uint8_t *indices;    // SORART02, or SORART03 once inflated; else null
+    const uint8_t *packed;     // SORART03: zlib stream, else null
+    uint32_t packedSize;
 };
 class ArtCatalog {
 public:
     // Parses a package held in memory (not copied; it must outlive the catalog).
-    bool load(const uint8_t *data,size_t size);
+    // SORART03 pages are inflated into memory the catalog owns, unless
+    // inflatePages is false: then each page is fetched with inflate() (the
+    // Dreamcast uploads one page at a time and keeps none in main RAM).
+    bool load(const uint8_t *data,size_t size,bool inflatePages=true);
+    // Inflates a SORART03 page into out (width*height bytes).
+    bool inflate(const ArtPage &page,uint8_t *out) const;
     const ArtFrame *find(uint32_t mapping,int palette) const;
     const std::vector<ArtFrame> &frames() const {return frames_;}
     const std::vector<ArtPage> &pages() const {return pages_;}
@@ -46,5 +55,6 @@ private:
     std::vector<ArtFrame> frames_;   // sorted by (mapping, palette)
     std::vector<ArtPage> pages_;
     std::vector<uint16_t> palette_;
+    std::vector<std::vector<uint8_t>> inflated_;
 };
 }

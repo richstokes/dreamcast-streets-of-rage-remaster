@@ -1,10 +1,11 @@
 #!/bin/sh
-# Build the placeholder art set (build/art/SORART.PAK) with every player
+# Build the replacement art set (build/art/SORART.PAK) with every player
 # character: for Adam, Axel (RIGHT on the select screen) and Blaze (LEFT) it
 # replays the scripted Round 1, action and combat scenarios and two bot runs
 # (plain; throws and pickups), extracts the object frames each run draws, and
 # packs them together with the two-player bot replay's.
-# Needs the headless build and the profiling core (tools/build-profile-core.sh).
+# Needs the headless build, the profiling core (tools/build-profile-core.sh)
+# and numpy + Pillow in build/tools-venv. ART_OVERRIDE=dir supplies hand-made frames.
 # Usage: tools/make-art-set.sh [rom]
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
@@ -35,4 +36,13 @@ for scenario in "$work"/*.json; do
     ( python3 "$root/tools/replay.py" "$scenario" "$work/$name.bin" > /dev/null; mkdir -p "$frames/$name"
       SOR_EXTRACT_FRAMES="$frames/$name" "$root/build/headless/sor-headless" "$rom" "$work/$name.bin" /dev/null > /dev/null 2>&1 ) &
 done; wait
-"$py" "$root/tools/make-placeholder-art.py" "$frames"/* --out "$root/build/art/SORART.PAK"
+# Every player frame comes from the ROM (the replays supply colours and a
+# pixel-for-pixel check); enemies, items and effects come from the replays.
+"$py" "$root/tools/extract-player-frames.py" "$rom" "$root/build/frames-players" "$frames"/*
+# ART_STYLE=placeholder: outlined pixel-doubled frames for checking alignment.
+if [ "${ART_STYLE:-enhanced}" = placeholder ]; then
+    "$py" "$root/tools/make-placeholder-art.py" "$root/build/frames-players" "$frames"/* --out "$root/build/art/SORART.PAK"
+else
+    "$py" "$root/tools/make-enhanced-art.py" "$root/build/frames-players" "$frames"/* --out "$root/build/art/SORART.PAK" \
+        --sheet "$root/build/art/sheets" --frames "$root/build/art/frames" ${ART_OVERRIDE:+--override "$ART_OVERRIDE"}
+fi

@@ -12,3 +12,5 @@ add_executable(sor-headless ${GAME_SOURCES} main.cpp extract_frames.cpp
 target_compile_definitions(sor-headless PRIVATE SOR_PC_HISTOGRAM)
 target_include_directories(sor-headless PRIVATE ../dreamcast ../dreamcast/compat
     "${ROOT}/include" "${ROOT}/build/native/upstream" ../render ../audio)
+find_package(ZLIB REQUIRED)
+target_link_libraries(sor-headless PRIVATE ZLIB::ZLIB)

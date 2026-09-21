@@ -8,6 +8,7 @@
 #include <cassert>
 #include <cstdio>
 #include <cstring>
+#include <zlib.h>
 #include <memory>
 #include <vector>
 namespace {
@@ -70,6 +71,20 @@ int main(){
     std::vector<uint16_t> out2(640*448);
     sor::raster_enhanced(*scene,state,out2.data(),640);
     assert(out2==out);
+    // SORART03: the same page zlib-compressed, inflated by the catalog or on request.
+    std::vector<uint8_t> page(64);for(int i=0;i<64;i++)page[i]=i<8*4&&i%8<4?1:0;
+    std::vector<uint8_t> z(compressBound(64));uLongf zn=z.size();assert(compress(z.data(),&zn,page.data(),64)==Z_OK);
+    std::vector<uint8_t> pak3(std::begin("SORART03"),std::end("SORART03")-1);
+    put32(pak3,1);put32(pak3,1);put32(pak3,2);put16(pak3,0);put16(pak3,0xFC00);
+    put16(pak3,8);put16(pak3,8);put32(pak3,uint32_t(zn));pak3.insert(pak3.end(),z.begin(),z.begin()+zn);
+    put32(pak3,0x054206);put16(pak3,0);put16(pak3,0);put16(pak3,0);put16(pak3,0);put16(pak3,4);put16(pak3,4);put16(pak3,2);put16(pak3,4);
+    sor::ArtCatalog art3;assert(art3.load(pak3.data(),pak3.size()));
+    scene->art=&art3;assert(scene->build(state,renderer)&&scene->artCount==1);
+    std::vector<uint16_t> out3(640*448);
+    sor::raster_enhanced(*scene,state,out3.data(),640);
+    assert(out3==out);
+    sor::ArtCatalog lazy;assert(lazy.load(pak3.data(),pak3.size(),false)&&!lazy.pages()[0].indices);
+    std::vector<uint8_t> inflated(64);assert(lazy.inflate(lazy.pages()[0],inflated.data())&&inflated==page);
     scene->art=&art;
 
     // VRAM's table no longer matches the build: the object's pieces come back.
@@ -77,5 +92,5 @@ int main(){
     assert(!probe.displayed(state));
     assert(scene->build(state,renderer));
     assert(scene->artCount==0&&scene->spriteTileCount==5);
-    puts("Enhanced scene: art replaces a probed object in its SAT slot (ARGB and indexed packages); other sprites stay cells; stale builds fall back");
+    puts("Enhanced scene: art replaces a probed object in its SAT slot (ARGB, indexed and compressed packages); other sprites stay cells; stale builds fall back");
 }

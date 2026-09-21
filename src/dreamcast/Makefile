@@ -15,18 +15,18 @@ $(AUDIO_OBJS): KOS_CPPFLAGS += -O3 -flto -DNDEBUG
 # accessors from another file on every access; let LTO inline them.
 VDP_OBJS := $(ROOT)/build/native/upstream/VDPState.o $(ROOT)/build/native/upstream/VDPPort.o runtime.o
 $(VDP_OBJS): KOS_CPPFLAGS += -O3 -flto
-KOS_CPPFLAGS += -std=gnu++23 -g -I. -Icompat -I../render -I../audio -I$(ROOT)/include -I$(ROOT)/build/native/upstream -ffunction-sections -fdata-sections -MMD -MP
+KOS_CPPFLAGS += -std=gnu++23 -g -isystem $(KOS_PORTS)/include/zlib -I. -Icompat -I../render -I../audio -I$(ROOT)/include -I$(ROOT)/build/native/upstream -ffunction-sections -fdata-sections -MMD -MP
 KOS_CFLAGS += -g -I$(ROOT)/include -ffunction-sections -fdata-sections -MMD -MP
 KOS_LDFLAGS += -Wl,--gc-sections,-Map,$(ROOT)/build/native/sor.map
 all: $(TARGET)
 $(OBJS): Makefile
 -include $(OBJS:.o=.d)
 $(TARGET): $(OBJS)
-	kos-c++ -O3 -flto -o $@ $(OBJS) -lm
+	kos-c++ -O3 -flto -o $@ $(OBJS) -lz -lm
 # build-and-run.sh embeds the ROM and, when built, the replacement-art package.
 EMBEDDED := $(ROOT)/build/native/embedded-rom.o $(wildcard $(ROOT)/build/native/embedded-art.o)
 $(ROOT)/build/native/sor-test.elf: $(OBJS) $(EMBEDDED)
-	kos-c++ -O3 -flto -o $@ $(OBJS) $(EMBEDDED) -lm
+	kos-c++ -O3 -flto -o $@ $(OBJS) $(EMBEDDED) -lz -lm
 $(ROOT)/build/native/memory.o: $(ROOT)/src/core/memory.c
 	kos-cc -c $< -o $@
 $(ROOT)/build/native/save.o: $(ROOT)/src/core/save.c
