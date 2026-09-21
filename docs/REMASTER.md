@@ -50,13 +50,10 @@ object's screen anchor (its feet) and emits one table record per visible piece.
 ## Using it
 
 ```sh
-# 1. Extract every object frame drawn in a replay (host build). The current set
-#    uses round1-full, two-player-bot and one bot run per other character
-#    (round1-full's prologue with RIGHT or LEFT on the select screen).
-SOR_EXTRACT_FRAMES=$PWD/build/frames-round1-full build/headless/sor-headless "$SOR_ROM" REPLAY.bin build/r.ram
-# 2. Placeholder package (derived from the ROM: stays in build/) and budget report.
-build/tools-venv/bin/python3 tools/make-placeholder-art.py build/frames-round1-full \
-  build/frames-two-bot build/frames-bot-right build/frames-bot-left --out build/art/SORART.PAK
+# 1-2. Placeholder set for all three characters (derived from the ROM: stays
+#      in build/): scripted and bot runs per character, frame extraction
+#      (SOR_EXTRACT_FRAMES), packing and a budget report.
+tools/make-art-set.sh
 # 3. Side-by-side previews: original at 2x (left), enhanced (right), plus a list of art drawn.
 SOR_ART=$PWD/build/art/SORART.PAK SOR_ENHANCED_CAPTURE=$PWD/build/cap:1500:2700:100 \
   build/headless/sor-headless "$SOR_ROM" REPLAY.bin build/r.ram
@@ -100,9 +97,10 @@ per-stage loading, as the brief requires. Adam's 47 frames seen in Round 1 are
 about half a full player set: a full character at 2x is roughly 2 MB in
 ARGB1555, 1 MB with an 8-bit palette, 0.25 MB with VQ.
 
-Current set (2026-09-21): 231 frames, 45 colours, 10 pages of 512x512; the
-package is 2,626,212 bytes (SORART02) and takes 2,621,440 bytes of PowerVR
-memory, leaving 1,476,808 free. As ARGB1555 it needed 5.2 MB, more than was
+Current set (2026-09-21): 289 frames (Adam 59, Axel 57, Blaze 55, enemies,
+items and effects 118), 42 colours, 12 pages of 512x512; the package is
+3,151,662 bytes (SORART02) and takes 3,145,728 bytes of PowerVR memory, leaving
+952,456 free. As ARGB1555 it needed 5.2 MB, more than was
 free, and embedded in the test ELF it overran the Dreamcast's 16 MB of RAM
 (Flycast rejected the ELF and rebooted in a loop).
 
