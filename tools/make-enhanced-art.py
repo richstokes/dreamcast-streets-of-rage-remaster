@@ -13,14 +13,22 @@ frame is redrawn at twice the resolution (src/render/art_catalog.hpp):
      checkerboard dithering of the 16-colour originals become continuous
      gradients -- while outlines and boundaries between materials, which differ
      strongly in colour, stay crisp. Transparent pixels never take part.
-  3. Colour: all frames share one palette of at most 255 colours (8-bit
-     PowerVR textures, palette bank 1), quantised without dithering.
+  3. Colour: 8-bit PowerVR textures; each palette is quantised from its
+     frames without dithering.
   4. Frames are cropped to their opaque pixels and the pages stored
-     zlib-compressed (SORART03): main RAM and the disc hold about 0.5 MB.
+     zlib-compressed (SORART04).
 
-Hand-made art overrides the generated frame: put <MAPPING>_p<PALETTE>.png
-(RGBA, twice the extracted frame's size, same anchor) in an --override
-directory. --sheet writes before/after comparison sheets for review.
+Frames are keyed by mapping address and colour key (art_catalog.hpp): the same
+enemy frame under different colours is separate art. Pages are grouped by the
+rounds their frames were seen in (index.json "rounds"; players and frames seen
+in five or more rounds are always resident) and the Dreamcast loads a round's
+pages only; the report lists PowerVR bytes per round. Three palettes of 255
+colours: players, always-resident others, round-specific others.
+
+Hand-made art overrides the generated frame: put <MAPPING>_c<KEY>.png (RGBA,
+twice the extracted frame's size, same anchor) in an --override directory.
+--style placeholder makes pixel-doubled frames with a cyan outline and a
+magenta anchor cross instead, for checking alignment. --sheet writes before/after comparison sheets for review.
 Everything here is derived from the ROM: keep it under build/, out of git.
 
   tools/make-enhanced-art.py DIR... --out build/art/SORART.PAK [--sheet DIR]
@@ -31,7 +39,7 @@ import numpy as np
 from PIL import Image
 
 WORLD_TYPES = set(range(0x01, 0x60)) | set(range(0x90, 0xA0))
-GUTTER = 2      # transparent texels around each frame (see make-placeholder-art.py)
+GUTTER = 2      # transparent texels around each frame (the PowerVR samples past a frame when art is scaled 480/448)
 
 
 def load_pam(path):
@@ -118,6 +126,24 @@ def quantise(colours, counts, n):
     return centres / WEIGHT
 
 
+def placeholder(rgba, anchor):
+    """Pixel-doubled frame with a cyan outline and a magenta cross at the anchor."""
+    big = np.repeat(np.repeat(rgba, 2, 0), 2, 1)
+    big = np.pad(big, ((1, 1), (1, 1), (0, 0)))
+    solid = big[..., 3] > 0
+    near = np.zeros_like(solid)
+    for dy in (-1, 0, 1):
+        for dx in (-1, 0, 1):
+            near |= np.roll(np.roll(solid, dy, 0), dx, 1)
+    big[near & ~solid] = (0, 255, 255, 255)
+    ax, ay = anchor[0] * 2 + 1, anchor[1] * 2 + 1
+    for d in range(-3, 4):
+        for x, y in ((ax + d, ay), (ax, ay + d)):
+            if 0 <= x < big.shape[1] and 0 <= y < big.shape[0]:
+                big[y, x] = (255, 0, 255, 255)
+    return big, (ax, ay)
+
+
 def pack(sizes, page):
     """Shelf packing, tallest first: [(page, x, y)] in input order."""
     order = sorted(range(len(sizes)), key=lambda i: -sizes[i][1])
@@ -147,105 +173,168 @@ def main():
     ap.add_argument('dirs', nargs='+', type=Path)
     ap.add_argument('--out', type=Path, required=True)
     ap.add_argument('--page', type=int, default=512)
+    ap.add_argument('--style', choices=('enhanced', 'placeholder'), default='enhanced')
     ap.add_argument('--override', type=Path, action='append', default=[], help='directory of hand-made frame PNGs')
     ap.add_argument('--sheet', type=Path, help='write before/after comparison sheets here')
     ap.add_argument('--frames', type=Path, help='write every generated frame as a PNG here (templates for hand-made art)')
+    ap.add_argument('--min-seen', type=int, default=8, help='frames some frame of a look must have been on screen (in one run) for the look to get art')
     ap.add_argument('--passes', type=int, default=2)
     ap.add_argument('--sigma-space', type=float, default=1.6)
     ap.add_argument('--sigma-colour', type=float, default=21.0)
     a = ap.parse_args()
 
-    frames = {}
+    frames, rounds = {}, {}
     for d in a.dirs:
         for f in json.loads((d / 'index.json').read_text())['frames']:
             if not set(f['types']) & WORLD_TYPES:
                 continue
-            key = (int(f['mapping'], 16), f['palette'])
-            # Prefer the ROM extraction (complete frames) over replay captures.
-            if key not in frames or 'character' in f or (f['seen'] > frames[key][0]['seen'] and 'character' not in frames[key][0]):
-                frames[key] = (f, d)
+            key = (int(f['mapping'], 16), f['colours'])
+            rounds[key] = rounds.get(key, 0) | f.get('rounds', 0)
+            # The ROM extraction (players) wins; then whole-set renderings and
+            # the captures seen most.
+            rank = (2 if 'character' in f else 1 if f.get('check') in ('confirmed', 'set_only', 'direct_culled') else 0, f['seen'])
+            if key not in frames or rank > frames[key][2]:
+                frames[key] = (f, d, rank)
+    # Colours seen only in passing are fades and flashes, not an object's look:
+    # they get no art, and the game's own pieces are drawn for them.
+    # Fades and flashes are not an object's look. A step of a fade is another
+    # look of the same frame with every colour darker (or, flashing, lighter),
+    # seen for less time; a look barely seen at all is dropped too. They get no
+    # art, and the game's own pieces are drawn for them.
+    shown, looks = {}, {}
+    for d in a.dirs:
+        for f in json.loads((d / 'index.json').read_text())['frames']:
+            shown[f['colours']] = max(shown.get(f['colours'], 0), f['seen'])
+            channels = [c >> s & 7 for i, c in enumerate(f['cram']) if f['mask'] >> i & 1 for s in (1, 5, 9)]
+            looks.setdefault(int(f['mapping'], 16), {})[f['colours']] = channels
+    dropped = {c for c, n in shown.items() if n < a.min_seen}
+    for same in looks.values():
+        for ka, ca in same.items():
+            for kb, cb in same.items():
+                if ka != kb and len(ca) == len(cb) and shown[kb] > shown[ka] and (
+                        all(x <= y for x, y in zip(ca, cb)) or all(x >= y for x, y in zip(ca, cb))):
+                    dropped.add(ka)
+    dropped -= {f['colours'] for f, _, _ in frames.values() if 'character' in f}
+    frames = {k: v for k, v in frames.items() if k[1] not in dropped}
     keys = sorted(frames)
+    CHARACTERS = {'adam': 1, 'axel': 2, 'blaze': 3}
+    def group(key):
+        """(rounds mask, palette, character): what is loaded together."""
+        if 'character' in frames[key][0]:
+            return 0xFF, 0, CHARACTERS[frames[key][0]['character']]
+        mask = rounds[key] & 0xFF
+        if not mask or mask == 0xFF:
+            return 0xFF, 1, 0
+        return mask, 2, 0
     images, anchors, sources, overridden = [], [], [], 0
     for key in keys:
-        f, d = frames[key]
-        name = '%s_p%d' % (f['mapping'], f['palette'])
+        f, d, _ = frames[key]
+        name = '%s_c%s' % (f['mapping'], f['colours'])
         source = load_pam(d / (name + '.pam')); sources.append(source)
-        art = None
+        art, anchor = None, (f['anchor'][0] * 2, f['anchor'][1] * 2)
         for o in a.override:
             if (o / (name + '.png')).exists():
                 art = np.array(Image.open(o / (name + '.png')).convert('RGBA'))
                 if art.shape[:2] != (source.shape[0] * 2, source.shape[1] * 2):
                     raise SystemExit('%s: override must be %dx%d' % (name, source.shape[1] * 2, source.shape[0] * 2))
                 art[..., 3] = np.where(art[..., 3] >= 128, 255, 0); overridden += 1
-        if art is None:
+        if art is None and a.style == 'placeholder':
+            art, anchor = placeholder(source, f['anchor'])
+        elif art is None:
             art = smooth(redraw_edges(source), a.passes, a.sigma_space, a.sigma_colour)
+        if a.frames:
+            a.frames.mkdir(parents=True, exist_ok=True); Image.fromarray(art).save(a.frames / (name + '.png'))
         # Crop to the opaque pixels (pieces are whole 8-pixel cells, mostly
         # empty at the edges); the anchor moves with the crop.
-        ys, xs = np.nonzero(art[..., 3]); ax, ay = f['anchor'][0] * 2, f['anchor'][1] * 2
+        ys, xs = np.nonzero(art[..., 3]); ax, ay = anchor
         if len(ys):
             art = art[ys.min(): ys.max() + 1, xs.min(): xs.max() + 1]; ax -= int(xs.min()); ay -= int(ys.min())
         else:
             art = art[:1, :1]
         images.append(art); anchors.append((ax, ay))
-        if a.frames:
-            a.frames.mkdir(parents=True, exist_ok=True); Image.fromarray(art).save(a.frames / (name + '.png'))
 
-    # One palette for the whole set: median cut + k-means over 15-bit colours,
-    # weighted by how many texels use each; no dithering.
-    opaque = np.concatenate([im[im[..., 3] > 0][:, :3] for im in images])
-    colours, counts = np.unique(to555(opaque) << 3 | 4, axis=0, return_counts=True)
-    if len(colours) > 255:
-        palette = to555(quantise(colours.astype(np.float32), counts, 255).astype(np.uint8))
-        palette = np.unique(palette, axis=0)
-    else:
-        palette = np.unique(to555(colours.astype(np.uint8)), axis=0)
-    pal8 = (palette.astype(np.float32) * 8 + 4)
-    lut = {}
-    def indices(im):
-        c = to555(im[..., :3]); flat = (c[..., 0].astype(np.int32) << 10 | c[..., 1] << 5 | c[..., 2]).ravel()
-        out = np.zeros(flat.shape, np.uint8)
-        for v in np.unique(flat):
-            if v not in lut:
-                rgb = np.float32([(v >> 10) * 8 + 4, (v >> 5 & 31) * 8 + 4, (v & 31) * 8 + 4])
-                lut[v] = int(np.argmin((((pal8 - rgb) * np.float32([0.55, 0.77, 0.32])) ** 2).sum(1))) + 1
-            out[flat == v] = lut[v]
-        out = out.reshape(im.shape[:2]); out[im[..., 3] == 0] = 0
-        return out
-    indexed = [indices(im) for im in images]
-    error = max(float(np.abs(pal8[ix[ix > 0] - 1] - im[ix > 0][:, :3]).max()) for ix, im in zip(indexed, images) if (ix > 0).any())
+    # Palettes: farthest-point seeding + k-means over 15-bit colours; no dithering.
+    groups = [group(k) for k in keys]
+    palettes, indexed, error_sum, error_n, error_max = [], [None] * len(keys), 0.0, 0, 0.0
+    for bank in range(3):
+        members = [i for i, g in enumerate(groups) if g[1] == bank]
+        if not members:
+            palettes.append(np.zeros((0, 3), np.uint16)); continue
+        opaque = np.concatenate([images[i][images[i][..., 3] > 0][:, :3] for i in members])
+        colours, counts = np.unique(to555(opaque) << 3 | 4, axis=0, return_counts=True)
+        if len(colours) > 255:
+            palette = np.unique(to555(quantise(colours.astype(np.float32), counts, 255).astype(np.uint8)), axis=0)
+        else:
+            palette = np.unique(to555(colours.astype(np.uint8)), axis=0)
+        palettes.append(palette)
+        pal8 = palette.astype(np.float32) * 8 + 4
+        lut = {}
+        for i in members:
+            im = images[i]
+            c = to555(im[..., :3]); flat = (c[..., 0].astype(np.int32) << 10 | c[..., 1] << 5 | c[..., 2]).ravel()
+            out = np.zeros(flat.shape, np.uint8)
+            for v in np.unique(flat):
+                if v not in lut:
+                    rgb = np.float32([(v >> 10) * 8 + 4, (v >> 5 & 31) * 8 + 4, (v & 31) * 8 + 4])
+                    lut[v] = int(np.argmin((((pal8 - rgb) * WEIGHT) ** 2).sum(1))) + 1
+                out[flat == v] = lut[v]
+            out = out.reshape(im.shape[:2]); out[im[..., 3] == 0] = 0
+            indexed[i] = out
+            if (out > 0).any():
+                e = np.abs(pal8[out[out > 0] - 1] - im[out > 0][:, :3])
+                error_sum += float(e.sum()); error_n += e.size; error_max = max(error_max, float(e.max()))
 
-    places, pages = pack([(im.shape[1], im.shape[0]) for im in images], a.page)
-    sheets = np.zeros((pages, a.page, a.page), np.uint8)
-    for ix, (p, x0, y0) in zip(indexed, places):
-        sheets[p, y0 + 1: y0 + 1 + ix.shape[0], x0 + 1: x0 + 1 + ix.shape[1]] = ix
-    words = [0] + [0x8000 | int(r) << 10 | int(g) << 5 | int(b) for r, g, b in palette]
-    out = bytearray(b'SORART03' + struct.pack('<III', pages, len(keys), len(words)))
-    out += struct.pack('<%dH' % len(words), *words)
-    for p in range(pages):
-        packed = zlib.compress(sheets[p].tobytes(), 9)
-        out += struct.pack('<HHI', a.page, a.page, len(packed)) + packed
+    # Pages per group; a group's last page is as short as a power of two allows.
+    pages, places = [], [None] * len(keys)          # pages: (height, rounds, bank, indices)
+    # Most important first (the Dreamcast loads in this order until memory runs
+    # out): players, then groups by how long their frames were on screen.
+    weight = {}
+    for k, g in zip(keys, groups):
+        weight[g] = weight.get(g, 0) + frames[k][0]['seen']
+    for g in sorted(set(groups), key=lambda g: (g[2] == 0, -weight[g], g)):
+        members = [i for i, x in enumerate(groups) if x == g]
+        placed, count = pack([(indexed[i].shape[1], indexed[i].shape[0]) for i in members], a.page)
+        sheets = np.zeros((count, a.page, a.page), np.uint8)
+        for i, (p, x0, y0) in zip(members, placed):
+            ix = indexed[i]
+            sheets[p, y0 + 1: y0 + 1 + ix.shape[0], x0 + 1: x0 + 1 + ix.shape[1]] = ix
+            places[i] = (len(pages) + p, x0, y0)
+        for p in range(count):
+            rows = np.nonzero(sheets[p].any(1))[0]
+            used = int(rows.max()) + 2 if len(rows) else 2
+            height = 64
+            while height < used: height *= 2
+            pages.append((height, g[0], g[1], sheets[p, :height], g[2]))
+
+    out = bytearray(b'SORART04' + struct.pack('<III', len(pages), len(keys), 3))
+    for palette in palettes:
+        words = [0] + [0x8000 | int(r) << 10 | int(g) << 5 | int(b) for r, g, b in palette]
+        out += struct.pack('<256H', *(words + [0] * (256 - len(words))))
+    for height, mask, bank, sheet, character in pages:
+        packed = zlib.compress(sheet.tobytes(), 9)
+        out += struct.pack('<HHHBBI', a.page, height, mask, bank, character, len(packed)) + packed
     for key, im, (ax, ay), (p, x0, y0) in zip(keys, images, anchors, places):
-        out += struct.pack('<IHHHHHHhh', key[0], key[1], p, x0 + 1, y0 + 1, im.shape[1], im.shape[0], ax, ay)
+        out += struct.pack('<IHHHHHHHhh', key[0], int(key[1], 16), frames[key][0]['mask'], p, x0 + 1, y0 + 1, im.shape[1], im.shape[0], ax, ay)
     a.out.parent.mkdir(parents=True, exist_ok=True); a.out.write_bytes(out)
 
     if a.sheet:
-        # Before (nearest 2x) above after, final palette applied, 4x for viewing.
+        # Before (pixel-doubled) above after (final palette), per character / object type.
         a.sheet.mkdir(parents=True, exist_ok=True)
-        groups = {}
+        sheets = {}
         for i, key in enumerate(keys):
-            groups.setdefault(frames[key][0].get('character', 'others'), []).append(i)
-        for name, members in groups.items():
+            f = frames[key][0]
+            sheets.setdefault(f.get('character') or 'type-%02x' % min(f['types']), []).append(i)
+        for name, members in sheets.items():
             cells = []
-            for i in members[:48]:
+            for i in members[:96]:
                 before = np.repeat(np.repeat(sources[i], 2, 0), 2, 1)
-                after = np.zeros_like(images[i]); m = indexed[i] > 0
+                pal8 = palettes[groups[i][1]].astype(np.float32) * 8 + 4
+                after = np.zeros(indexed[i].shape + (4,), np.uint8); m = indexed[i] > 0
                 after[m, :3] = pal8[indexed[i][m] - 1].astype(np.uint8); after[m, 3] = 255
-                # The source is uncropped; pad both to a common width.
-                ww2 = max(before.shape[1], after.shape[1])
-                before = np.pad(before, ((0, 0), (0, ww2 - before.shape[1]), (0, 0)))
-                after = np.pad(after, ((0, 0), (0, ww2 - after.shape[1]), (0, 0)))
-                cell = np.concatenate([before, after], 0)
-                cells.append(cell)
+                width = max(before.shape[1], after.shape[1])
+                before = np.pad(before, ((0, 0), (0, width - before.shape[1]), (0, 0)))
+                after = np.pad(after, ((0, 0), (0, width - after.shape[1]), (0, 0)))
+                cells.append(np.concatenate([before, after], 0))
             hh = max(c.shape[0] for c in cells); ww = max(c.shape[1] for c in cells); cols = 12
             sheet = np.full(((len(cells) + cols - 1) // cols * hh, cols * ww, 4), (40, 44, 52, 255), np.uint8)
             for n, c in enumerate(cells):
@@ -254,9 +343,13 @@ def main():
                 region[c[..., 3] > 0] = c[c[..., 3] > 0]
             Image.fromarray(sheet).convert('RGB').save(a.sheet / (name + '.png'))
 
-    texels = sum(im.shape[0] * im.shape[1] for im in images)
-    report = dict(frames=len(keys), overridden=overridden, pages=pages, colours=len(palette), packed_bytes=len(out),
-                  powervr_bytes=pages * a.page * a.page, texels=texels, max_channel_error=error)
+    # One player: a third of the player pages; two different characters: two thirds.
+    players = sum(a.page * p[0] for p in pages if p[4])
+    per_round = {r + 1: sum(a.page * p[0] for p in pages if p[1] >> r & 1 and not p[4]) + players // 3 for r in range(8)}
+    report = dict(style=a.style, frames=len(keys), colour_sets=len(shown) - len(dropped), transient_colour_sets_dropped=len(dropped), player_frames=sum(1 for g in groups if g[1] == 0), overridden=overridden,
+                  pages=len(pages), packed_bytes=len(out), colours=[len(p) for p in palettes],
+                  powervr_bytes_per_round_one_player=per_round, powervr_bytes_per_character=players // 3,
+                  mean_channel_error=round(error_sum / max(1, error_n), 2), max_channel_error=error_max)
     a.out.with_suffix('.json').write_text(json.dumps(report, indent=1) + '\n')
     print(json.dumps(report))
 

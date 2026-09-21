@@ -18,7 +18,7 @@ source "${KOS_ENV:-$HOME/.local/share/dreamcast/kos/environ.sh}"
 set -u
 "$KOS_BASE/utils/bin2o/bin2o" "$rom" sor_embedded_rom "$root/build/native/embedded-rom.o"
 # Replacement art for enhanced graphics, when a package has been built
-# (tools/make-placeholder-art.py). There is no disc in this flow, so it is
+# (tools/make-art-set.sh). There is no disc in this flow, so it is
 # embedded in the executable.
 art=${SOR_ART:-"$root/build/art/SORART.PAK"}
 if [ -f "$art" ]; then

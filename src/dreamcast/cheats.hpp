@@ -26,6 +26,12 @@ public:
     void apply(SystemMemory &) const;
     bool protectsHealth(uint32_t object, SystemMemory &) const;
     void setEnhancedGraphics(bool on) { settings_.enhancedGraphics = on; }
+    // Scripted host runs (SOR_CHEATS in the headless build): start at a round
+    // with the infinite options on, to visit content no replay reaches.
+    void setScripted(unsigned round) {
+        settings_.round = round; overrideRound_ = true;
+        settings_.infiniteLives = settings_.infiniteHealth = settings_.infiniteSpecials = true;
+    }
 private:
     Settings settings_{};
     bool overrideRound_ = false, overrideLives_ = false, visible_ = false;

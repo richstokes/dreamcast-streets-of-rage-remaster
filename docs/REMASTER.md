@@ -1,135 +1,179 @@
-# Graphical remaster: enhanced rendering path
+# Graphical remaster: enhanced graphics
 
-Status (2026-09-21): **original and enhanced graphics are selectable on the same
-simulation, and the enhanced mode draws every player frame and the Round 1
-enemies, items and effects with generated 2x art.** The art is produced by an
-offline pipeline from the original frames; it is not hand-redrawn. Hand-made
-frames can replace any generated frame (see below).
+Status (2026-09-21): original and enhanced graphics are selectable on the same
+simulation. Enhanced mode draws the three players (every animation frame) and
+the enemies, bosses, items and effects of all eight rounds with generated 2x
+art. The art comes from an offline pipeline that redraws the original frames;
+**it is not hand-drawn**, and any frame can be overridden with hand-made art.
+Backgrounds, the HUD and text are unchanged.
 
-## The art pipeline
+Read this before touching `src/render/art_catalog.*`, `sprite_probe.*`,
+`VdpScene::enhancedSprites`, `src/headless/extract_frames.cpp`, the loader in
+`src/dreamcast/renderer_kos.cpp` or the art tools. Everything derived from the
+ROM (frames, sheets, packages) stays under `build/`, out of git.
 
-- `tools/extract-player-frames.py`: every animation frame of Adam, Axel and
-  Blaze (67, 65 and 73) straight from the ROM: it walks the animation sets
-  (`$53EFE`, `$49AE0`, `$5E90A`), replays each frame's two player-art DMA
-  records and composes the pieces. The 167 frames that replays also drew match
-  them pixel for pixel, except 4 the replays saw partly culled.
-- `SOR_EXTRACT_FRAMES` (host build): whatever a replay draws; the source for
-  enemies, items and effects.
-- `tools/make-enhanced-art.py`: per frame, Scale2x twice then averaged back to
-  2x (anti-aliased interior edges, rounded silhouette, 1-bit alpha), then an
-  edge-preserving filter that turns the 16-colour originals' stepped ramps and
-  dithering into continuous shading while outlines stay crisp; one 255-colour
-  palette for the set (farthest-point seeding + k-means, no dithering); frames
-  cropped, packed into 512x512 pages and zlib-compressed (`SORART03`).
-  `--sheet` writes before/after sheets, `--frames` every frame as a PNG, and
-  `--override DIR` takes hand-made `<MAPPING>_p<PALETTE>.png` frames (RGBA,
-  twice the extracted frame's size) in place of generated ones.
-- `tools/make-art-set.sh` runs all of it (`ART_STYLE=placeholder` builds the
-  outlined alignment-check set instead; `ART_OVERRIDE=dir`).
+## Quick start
 
-## How objects become replacement art
+```sh
+tools/build-headless.sh            # host build: extraction and previews
+tools/build-profile-core.sh        # reference core, for the bot runs
+build/tools-venv/bin/python3 -m pip install numpy pillow
+tools/make-art-set.sh              # everything below; about 2 minutes -> build/art/SORART.PAK
+./build-and-run.sh                 # test ELF with the package embedded, enhanced on, Flycast muted
+```
+
+Review the result in `build/art/sheets/<character or type-XX>.png` (original
+pixel-doubled above, generated below), `build/art/frames/*.png` (every frame)
+and `build/art/SORART.json` (frame counts, palette error, PowerVR bytes per
+round). L + R in game opens the options menu; GRAPHICS switches modes.
+
+Host preview of a replay, original left and enhanced right, with a text file
+per frame listing the art drawn:
+
+```sh
+SOR_ART=$PWD/build/art/SORART.PAK SOR_ENHANCED_CAPTURE=$PWD/build/cap:1500:2700:100 \
+  build/headless/sor-headless "$SOR_ROM" REPLAY.bin /dev/null
+```
+
+## How an object becomes replacement art at run time
 
 The Genesis draws everything as hardware sprite pieces. SoR builds its sprite
 table each update from object records: `emit_object_sprite_mapping` (`$AF46`)
-resolves an object's animation frame to a mapping record in ROM, computes the
+resolves an object's animation frame to a frame record in ROM, computes the
 object's screen anchor (its feet) and emits one table record per visible piece.
 
-- **Sprite probe** (`src/render/sprite_probe.*`, hooks inserted by
-  `tools/sprite_probe_patches.py`): while the game builds its table, the port
-  records, per object, the mapping address, mirroring, anchor, tile base and
-  the range of table records it emitted. Recording changes no game state or
-  emulated time: both power-on replays, the state-synced windows re-run and all
-  GPU scene checks are unchanged.
+- **Sprite probe** (`src/render/sprite_probe.*`, hooks inserted into the
+  translated code by `tools/sprite_probe_patches.py`): while the game builds
+  its table the port records, per object, the frame record's address
+  ("mapping"), mirroring, anchor, tile base (`+$0E`), animation set (`+$04`)
+  and the range of table records it emitted. Recording changes no game state
+  or emulated time.
 - **Matching the displayed table**: the RAM table reaches VRAM by DMA at the
   next graphics VBlank, so the probe keeps two builds and uses the one whose
-  records are byte-for-byte those in VRAM. If neither matches, the frame falls
-  back to the original pieces.
-- **Frame key**: mapping address and palette line. A mirrored mapping uses the
-  same art flipped about the anchor; enemy palette swaps are separate keys.
-- **Enhanced scene** (`VdpScene::enhanced`): every sprite piece becomes 8x8
-  cells drawn as their own quads, and an object with art becomes one quad in its
-  first record's slot. Depth is the piece's priority layer (3 or 6, as in the
-  original renderer) plus its link order, so replacement art keeps the original
-  front-to-back order among sprites and priority against the planes. The
-  software sprite layers are not built in enhanced mode. They also produce the
-  VDP's sprite overflow and collision status bits, but the game never acts on
-  them: the VBlank handler reads the status register only to discard it, and
-  the Round 1, two-player and action replays with both bits forced clear keep
-  every frame's RAM equal (2026-09-21). VDP per-line sprite limits do not apply
-  to enhanced drawing (no sprite dropout).
-- **Art catalog** (`src/render/art_catalog.*`, package format in the header):
-  pages of texels plus frames `{mapping, palette, page, rect, anchor}`, art
-  pixels at 2x. `SORART02` stores one palette of up to 256 colours and 8-bit
-  pages (`SORART01`: ARGB1555). On the Dreamcast the pages go to PowerVR memory
-  at start as 8-bit paletted textures in palette bank 1 (the 4-bit tile
-  palettes use entries 0-63 of bank 0).
+  records are byte-for-byte those in VRAM; if neither matches, the frame is
+  drawn from the original pieces.
+- **Art key** (`art_catalog.hpp`): the mapping address plus `colour_key()` of
+  the sprite's CRAM line *over the entries the object's art uses* (each frame
+  carries that mask). Why not just the palette line: enemy families share
+  frames and a line while the game loads different colours (green, purple and
+  yellow Signals), and replacement art has its colours baked in. Why not the
+  whole line: lines also hold colours the object never uses, which stages
+  cycle; keyed on those, one enemy looked like 40 different ones. Consequence:
+  during fades and hit flashes the colours match no art and the object is
+  drawn from its original pieces in the game's colours, which is the correct
+  picture. `tools/art_key.py` computes the same key.
+- **Enhanced scene** (`VdpScene::enhancedSprites`): an object with art becomes
+  one quad in its first record's slot; every other sprite piece becomes 8x8
+  cells drawn as their own quads. Depth is the piece's priority layer (3 or 6,
+  as in the original renderer) plus its link order, so art keeps the original
+  order among sprites and against the planes. Mirrored frames flip the art
+  about the anchor. The software sprite layers are not built in enhanced mode:
+  their other product, the VDP's sprite overflow/collision status bits, is
+  never used by the game (the VBlank handler discards the status read, and
+  replays with both bits forced clear keep every frame's RAM equal). Per-line
+  sprite limits therefore do not apply (no dropout).
+- **What is loaded** (`load_selection` in `renderer_kos.cpp`): all the art does
+  not fit in PowerVR memory (about 4.1 MB free, 4.6 MB while enhanced mode
+  frees the two software sprite-layer textures). Each page names its rounds
+  and, for player art, its character. Every frame the runtime reports the
+  round (`$FFFF02`) and the characters in play (players' animation sets) via
+  `platform_game_state`; when they or the graphics mode change, pages are
+  freed and loaded (0.5-1 s, at round changes and when a player joins). Pages
+  are stored most important first; if memory runs out the rest are marked
+  unloaded and their frames fall back to the original pieces. Main RAM is the
+  other constraint (the game leaves 1-2 MB of heap): the package stays
+  zlib-compressed in RAM (1.3 MB) and one page is inflated at a time.
 
-## Using it
+Package format `SORART04`: see the header comment of `art_catalog.hpp` (three
+255-colour palettes in PowerVR palette banks 1-3; bank 0 holds the tile
+palettes; 8-bit pages 512 wide, 64-512 high).
 
-```sh
-# 1-2. Placeholder set for all three characters (derived from the ROM: stays
-#      in build/): scripted and bot runs per character, frame extraction
-#      (SOR_EXTRACT_FRAMES), packing and a budget report.
-tools/make-art-set.sh
-# 3. Side-by-side previews: original at 2x (left), enhanced (right), plus a list of art drawn.
-SOR_ART=$PWD/build/art/SORART.PAK SOR_ENHANCED_CAPTURE=$PWD/build/cap:1500:2700:100 \
-  build/headless/sor-headless "$SOR_ROM" REPLAY.bin build/r.ram
-# 4. Dreamcast: package.sh puts build/art/SORART.PAK (or $SOR_ART) on the disc;
-#    SOR_ENHANCED=1 starts in enhanced graphics.
-FLYCAST_VSYNC=0 SOR_ENHANCED=1 tools/bench-flycast.sh enh-actions
-# 5. Development ELF: build-and-run.sh embeds the same package in the
-#    executable (there is no disc) and starts in enhanced graphics
-#    (SOR_ENHANCED=0 to start in the original). Flycast starts muted
-#    (FLYCAST_MUTE=0 for sound).
-./build-and-run.sh
-```
+## The art pipeline (`tools/make-art-set.sh`)
 
-In game, L + R opens the options menu; GRAPHICS switches ORIGINAL / ENHANCED at
-any time. Without an art package, enhanced mode draws the original sprites as
-cells (identical pictures, no line limits).
+1. **Player runs** (reference core + `bot-play.py`, then replayed natively):
+   Adam, Axel (RIGHT on the select screen) and Blaze (LEFT) through the
+   scripted Round 1, action and combat scenarios and two bot runs. They supply
+   the players' CRAM line and check step 3.
+2. **Round sweeps** (native headless, `SOR_CHEATS=ROUND`: start at that round
+   with infinite health, lives and specials): an open-loop script walks,
+   punches in both lanes and calls the police every sixth cycle; Round 8 runs
+   right to left, so its script is mirrored. `SOR_EXTRACT_FRAMES=dir` saves
+   every object frame drawn, and, because everything but the players keeps its
+   art resident in VRAM, **renders the whole animation set** of each object
+   that has been on screen for 45 frames. `index.json` records for each frame
+   the mask, CRAM line, rounds seen, object types, and how the set rendering
+   compared with direct captures (`check`: confirmed / contradicted /
+   set_only / direct / direct_culled). Contradictions are a handful per run
+   (effects whose tiles are rewritten); confirmed frames are in the hundreds.
+3. **`tools/extract-player-frames.py`**: player art is not resident (each frame
+   record names two ROM-to-VRAM DMA records), so all 205 player frames come
+   straight from the ROM: animation sets `$53EFE` Adam, `$49AE0` Axel, `$5E90A`
+   Blaze; frame record = piece count, 2+2 box ids, upper and lower art ids
+   (tables `$1A160` -> VRAM `$B000`, `$1A53E` -> `$B400`), 5-byte pieces. Every
+   frame the replays also drew matches pixel for pixel.
+4. **`tools/make-enhanced-art.py`**:
+   - drops looks that are fades or flashes (every colour darker or lighter
+     than a longer-seen look of the same frame) or were barely seen;
+   - redraws each frame: Scale2x twice then averaged back to 2x (anti-aliased
+     interior edges, rounded silhouette, 1-bit alpha for PowerVR punch-through),
+     then an edge-preserving (bilateral) filter that turns the 16-colour
+     originals' stepped ramps and dithering into continuous shading while
+     outlines stay crisp;
+   - quantises three palettes (players; objects seen in every round; the rest)
+     with farthest-point seeding and k-means, no dithering;
+   - crops, packs pages per (rounds, palette, character) group, orders them by
+     importance and writes `SORART04`.
+   `--style placeholder` (or `ART_STYLE=placeholder`) makes pixel-doubled
+   frames with a cyan outline and a magenta anchor cross instead, to check
+   alignment and coverage. `--override DIR` (or `ART_OVERRIDE=dir`) takes
+   hand-made `<MAPPING>_c<KEY>.png` frames (RGBA, twice the extracted frame's
+   size, same anchor; names as in `build/art/frames/`).
 
-## Measurements (Flycast, placeholder set, 2026-09-19)
+## Current set (2026-09-21)
 
-| | Original | Enhanced |
-| --- | --- | --- |
-| Action replay: flips / VBlanks | 1,611 / 1,611 | 1,611 / 1,611 |
-| Two-player: flips / VBlanks | 893 / 893 | 893 / 893 |
-| Audio underruns / ring minimum (two-player) | 0 / 1,056 | 0 / 1,165 |
-| GPU upload / commands per frame (two-player mean) | 467 / 198 µs | 370 / 235 µs |
+940 frames in 67 looks (205 player frames; 379 transient looks dropped), 59
+pages, 1,258,670 package bytes. Mean palette error 3.7 of 255 per channel.
+PowerVR bytes with one player: 2.6-4.0 MB depending on the round (one
+character is 0.75 MB); two different characters in rounds 5 and 6 exceed the
+budget by a few hundred KB, and the least-seen pages fall back.
 
-Placeholder set: 149 frames from the Round 1 replays (Adam 47, enemy families
-7-16 each, items and effects), 1.33 M texels:
+Flycast, two-player bot replay (8,402 frames), enhanced: 7,143 VBlanks / 7,133
+flips, as before the enemy art; audio checksums unchanged. The disc build
+loaded Round 1 plus two characters into 4,456,448 bytes with 165,704 free.
 
-| Format | Bytes | Notes |
-| --- | --- | --- |
-| ARGB1555, 6 pages of 512x512 | 3,145,728 | what the prototype loads; leaves 952 KB of PowerVR memory |
-| ARGB1555, tight | 2,651,840 | |
-| 8-bit palette | 1,325,920 | 256 colours per texture, 3 banks free beside the tile palettes |
-| 4-bit palette | 662,960 | 16 colours per texture |
-| VQ (estimate) | 343,768 | 2x2 blocks, 2 KB codebook per texture |
+Coverage gaps: Mr. X and whatever else the Round 8 sweep does not reach
+(it gets as far as the returning bosses); weapons in a player's hands are
+separate objects and are covered; the character-select portraits, the HUD and
+cutscene objects are left as they are (HUD types are excluded by
+`WORLD_TYPES`).
 
-Loading the 3 MB package from the emulated CD takes 25.7 s at boot (about
-120 KB/s). A real art set therefore needs compression (VQ or palettes) and
-per-stage loading, as the brief requires. Adam's 47 frames seen in Round 1 are
-about half a full player set: a full character at 2x is roughly 2 MB in
-ARGB1555, 1 MB with an 8-bit palette, 0.25 MB with VQ.
+## Known limits
 
-Current set (2026-09-21): 323 frames (205 player frames, 118 others), 255
-colours, 12 pages of 512x512: 3,145,728 bytes of PowerVR memory (952,456 left
-free), but only 444,460 bytes on disc or embedded in the test ELF. The
-Dreamcast inflates and uploads one page at a time (1.1 s at boot), because main
-RAM cannot hold the set: an uncompressed 3.4 MB package left the game too
-little heap (`std::bad_alloc` at start), and a 5.2 MB one overran 16 MB.
-
-## Known limits of the prototype
-
-- Palette effects (screen fades, hit flashes, the police special's flash) do
-  not reach replacement art, which has its own colours. The PowerVR can darken
-  or tint a quad through its vertex colour; that mapping is still to do.
+- Generated art cannot add detail the 16-colour originals never had; thin
+  details (hair strands, faces) soften. Hand-made overrides are the way to
+  real redrawn art.
+- Art pops in after a fade or flash ends, because those frames are drawn from
+  the original pieces (see the art key). Tinting art through the PowerVR
+  vertex colour would make fades seamless; not done.
 - Pieces the game culls at the screen edge are shown by replacement art (the
   whole frame is drawn and clipped by the screen).
-- Placeholder frames come from what the replays showed; frames never drawn in
-  a replay have no placeholder and fall back to the original pieces.
-- Everything is loaded at boot, uncompressed (8-bit palette indices).
-- Output is 640x480 from 320x224, so art is scaled 1:1 horizontally and by
-  480/448 vertically, like the planes.
+- A few set renderings carry stray pixels where an effect's tiles had been
+  rewritten when the set was sampled.
+- Round changes and a second player joining cost a 0.5-1 s load.
+- Output is 640x480 from 320x224: art is 1:1 horizontally and scaled 480/448
+  vertically, like the planes. A two-texel gutter around packed frames stops
+  the PowerVR sampling neighbours.
+
+## History of decisions (why things are the way they are)
+
+- `SORART01` ARGB1555 pages (3 MB for 149 frames, 25 s to read from CD) ->
+  `02` 8-bit palette -> `03` zlib pages, because a 3.4 MB package embedded in
+  the test ELF left the game no heap (`std::bad_alloc`) and 5.2 MB overran
+  16 MB (Flycast: "Invalid load address", boot loop) -> `04` colour keys with
+  masks, rounds, characters.
+- The Dreamcast B button used to toggle a software comparison renderer (85 ms
+  a frame, original graphics) in every build; it was pressed by accident and
+  reported as "art resets and the frame rate collapses". It now needs
+  `SOR_SOFTWARE_TOGGLE=1`. For any report of slowness read the run's log
+  first (`build/logs/flycast.log`: `Renderer:`, `SLOW`, `HEARTBEAT`,
+  `Enhanced art:` lines; `tools/flycast-speed.py` follows it live).

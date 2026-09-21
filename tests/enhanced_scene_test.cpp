@@ -1,5 +1,6 @@
 // Enhanced rendering: an object recorded by the sprite probe and present in the
-// art catalog is drawn once with its art in its SAT slot, its hardware pieces
+// art catalog (under its line's colours, on a page of the current round) is
+// drawn once with its art in its SAT slot, its hardware pieces
 // are left out, other sprites stay as cells, and a probe build that no longer
 // matches VRAM's sprite table falls back to the original pieces.
 #include "vdp_scene.hpp"
@@ -35,13 +36,34 @@ int main(){
     probe.beginBuild();
     probe.beginObject(0xB800,1,0x054206,false,128+48,128+66,0,0xFFDA00);
     probe.endObject(0xFFDA08,ram.data());
-    // One art frame for mapping $054206 palette 0: 4x4 art pixels, anchor 2,4.
-    std::vector<uint8_t> pak(std::begin("SORART01"),std::end("SORART01")-1);
-    put32(pak,1);put32(pak,1);put16(pak,8);put16(pak,8);
-    for(int i=0;i<64;i++)put16(pak,i<8*4&&i%8<4?0xFC00:0);  // top-left 4x4 red
-    put32(pak,0x054206);put16(pak,0);put16(pak,0);put16(pak,0);put16(pak,0);put16(pak,4);put16(pak,4);put16(pak,2);put16(pak,4);
+    // One art frame for mapping $054206 in line 0's colours: 4x4 art pixels,
+    // anchor 2,4, on a page of rounds 1 and 3 for character 2, palette 1.
+    // The art uses colours 1 and 2 of its line.
+    const uint16_t mask=0b110,key=sor::colour_key(state.cram_,mask);
+    const auto package=[&](uint16_t colours,uint16_t rounds,uint8_t character){
+        std::vector<uint8_t> page(64);for(int i=0;i<64;i++)page[i]=i<8*4&&i%8<4?1:0;   // top-left 4x4
+        std::vector<uint8_t> z(compressBound(64));uLongf zn=z.size();assert(compress(z.data(),&zn,page.data(),64)==Z_OK);
+        std::vector<uint8_t> pak(std::begin("SORART04"),std::end("SORART04")-1);
+        put32(pak,1);put32(pak,1);put32(pak,2);
+        for(int palette=0;palette<2;palette++)for(int i=0;i<256;i++)put16(pak,palette==1&&i==1?0xFC00:0);   // red
+        put16(pak,8);put16(pak,8);put16(pak,rounds);pak.push_back(1);pak.push_back(character);put32(pak,uint32_t(zn));pak.insert(pak.end(),z.begin(),z.begin()+zn);
+        put32(pak,0x054206);put16(pak,colours);put16(pak,mask);put16(pak,0);put16(pak,0);put16(pak,0);put16(pak,4);put16(pak,4);put16(pak,2);put16(pak,4);
+        return pak;
+    };
+    const auto pak=package(key,0b101,2);
     sor::ArtCatalog art;assert(art.load(pak.data(),pak.size()));
-    assert(art.find(0x054206,0)&&!art.find(0x054206,1)&&!art.find(0x054207,0));
+    assert(art.find(0x054206,state.cram_)&&!art.find(0x054207,state.cram_));
+    // Only the current round's pages are found.
+    // Only pages of the current round and of a character in play are found;
+    // nor is a page the loader could not fit.
+    art.select(2,1<<2);assert(!art.find(0x054206,state.cram_));
+    art.select(3,1<<1);assert(!art.find(0x054206,state.cram_));
+    art.select(3,1<<2);assert(art.find(0x054206,state.cram_));
+    art.setUnloaded(0);assert(!art.find(0x054206,state.cram_));
+    art.select(0,0);assert(art.find(0x054206,state.cram_));
+    // Pages can be left packed and inflated on request (the Dreamcast's loader).
+    sor::ArtCatalog lazy;assert(lazy.load(pak.data(),pak.size(),false)&&!lazy.pages()[0].indices);
+    std::vector<uint8_t> inflated(64);assert(lazy.inflate(lazy.pages()[0],inflated.data())&&inflated[0]==1&&inflated[4]==0);
 
     auto scene=std::make_unique<sor::VdpScene>();
     VDPTile tile(state);Framebuffer fb;VDPRenderer renderer(state,tile,fb);
@@ -59,38 +81,20 @@ int main(){
     assert(out[(66*2-4)*640+48*2+2]!=0xFC00);              // art is 4 pixels wide
     assert(out[(60*2)*640+100*2]==scene->colors[1]);       // unowned sprite cell
 
-    // The same frame as SORART02 (palette + 8-bit page) draws the same pixels.
-    std::vector<uint8_t> pak2(std::begin("SORART02"),std::end("SORART02")-1);
-    put32(pak2,1);put32(pak2,1);put32(pak2,2);put16(pak2,0);put16(pak2,0xFC00);
-    put16(pak2,8);put16(pak2,8);
-    for(int i=0;i<64;i++)pak2.push_back(i<8*4&&i%8<4?1:0);
-    put32(pak2,0x054206);put16(pak2,0);put16(pak2,0);put16(pak2,0);put16(pak2,0);put16(pak2,4);put16(pak2,4);put16(pak2,2);put16(pak2,4);
-    sor::ArtCatalog art2;assert(art2.load(pak2.data(),pak2.size()));
-    assert(art2.palette().size()==256&&art2.pages()[0].indices&&!art2.pages()[0].pixels);
-    scene->art=&art2;assert(scene->build(state,renderer)&&scene->artCount==1);
-    std::vector<uint16_t> out2(640*448);
-    sor::raster_enhanced(*scene,state,out2.data(),640);
-    assert(out2==out);
-    // SORART03: the same page zlib-compressed, inflated by the catalog or on request.
-    std::vector<uint8_t> page(64);for(int i=0;i<64;i++)page[i]=i<8*4&&i%8<4?1:0;
-    std::vector<uint8_t> z(compressBound(64));uLongf zn=z.size();assert(compress(z.data(),&zn,page.data(),64)==Z_OK);
-    std::vector<uint8_t> pak3(std::begin("SORART03"),std::end("SORART03")-1);
-    put32(pak3,1);put32(pak3,1);put32(pak3,2);put16(pak3,0);put16(pak3,0xFC00);
-    put16(pak3,8);put16(pak3,8);put32(pak3,uint32_t(zn));pak3.insert(pak3.end(),z.begin(),z.begin()+zn);
-    put32(pak3,0x054206);put16(pak3,0);put16(pak3,0);put16(pak3,0);put16(pak3,0);put16(pak3,4);put16(pak3,4);put16(pak3,2);put16(pak3,4);
-    sor::ArtCatalog art3;assert(art3.load(pak3.data(),pak3.size()));
-    scene->art=&art3;assert(scene->build(state,renderer)&&scene->artCount==1);
-    std::vector<uint16_t> out3(640*448);
-    sor::raster_enhanced(*scene,state,out3.data(),640);
-    assert(out3==out);
-    sor::ArtCatalog lazy;assert(lazy.load(pak3.data(),pak3.size(),false)&&!lazy.pages()[0].indices);
-    std::vector<uint8_t> inflated(64);assert(lazy.inflate(lazy.pages()[0],inflated.data())&&inflated==page);
-    scene->art=&art;
+    // Other colours in the line (a flash, a fade, a recoloured enemy): the
+    // art is not for them, and the object's pieces are drawn.
+    state.cram_[2]^=0x0E0;
+    assert(scene->build(state,renderer)&&scene->artCount==0&&scene->spriteTileCount==5);
+    state.cram_[2]^=0x0E0;
+    assert(scene->build(state,renderer)&&scene->artCount==1);
+    // A colour of the line the art does not use (stage colour cycling) changes nothing.
+    state.cram_[9]^=0x0E0;
+    assert(scene->build(state,renderer)&&scene->artCount==1);
 
     // VRAM's table no longer matches the build: the object's pieces come back.
     state.vram_[state.satBase()+7]^=1;
     assert(!probe.displayed(state));
     assert(scene->build(state,renderer));
     assert(scene->artCount==0&&scene->spriteTileCount==5);
-    puts("Enhanced scene: art replaces a probed object in its SAT slot (ARGB, indexed and compressed packages); other sprites stay cells; stale builds fall back");
+    puts("Enhanced scene: art replaces a probed object in its SAT slot (keyed by colours, per round); other sprites stay cells; stale builds fall back");
 }

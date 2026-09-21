@@ -119,6 +119,15 @@ void MegaDriveEnvironment::writeBus(void *ctx,uint32_t a,unsigned w,uint32_t v){
 }
 void MegaDriveEnvironment::present(){
     const auto start=platform_time_us();
+    {
+        unsigned characters=0;
+        for(uint32_t player:{0xffb800u,0xffb880u})if(mem_.readByte(player)==1)switch(mem_.readLong(player+4)&0xffffff){
+            case 0x53EFE:characters|=2;break;   // animation sets: Adam,
+            case 0x49AE0:characters|=4;break;   // Axel,
+            case 0x5E90A:characters|=8;break;   // Blaze
+        }
+        platform_game_state(unsigned(mem_.readWord(0xffff02)&7)+1,characters);
+    }
     const sor::TitleCaption title(state_,mem_.readWord(0xffff00));
     if(platform_render_vdp(state_,renderer_,title)){
         if(frames_%600==0){auto stats=platform_memory_stats();sor_log("PVR frame=%lu render_us=%llu heap_used=%lu vram_free=%lu\n",(unsigned long)frames_,(unsigned long long)(platform_time_us()-start),(unsigned long)stats.heap_used,(unsigned long)stats.vram_free);}
@@ -135,7 +144,7 @@ void MegaDriveEnvironment::present(){
 void MegaDriveEnvironment::spriteProbeBuild(){sor::sprite_probe().beginBuild();}
 void MegaDriveEnvironment::spriteProbeObject(uint32_t object,uint32_t mapping,bool flip,uint16_t x,uint16_t y,uint32_t sat){
     sor::sprite_probe().beginObject(uint16_t(object),uint8_t(mem_.readByte(object)),mapping,flip,int16_t(x),int16_t(y),
-                                    uint16_t(mem_.readWord(object+0x0E)),sat);
+                                    uint16_t(mem_.readWord(object+0x0E)),sat,mem_.readLong(object+4));
 }
 void MegaDriveEnvironment::spriteProbeEnd(uint32_t sat){sor::sprite_probe().endObject(sat,mem_.state.ram);}
 void MegaDriveEnvironment::syncAudio(){

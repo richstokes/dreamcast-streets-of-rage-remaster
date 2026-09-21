@@ -15,3 +15,13 @@
   Avoid unnecessary window activation, but allow it when needed for verification.
 - Keep supplied ROMs, extracted game assets, generated game code, and disc images
   out of git. Commit and push reviewable source changes to `main` as requested.
+
+# Where things are explained
+
+- Enhanced graphics (replacement art, its keys, per-round loading, the art
+  pipeline and its memory budgets): `docs/REMASTER.md`. Read it before changing
+  the renderer's sprite path, the art tools or the package format.
+- Performance measurement and its pitfalls: `docs/OPTIMIZATION_LOG.md`,
+  `tools/bench-flycast.sh`, `tools/flycast-speed.py`. Start Flycast muted
+  (the default of `tools/run-flycast.sh`).
+- Fidelity against the original: `docs/FIDELITY_GATE.md`, `docs/REFERENCE.md`.

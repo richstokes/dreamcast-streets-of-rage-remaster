@@ -9,7 +9,7 @@ mkdcdisc=${MKDCDISC:-"$root/build/mkdcdisc/build/mkdcdisc"}
 mkdir -p "$root/build/disc" "$root/dist"
 cp "$rom" "$root/build/disc/SOR.BIN"
 # Replacement art for enhanced graphics (a local build product: placeholder
-# art is derived from the ROM; tools/make-placeholder-art.py).
+# art is derived from the ROM; tools/make-art-set.sh).
 art=${SOR_ART:-"$root/build/art/SORART.PAK"}
 if [ -f "$art" ]; then cp "$art" "$root/build/disc/SORART.PAK"; else rm -f "$root/build/disc/SORART.PAK"; fi
 if [ -n "${SOR_REPLAY:-}" ]; then

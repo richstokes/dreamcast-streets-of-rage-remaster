@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include "vdp_scene.hpp"
 #include "extract_frames.hpp"
+#include "cheats.hpp"
 #include "art_catalog.hpp"
 #include <vector>
 
@@ -79,13 +80,14 @@ void capture_write(const Framebuffer &fb,int width,int height){
     if(FILE *list=fopen((capture.directory+name).c_str(),"w")){
         const auto &scene=*capture.scene;
         for(size_t i=0;i<scene.artCount;i++){const auto &d=scene.artDraws[i];const auto &f=capture.art.frames()[d.frame];
-            fprintf(list,"art %06X p%d anchor %d,%d layer %d order %d%s size %dx%d\n",f.mapping,f.palette,d.x,d.y,d.layer,d.order,d.flip?" flip":"",f.w,f.h);}
+            fprintf(list,"art %06X c%04X anchor %d,%d layer %d order %d%s size %dx%d\n",f.mapping,f.colours,d.x,d.y,d.layer,d.order,d.flip?" flip":"",f.w,f.h);}
         fprintf(list,"sprite cells %zu\n",scene.spriteTileCount);fclose(list);
     }
 }
 }
 const uint8_t *platform_embedded_rom(size_t &size){size=0;return nullptr;}
 const uint8_t *platform_embedded_art(size_t &size){size=0;return nullptr;}
+void platform_game_state(unsigned round,unsigned){sor::extract_frames_round(round);}
 void platform_video_init(){}
 void platform_video_shutdown(){}
 bool platform_render_vdp(VDPState &state,VDPRenderer &renderer,const sor::TitleCaption &title){
@@ -149,6 +151,9 @@ void platform_observe_frame(uint32_t frame,const sor_memory &memory,const Frameb
 }
 int main(int argc,char **argv){
     if(argc!=4){fprintf(stderr,"usage: sor-headless ROM REPLAY RAMTRACE\n");return 2;}
+    // SOR_CHEATS=ROUND: start at that round with infinite health, lives and specials.
+    if(const char *round=std::getenv("SOR_CHEATS"))sor::cheats::menu.setScripted(unsigned(std::atoi(round)));
+    sor::extract_frames_rom(argv[1]);
     if(!replay_load(argv[2])){fprintf(stderr,"Invalid replay\n");return 2;}
     trace=fopen(argv[3],"wb");if(!trace){perror("trace");return 2;}
     capturePath=std::string(argv[3])+".ppm";

@@ -46,9 +46,9 @@ std::vector<pvr_poly_hdr_t> artHeaders;
 int uploadedTop[2]{256,256},uploadedBottom[2]{};
 void header(pvr_poly_hdr_t &h,pvr_ptr_t texture,int w,int hgt,bool linear,int palette=-1){
     pvr_poly_cxt_t c;
-    // palette: -1 ARGB1555, -2 8-bit indices into bank 1 (art), else a 4-bit bank.
+    // palette: -1 ARGB1555; -2, -3, -4: 8-bit indices into bank 1, 2, 3 (art); else a 4-bit bank.
     const int format=palette==-1 ? (PVR_TXRFMT_ARGB1555|(linear?PVR_TXRFMT_NONTWIDDLED:0))
-                    : palette==-2 ? (PVR_TXRFMT_PAL8BPP|PVR_TXRFMT_8BPP_PAL(1))
+                    : palette<=-2 ? (PVR_TXRFMT_PAL8BPP|PVR_TXRFMT_8BPP_PAL(-1-palette))
                     : (PVR_TXRFMT_PAL4BPP|PVR_TXRFMT_4BPP_PAL(palette));
     pvr_poly_cxt_txr(&c,PVR_LIST_PT_POLY,format,w,hgt,texture,PVR_FILTER_NONE);
     c.gen.culling=PVR_CULLING_NONE;
@@ -77,56 +77,62 @@ void load_art(){
     const size_t size=artPackage.empty()?embedded:artPackage.size();
     if(!data||!size){sor_log("Enhanced art: no package (original sprites drawn per cell)\n");return;}
     if(!art.load(data,size,false)){sor_log("Enhanced art: invalid package\n");art=sor::ArtCatalog();return;}
-    // Indexed art (SORART02, or SORART01 with at most 255 colours) is stored
-    // with 8-bit indices into palette bank 1 (entries 256-511; the 4-bit tile
-    // palettes use entries 0-63 of bank 0): half the memory of ARGB1555.
-    static uint8_t colourIndex[32768];
-    unsigned colours=1;
-    if(!art.palette().empty()){
-        colours=256;
-        for(unsigned i=0;i<256;i++)pvr_set_pal_entry(256+i,art.palette()[i]);
-    }else{
-        std::fill_n(colourIndex,32768,0);
-        for(const auto &page:art.pages()){
-            const size_t n=size_t(page.width)*page.height;
-            for(size_t i=0;i<n && colours<=256;i++){
-                const uint16_t v=page.pixels[i];
-                if((v&0x8000) && !colourIndex[v&0x7FFF]){
-                    if(colours<256)pvr_set_pal_entry(256+colours,v);
-                    colourIndex[v&0x7FFF]=uint8_t(colours++);
-                }
-            }
+    // Art is 8-bit indices into palette banks 1-3 (entries 256-1023; the 4-bit
+    // tile palettes use entries 0-63 of bank 0). The compressed package stays in main
+    // RAM; pages are inflated and uploaded per round (load_round).
+    for(size_t i=0;i<art.palettes().size();i++)pvr_set_pal_entry(256+i,art.palettes()[i]);
+    artTextures.assign(art.pages().size(),nullptr);artHeaders.resize(art.pages().size());
+    sor_log("Enhanced art: %zu frames in %zu pages, %zu package bytes\n",art.frames().size(),art.pages().size(),size);
+}
+// Load the art of the round and characters in play, in place of what was
+// loaded. All of the game's art does not fit in PowerVR memory, and one inflated
+// page at a time is all main RAM holds. Enhanced graphics do not use the
+// software sprite layers, so their textures make room for art while it is on.
+unsigned artRound=~0u,artCharacters=~0u;bool artEnhanced=false;
+void load_selection(unsigned round,unsigned characters,bool enhanced){
+    if(round==artRound&&characters==artCharacters&&enhanced==artEnhanced)return;
+    artRound=round;artCharacters=characters;artEnhanced=enhanced;
+    const auto start=timer_us_gettime64();
+    pvr_wait_ready();                         // the frame in flight still samples these textures
+    if(scene)scene->invalidate();
+    if(!enhanced||art.empty()){
+        for(auto &p:artTextures)if(p){pvr_mem_free(p);p=nullptr;}
+        for(int p=0;p<2;p++)if(!spriteTexture[p]){
+            spriteTexture[p]=pvr_mem_malloc(512*256*2);
+            if(!spriteTexture[p])throw std::runtime_error("PowerVR sprite layers unavailable");
+            header(spriteHeaders[p],spriteTexture[p],512,256,true);
         }
-        if(colours<=256)pvr_set_pal_entry(256,0);   // index 0: transparent
+        uploadedTop[0]=uploadedTop[1]=0;uploadedBottom[0]=uploadedBottom[1]=256;
+        return;
     }
-    const bool indexed=colours<=256;
-    size_t bytes=0;
+    for(auto &p:spriteTexture)if(p){pvr_mem_free(p);p=nullptr;}
+    art.select(round,characters);
+    for(size_t i=0;i<artTextures.size();i++)
+        if(artTextures[i]&&!art.wanted(i)){pvr_mem_free(artTextures[i]);artTextures[i]=nullptr;}
+    size_t bytes=0,loaded=0,missing=0;
     std::vector<uint8_t> indices;
-    for(const auto &page:art.pages()){
-        const size_t texels=size_t(page.width)*page.height,n=indexed?texels:texels*2;
-        pvr_ptr_t t=pvr_mem_malloc(n);
-        if(!t){sor_log("Enhanced art: PowerVR memory exhausted after %zu bytes\n",bytes);art=sor::ArtCatalog();return;}
-        if(page.packed){
-            // One page in main RAM at a time.
-            indices.resize(texels);
-            if(!art.inflate(page,indices.data())){sor_log("Enhanced art: page inflate failed\n");art=sor::ArtCatalog();return;}
-            pvr_txr_load_ex(indices.data(),t,page.width,page.height,PVR_TXRLOAD_8BPP);
-        }else if(page.indices)pvr_txr_load_ex(page.indices,t,page.width,page.height,PVR_TXRLOAD_8BPP);
-        else if(indexed){
-            indices.resize(texels);
-            for(size_t i=0;i<texels;i++){const uint16_t v=page.pixels[i];indices[i]=(v&0x8000)?colourIndex[v&0x7FFF]:0;}
-            pvr_txr_load_ex(indices.data(),t,page.width,page.height,PVR_TXRLOAD_8BPP);
-        }else pvr_txr_load(page.pixels,t,n);
-        bytes+=n;
-        artTextures.push_back(t);artHeaders.emplace_back();
-        header(artHeaders.back(),t,page.width,page.height,true,indexed?-2:-1);
+    for(size_t i=0;i<artTextures.size();i++){
+        const auto &page=art.pages()[i];
+        if(!art.wanted(i))continue;
+        const size_t texels=size_t(page.width)*page.height;
+        if(artTextures[i]){bytes+=texels;continue;}   // already there
+        indices.resize(texels);
+        pvr_ptr_t t=missing?nullptr:pvr_mem_malloc(texels);
+        if(!t||!art.inflate(page,indices.data())){
+            // Pages are stored most important first: the rest fall back to the original pieces.
+            if(t)pvr_mem_free(t);
+            art.setUnloaded(i);missing++;continue;
+        }
+        pvr_txr_load_ex(indices.data(),t,page.width,page.height,PVR_TXRLOAD_8BPP);
+        artTextures[i]=t;header(artHeaders[i],t,page.width,page.height,true,-2-int(page.palette));loaded++;bytes+=texels;
     }
-    // Pixels now live in PowerVR memory; the catalog keeps sizes and frames.
-    artPackage.clear();artPackage.shrink_to_fit();
-    sor_log("Enhanced art: %zu frames, %zu pages, %u colours, %zu PowerVR bytes; free %lu; loaded in %llu ms\n",art.frames().size(),art.pages().size(),indexed?unsigned(art.palette().empty()?colours-1:256):0u,bytes,
+    sor_log("Enhanced art: round %u characters %x: %zu pages loaded, %zu did not fit, %zu PowerVR bytes in use; free %lu; %llu ms\n",round,characters,loaded,missing,bytes,
             (unsigned long)pvr_mem_available(),(unsigned long long)((timer_us_gettime64()-start)/1000));
+    if(!replay_active())sor_flush_log();
 }
+unsigned gameRound=1,gameCharacters=0;
 }
+void dc_renderer_game_state(unsigned round,unsigned characters){gameRound=round;gameCharacters=characters;}
 void dc_renderer_init(){
     scene=std::make_unique<sor::VdpScene>();
     tiles=pvr_mem_malloc(2048*32);
@@ -159,12 +165,13 @@ void dc_renderer_shutdown(){
     for(auto p:spriteTexture)if(p)pvr_mem_free(p);
     if(cheatHintTexture)pvr_mem_free(cheatHintTexture);
     for(auto p:titleTextures)if(p)pvr_mem_free(p);
-    for(auto p:artTextures)pvr_mem_free(p);
+    for(auto p:artTextures)if(p)pvr_mem_free(p);
     artTextures.clear();artHeaders.clear();art=sor::ArtCatalog();
     scene.reset();
 }
 bool dc_render_vdp(VDPState &state,VDPRenderer &renderer,const sor::TitleCaption &title){
     const auto begin=timer_us_gettime64();
+    load_selection(gameRound,gameCharacters,sor::cheats::menu.settings().enhancedGraphics);
     scene->enhanced=sor::cheats::menu.settings().enhancedGraphics;scene->art=&art;
     if(!scene->buildCached(state,renderer)||scene->count>maxTileQuads)return false;
     const bool enhanced=scene->enhanced;

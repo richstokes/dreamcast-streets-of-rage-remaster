@@ -50,6 +50,8 @@ public:
     size_t spriteTileCount=0;
     ArtDraw artDraws[80];
     size_t artCount=0;
+    // The art changed (another round's pages): the cached scene's art draws are stale.
+    void invalidate(){cacheValid=false;}
 private:
     VDPState previous;
     bool cacheValid=false;

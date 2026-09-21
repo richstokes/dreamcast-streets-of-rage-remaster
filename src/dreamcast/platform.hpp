@@ -11,6 +11,9 @@ const uint8_t *platform_embedded_rom(size_t &size);
 // Replacement art built into the executable (build-and-run.sh), for runs
 // without a disc; the Dreamcast renderer prefers /cd/SORART.PAK.
 const uint8_t *platform_embedded_art(size_t &size);
+// Each presented frame: the round being played (1-8) and the characters in play
+// (bit 1 Adam, 2 Axel, 3 Blaze). Replacement art is loaded for these only.
+void platform_game_state(unsigned round,unsigned characters);
 struct PlatformMemoryStats { uint32_t heap_used, vram_free; };
 void platform_poll_controllers(PlayersControlState &);
 void platform_video_init();

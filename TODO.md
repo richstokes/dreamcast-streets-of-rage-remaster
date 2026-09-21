@@ -212,10 +212,13 @@ transitions, original audio and one-/two-player coverage; simply reaching it is 
 - [x] Build repeatable reference-data extraction tools. (Object frames with anchors:
   SOR_EXTRACT_FRAMES; side-by-side previews: SOR_ENHANCED_CAPTURE; docs/REMASTER.md.)
 - [ ] Build replacement-art import, texture packing and animation-metadata validation tools.
-  (Packing and the runtime format exist for placeholders, tools/make-placeholder-art.py;
-  import and validation of real art remain.)
-- [ ] Select practical texture formats, palettes and compression using measured costs.
-- [ ] Implement stage-specific loading/residency; never preload the entire enhanced game.
+  (2026-09-21: tools/make-art-set.sh generates 2x art for all players, enemies and bosses and
+  packs it; hand-made frames import with --override. Validation of hand-made art's anchors and
+  sizes beyond the size check remains.)
+- [x] Select practical texture formats, palettes and compression using measured costs.
+  (8-bit pages, three 255-colour palettes, zlib in RAM and on disc: docs/REMASTER.md.)
+- [x] Implement stage-specific loading/residency; never preload the entire enhanced game.
+  (Pages per round and per character in play, most important first with fallback.)
 - [ ] Budget every enhancement, including the 4× pixel-storage cost of doubling both dimensions.
 - [ ] Prevent texture uploads, asset reads and audio streaming from hitching combat.
 - [ ] Provide a lower-cost enhanced configuration if required by measurements.

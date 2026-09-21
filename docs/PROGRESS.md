@@ -9,7 +9,7 @@
   draws every other sprite as 8x8 cells (docs/REMASTER.md).
 - Asset plumbing: every object frame drawn in a replay can be extracted with its
   anchor (SOR_EXTRACT_FRAMES), packed into a runtime package
-  (tools/make-placeholder-art.py) and previewed side by side
+  (now tools/make-enhanced-art.py --style placeholder) and previewed side by side
   (SOR_ENHANCED_CAPTURE). Placeholder art is the original doubled with an outline
   and anchor cross; it is derived from the ROM and stays in build/.
 - Flycast with 149 placeholder frames: both benchmarks at every VBlank, no

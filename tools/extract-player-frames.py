@@ -14,15 +14,18 @@ animation set (graphics-engine analysis, section 8.3):
 Player tiles are not resident: the art ids select ROM-to-VRAM DMA records
 ($1A160 upper -> VRAM $B000, $1A53E lower -> $B400 for player 1), which are
 replayed here. Output matches SOR_EXTRACT_FRAMES (src/headless/
-extract_frames.cpp): <mapping>_p<palette>.pam and index.json, with the key
-being the frame record's address. Colours come from REFERENCE directories of
-replay-extracted frames (the game's palettes live in RAM, not in one ROM
-table); frames also present there are compared pixel for pixel.
+extract_frames.cpp): <mapping>_c<colour key>.pam and index.json, with the
+mapping being the frame record's address. Colours come from REFERENCE
+directories of replay-extracted frames (the CRAM line each character was seen
+with; the game builds its palettes in RAM); frames also present there are
+compared pixel for pixel.
 
   tools/extract-player-frames.py ROM OUT REFERENCE_DIR...
 """
 import json, struct, sys
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from art_key import colour_key
 
 SETS = {'adam': 0x53EFE, 'axel': 0x49AE0, 'blaze': 0x5E90A}
 UPPER, LOWER = 0x1A160, 0x1A53E
@@ -90,47 +93,49 @@ def main():
     reference = {}
     for d in refs:
         for f in json.loads((d / 'index.json').read_text())['frames']:
-            reference.setdefault((int(f['mapping'], 16), f['palette']), (f, d))
+            reference.setdefault((int(f['mapping'], 16), tuple(f['cram'][1:])), (f, d))
     index, report = [], {}
     for name, base in SETS.items():
         records = frames_of(rom, base)
-        rendered = {r: render(rom, r) for r in sorted(records)}
-        rendered = {r: v for r, v in rendered.items() if v}
-        # Learn the character's colours from the replay frames it shares.
-        colours, palettes = {}, set()
-        for r, (w, h, anchor, palette, rows) in rendered.items():
-            for (mapping, pal), (f, d) in reference.items():
-                if mapping != r or (f['width'], f['height']) != (w, h):
-                    continue
-                data = load_pam(d / ('%06X_p%d.pam' % (mapping, pal)))
-                for y in range(h):
-                    for x in range(w):
-                        if rows[y][x] and data[(y * w + x) * 4 + 3]:
-                            colours.setdefault(pal, {}).setdefault(rows[y][x], {}).setdefault(bytes(data[(y * w + x) * 4:(y * w + x) * 4 + 3]), 0)
-                            colours[pal][rows[y][x]][bytes(data[(y * w + x) * 4:(y * w + x) * 4 + 3])] += 1
-                palettes.add(pal)
-        tables = {pal: {i: max(c, key=c.get) for i, c in t.items()} for pal, t in colours.items()}
+        rendered = {r: v for r, v in ((r, render(rom, r)) for r in sorted(records)) if v}
+        # The colours the character was seen in (a second player of the same
+        # character gets its own): each is one CRAM line, from the replays.
+        # Steps of a fade last a few frames each; a real look is held.
+        lines, held = {}, {}
+        for d in refs:
+            for f in json.loads((d / 'index.json').read_text())['frames']:
+                if int(f['mapping'], 16) in rendered and 1 in f['types'] and any(f['cram'][1:]):
+                    held[f['colours']] = max(held.get(f['colours'], 0), f['seen']); lines[f['colours']] = f['cram']
+        lines = {c: cram for c, cram in lines.items() if held[c] >= 90}
+        # The character's colour mask: every CRAM entry any of its frames uses.
+        mask = 0
+        for w, h, anchor, palette, rows in rendered.values():
+            for row in rows:
+                for i in set(row):
+                    mask |= 1 << i
+        mask &= 0xFFFE
+        lines = {'%04X' % colour_key(cram, mask): cram for cram in lines.values()}
         same = differ = 0
         for r, (w, h, anchor, palette, rows) in rendered.items():
-            for pal, table in tables.items():
+            for colours, cram in lines.items():
+                table = [bytes(((c >> s & 7) * 255 // 7) for s in (1, 5, 9)) for c in cram]
                 rgba = bytearray(w * h * 4)
                 for y in range(h):
                     for x in range(w):
                         if rows[y][x]:
-                            c = table.get(rows[y][x], b'\xff\x00\xff')
-                            rgba[(y * w + x) * 4:(y * w + x) * 4 + 4] = c + b'\xff'
-                if (r, pal) in reference:
-                    f, d = reference[(r, pal)]
-                    ok = (f['width'], f['height']) == (w, h) and load_pam(d / ('%06X_p%d.pam' % (r, pal))) == bytes(rgba)
+                            rgba[(y * w + x) * 4:(y * w + x) * 4 + 4] = table[rows[y][x]] + b'\xff'
+                if (r, tuple(cram[1:])) in reference:
+                    f, d = reference[(r, tuple(cram[1:]))]
+                    ok = (f['width'], f['height']) == (w, h) and load_pam(d / ('%06X_c%s.pam' % (r, f['colours']))) == bytes(rgba)
                     same += ok; differ += not ok
-                (out / ('%06X_p%d.pam' % (r, pal))).write_bytes(
+                (out / ('%06X_c%s.pam' % (r, colours))).write_bytes(
                     b'P7\nWIDTH %d\nHEIGHT %d\nDEPTH 4\nMAXVAL 255\nTUPLTYPE RGB_ALPHA\nENDHDR\n' % (w, h) + bytes(rgba))
-                index.append(dict(mapping='%06X' % r, palette=pal, width=w, height=h, anchor=list(anchor),
-                                  seen=1, first_frame=0, variants=1, types=[1], character=name, animation=records[r]))
-        report[name] = dict(frames=len(rendered), palettes=sorted(tables), colours={p: len(t) for p, t in tables.items()},
-                            match_replays=same, differ_from_replays=differ)
+                index.append(dict(mapping='%06X' % r, colours=colours, mask=mask, palette=palette, cram=cram, width=w, height=h,
+                                  anchor=list(anchor), seen=1, first_frame=0, variants=1, check='rom', rounds=0,
+                                  types=[1], character=name, animation=records[r]))
+        report[name] = dict(frames=len(rendered), colour_sets=sorted(lines), match_replays=same, differ_from_replays=differ)
     (out / 'index.json').write_text(json.dumps({'frames': index}, indent=1) + '\n')
-    print(json.dumps(report, indent=1))
+    print(json.dumps(report))
 
 
 if __name__ == '__main__':

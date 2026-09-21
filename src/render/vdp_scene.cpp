@@ -161,7 +161,7 @@ void VdpScene::enhancedSprites(const VDPState &s){
     if(build)for(unsigned o=0;o<build->count;o++){
         const auto &obj=build->objects[o];
         if(obj.first+obj.count>VDPState::SAT_MAX_SPRITES)continue;
-        const ArtFrame *f=art->find(obj.mapping,record(obj.first)[4]>>5&3);
+        const ArtFrame *f=art->find(obj.mapping,s.cram_+(record(obj.first)[4]>>5&3)*16);
         if(!f)continue;
         frameOf[o]=uint32_t(f-art->frames().data());
         for(int r=obj.first;r<obj.first+obj.count;r++)owner[r]=int16_t(o);
