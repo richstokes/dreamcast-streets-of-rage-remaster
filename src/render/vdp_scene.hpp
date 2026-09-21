@@ -1,5 +1,7 @@
 #pragma once
 #include "art_catalog.hpp"
+#include "scene_light.hpp"
+#include "scene_particles.hpp"
 #include "VDPState.hpp"
 #include "VDPRenderer.hpp"
 #include "sprite_probe.hpp"
@@ -20,6 +22,7 @@ struct SpriteTile {
     int16_t x,y;
     uint8_t palette,layer,order;
     bool hflip,vflip;
+    uint8_t shade[3]{255,255,255};   // lighting: the owning object's light (scale only)
 };
 struct ArtDraw {
     uint32_t frame;          // index into ArtCatalog::frames()
@@ -28,6 +31,17 @@ struct ArtDraw {
     bool flip;
     ArtTint tint;            // follows the game's fades and flashes
     int16_t lineFrom,lineTo; // screen lines [from, to) not blanked by a sprite mask
+    uint8_t type=0;          // object type
+    // Lighting (scene_light.hpp): the tint per corner, fade or flash included,
+    // and the shadow the object casts on the ground line.
+    bool lit=false,shadow=false;
+    CornerLight light;
+    int16_t ground=0;
+};
+// Lighting: a pool of light on the ground under an emitter (added to the picture).
+struct GlowDraw {
+    int16_t x,y,radiusX,radiusY;
+    uint8_t colour[3],strength;
 };
 class VdpScene {
 public:
@@ -56,6 +70,17 @@ public:
     // and the hold is not known when a pose starts: 2 keeps attacks readable.
     bool smooth=false;
     static constexpr unsigned INBETWEEN_TICKS=2;
+    // Dynamic lighting of the enhanced drawing: see scene_light.hpp.
+    bool lighting=false;
+    static constexpr int WALL_ABOVE_LANES=16;
+    static constexpr unsigned CONTACT_ALPHA=110; // of 255, at the middle of the contact shadow
+    // The contact shadow's width, of 256 of the art's, for an object `up` lines above the ground.
+    static constexpr int contactScale(int up){return up<=0?150:up>=96?60:150-up*90/96;}
+    GlowDraw glows[16];
+    size_t glowCount=0;
+    ParticleDraw particleDraws[Particles::MAX];
+    size_t particleCount=0;
+    size_t planeEnd[2]{};                        // quads [0, planeEnd[0]) are plane B's, then plane A's, then the window's
     static constexpr size_t MAX_SPRITE_TILES=80*16;
     SpriteTile spriteTiles[MAX_SPRITE_TILES];
     size_t spriteTileCount=0;
@@ -63,11 +88,28 @@ public:
     size_t artCount=0;
     // The art changed (another round's pages): the cached scene's art draws are stale.
     void invalidate(){cacheValid=false;}
+    const SceneLight &sceneLight() const {return light_;}
 private:
     VDPState previous;
     bool cacheValid=false;
     uint16_t spriteFlags=0;
-    bool builtEnhanced_=false;
+    bool builtEnhanced_=false,builtLighting_=false;
+    SceneLight light_;
+    Particles particles_;
+    uint16_t sparkSlots_[16]{};        // hit sparks on screen at the last build: a new one bursts
+    unsigned sparkSlotCount_=0;
+    uint32_t particleSerial_=0;
+    void particlesStep(const VDPState &,const SpriteBuild *displayed);
+    uint16_t lightColors_[64]{},lightBackground_=0;   // what light_ was built from
+    bool lightValid_=false;
+    unsigned lightAge_=0;
+    // The round's ground level (object +$18 of whatever stands on the ground;
+    // it differs between rounds): the value most shadow casters share, or one
+    // a lone object has kept for a while (a jump changes it every tick).
+    // horizon_: the farthest ground line anything has stood on (lanes are about 36 lines deep).
+    int16_t groundLevel_=0,loneLevel_=0,horizon_=0;
+    unsigned loneBuilds_=0;
+    bool groundKnown_=false;
     // The pose each object with art was last drawn in.
     struct Pose{uint32_t set,mapping,from;uint16_t slot;uint8_t ticks;bool flip;};
     Pose poses_[SpriteBuild::MAX_OBJECTS];

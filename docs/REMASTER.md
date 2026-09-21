@@ -7,7 +7,7 @@ art. The art comes from an offline pipeline that redraws the original frames;
 **it is not hand-drawn**, and any frame can be overridden with hand-made art.
 Backgrounds, the HUD and text are unchanged.
 
-Read this before touching `src/render/art_catalog.*`, `sprite_probe.*`,
+Read this before touching `src/render/art_catalog.*`, `sprite_probe.*`, `scene_light.*`, `scene_particles.*`,
 `VdpScene::enhancedSprites`, `src/headless/extract_frames.cpp`, the loader in
 `src/dreamcast/renderer_kos.cpp` or the art tools. Everything derived from the
 ROM (frames, sheets, packages) stays under `build/`, out of git.
@@ -26,7 +26,8 @@ Review the result in `build/art/sheets/<character or type-XX>.png` (original
 pixel-doubled above, generated below), `build/art/frames/*.png` (every frame)
 and `build/art/SORART.json` (frame counts, palette error, PowerVR bytes per
 round). L + R in game opens the options menu; GRAPHICS switches modes and
-ANIMATION turns on in-between poses (see Smooth animation).
+ANIMATION turns on in-between poses (see Smooth animation) and LIGHTING turns
+on shadows and light (see Dynamic lighting).
 
 Host preview of a replay, original left and enhanced right, with a text file
 per frame listing the art drawn:
@@ -192,6 +193,98 @@ smoother animation needs new poses. ANIMATION: SMOOTH in the options menu
   48 in-betweens are 590 KB of PowerVR memory and are drawn on his pose changes
   (`SOR_SMOOTH=1` with `SOR_ENHANCED_CAPTURE` at a step of 1; the frame lists
   name the `from` pose).
+
+## Dynamic lighting (shadows and light)
+
+The game has no light: a sprite has the same colours wherever it stands, and
+nothing casts a shadow. LIGHTING: DYNAMIC in the options menu (L + R;
+`SOR_LIGHTING=1` starts with it on, in the Dreamcast build and the host
+preview), with enhanced graphics, adds both. Drawing only, from the VDP's state
+and the sprite probe; the simulation and the original mode are untouched.
+
+**The PowerVR has no programmable shaders**, so there are none: everything is
+what its fixed pipeline does per quad -- texture x vertex colour + offset
+colour, interpolated between the corners -- plus the translucent list (enabled
+for this in `game.cpp`; it draws nothing else). `src/render/scene_light.*`
+computes, in integers, the same values for the Dreamcast and the host preview
+(`raster_enhanced`).
+
+- **The backdrop as lights** (`SceneLight::build`, `collect`): planes B and A
+  as they are on screen (not the HUD's window plane) are reduced to a 20 x 16
+  grid: per cell a mean colour and, with each texel counted by its brightness
+  squared (strongest channel, so a saturated orange window counts as much as a
+  pale lamp), an RMS brightness and the colour of what is bright. Cells above
+  the *wall line* that outshine the screen's mean are lights (merged two by
+  two, at most 80), standing in the wall at their place and height with their
+  colour and power. Neon that cycles colours changes the light with it. Every
+  other tile (by pattern number: stable under scrolling) gives two texels; the
+  grid is rebuilt at most every other build while the planes scroll, and every
+  16 builds otherwise.
+- **The whole scene lights an object** (`SceneLight::shade`): every light
+  counts, by its distance over the ground (a screen line is about three of the
+  ground; the object's distance from the wall comes from its ground line), into
+  a left and a right group (a light right behind the object is both). Each
+  side's corners of the quad get a scale (a little of the screen's hue, more of
+  that side's light, brighter the more reaches it; the feet darker and in the
+  ground's colour) and an offset (added light). Exposure is fixed (`EXPOSURE`).
+  The game's fade or flash tint is folded in.
+- **Shadows**: away from each group's centre of power, the object's art again,
+  black, bilinear, sheared from the ground line towards the viewer (the lights
+  are behind the playfield): lean and length follow (object - light) / the
+  lights' height, so shadows swing round as a character passes a shop window,
+  lengthen towards the viewer and shorten under high lights; the two share
+  `SHADOW_ALPHA` by power. Plus a contact shadow (a dark ellipse) under the
+  feet that shrinks with height in a jump. Depth 2.85-2.9: over the low
+  planes, under every sprite and the high-priority tiles (the foreground car
+  and hydrant cover them). No extra texture memory. The original game draws
+  no shadows at all.
+- **Spill**: the lights' colour is added to the ground below the wall line, per
+  column, strongest for lights near the ground, rising over `SPILL_RISE` lines
+  (the wall line is not known to a line) and fading over `SPILL_DEPTH`:
+  untextured Gouraud quads, additive.
+- **Objects that are light** (`light_kind`): the police's napalm (`$0E`), the
+  bazooka's flame (type `$05`, frames `$070C1F`- except the grey smoke
+  `$070C47`-`$070C5B`; the car is `$070B20`-) and hit sparks (`$49`). Their
+  colour (the bright entries of their CRAM line) is added to the corners of
+  objects near them; fire and flame put a pool of light on the ground.
+- **Particles** (`scene_particles.*`): embers rise from fire, the bazooka's
+  flame throws embers and sparks and its smoke lingers, a hit spark bursts
+  into sparks. Up to 96, their own random numbers, a tick per sprite-table
+  build, x kept in the world (plane A's scroll is the camera), not drawn over
+  the HUD; additive (or covering, for smoke) quads of one 32 x 32 radial
+  texture. They move without invalidating the cached scene
+  (`VdpScene::particlesStep` runs on reused frames too; the renderer rebuilds
+  only their quads).
+- **The ground line and the wall line**: a sprite's y is `+$14`/2 + `+$18`
+  (`$AF60`); `+$18` is the round's ground value (160, 168, 136 on the lift...)
+  and less in the air. The scene takes as the ground the `+$18` most playfield
+  objects share, or one a lone object has kept for 8 builds, so a jumping
+  player's shadow stays on the ground. The wall line is `WALL_ABOVE_LANES`
+  above the farthest ground line anything has stood on in the round (pale
+  ground behind an object must not count as a light). The probe records `+$18`
+  (`level`) and `+$01` bit 1 (`screen`: placed on the screen, not the world).
+- **Which objects** (`in_playfield`): players, enemies, bosses, props, weapons
+  and pickups are lit and cast shadows. Scenery made of sprites (awnings,
+  rain), captions and effects are left alone. An object with no art loaded is
+  drawn from its pieces with one flat light and no shadow.
+
+Cost (Flycast, action replay, 1,611 gameplay frames, 2026-09-21): the scene
+step goes from 0.76 to 1.5 ms a frame; 1,613 VBlanks for 1,611 flips (two late
+frames) against 1,611 / 1,611 unlit; 7 audio underruns against 5. PowerVR
+memory is unchanged but for a 2 KB texture. What was slow on the way, so as
+not to repeat it: divisions per tile quad in `SceneLight::build` (4.2 ms, 24
+frames dropped); particles invalidating the scene cache (every frame rebuilt
+while one was alive). Flycast does not model cache misses: measure on hardware.
+
+Limits: light is per corner, so there is no shading by the art's form (the
+PowerVR's bump mapping would need a 16-bit normal map per page, and art
+already fills its memory); the light is only what the backdrop's pixels say;
+shadows are darker where two cross; a sprite mask (dropping in behind the HUD)
+clips the art but not its shadow; backdrops themselves are not relit.
+
+Check it on the host: `SOR_LIGHTING=1` with `SOR_ENHANCED_CAPTURE`; each frame's
+text file lists the corners' light, shadows (lean/length@alpha), the ground
+line, pools, the wall line, the lights' count, the spill and the grid.
 
 ## Current set (2026-09-21)
 

@@ -1,6 +1,7 @@
 #include "diagnostics.hpp"
 #include <kos.h>
 #include <cstring>
+#include <cmath>
 #include <algorithm>
 #include <memory>
 #include <stdexcept>
@@ -43,6 +44,14 @@ sor::ArtCatalog art;
 std::vector<uint8_t> artPackage;
 std::vector<pvr_ptr_t> artTextures;
 std::vector<pvr_poly_hdr_t> artHeaders;
+// Dynamic lighting (src/render/scene_light.hpp): shadows are the art drawn
+// again, black and translucent, on the ground; pools of light are added.
+std::vector<pvr_poly_hdr_t> shadowHeaders;
+pvr_ptr_t glowTexture=nullptr;
+pvr_poly_hdr_t glowHeader,blobHeader,spillHeader;   // light added; matter (contact shadows, smoke); light spilt on the ground
+constexpr size_t maxLightPackets=16+2*sor::SceneLight::COLS+80*3+sor::Particles::MAX;
+Packet lightPackets[maxLightPackets];
+size_t lightPacketCount=0,staticLightPackets=0;
 int uploadedTop[2]{256,256},uploadedBottom[2]{};
 void header(pvr_poly_hdr_t &h,pvr_ptr_t texture,int w,int hgt,bool linear,int palette=-1){
     pvr_poly_cxt_t c;
@@ -56,6 +65,16 @@ void header(pvr_poly_hdr_t &h,pvr_ptr_t texture,int w,int hgt,bool linear,int pa
     c.depth.comparison=PVR_DEPTHCMP_GEQUAL;
     pvr_poly_compile(&h,&c);
 }
+// The art of a page again, in the translucent list: only its alpha is used.
+void shadow_header(pvr_poly_hdr_t &h,pvr_ptr_t texture,int w,int hgt,int bank){
+    pvr_poly_cxt_t c;
+    pvr_poly_cxt_txr(&c,PVR_LIST_TR_POLY,PVR_TXRFMT_PAL8BPP|PVR_TXRFMT_8BPP_PAL(bank),w,hgt,texture,PVR_FILTER_BILINEAR);
+    c.txr.env=PVR_TXRENV_MODULATEALPHA;      // colour and alpha: texture * vertex
+    c.gen.culling=PVR_CULLING_NONE;
+    c.depth.comparison=PVR_DEPTHCMP_GEQUAL;c.depth.write=PVR_DEPTHWRITE_DISABLE;
+    pvr_poly_compile(&h,&c);
+}
+uint32_t argb_of(const uint8_t *rgb,unsigned alpha=255){return uint32_t(alpha)<<24|uint32_t(rgb[0])<<16|uint32_t(rgb[1])<<8|rgb[2];}
 void quad(Packet &packet,const pvr_poly_hdr_t &h,float x,float y,float w,float hgt,float z,float u0,float v0,float u1,float v1){
     packet={};packet.header=h;
     const float xx[]={x,x+w,x,x+w},yy[]={y,y,y+hgt,y+hgt};
@@ -82,7 +101,7 @@ void load_art(){
     // tile palettes use entries 0-63 of bank 0). The compressed package stays in main
     // RAM; pages are inflated and uploaded per round (load_round).
     for(size_t i=0;i<art.palettes().size();i++)pvr_set_pal_entry(256+i,art.palettes()[i]);
-    artTextures.assign(art.pages().size(),nullptr);artHeaders.resize(art.pages().size());
+    artTextures.assign(art.pages().size(),nullptr);artHeaders.resize(art.pages().size());shadowHeaders.resize(art.pages().size());
     sor_log("Enhanced art: %zu frames in %zu pages, %zu package bytes\n",art.frames().size(),art.pages().size(),size);
 }
 // Load the art of the round and characters in play, in place of what was
@@ -127,6 +146,7 @@ void load_selection(unsigned round,unsigned characters,bool enhanced,bool smooth
         }
         pvr_txr_load_ex(indices.data(),t,page.width,page.height,PVR_TXRLOAD_8BPP);
         artTextures[i]=t;header(artHeaders[i],t,page.width,page.height,true,-2-int(page.palette));loaded++;bytes+=texels;
+        shadow_header(shadowHeaders[i],t,page.width,page.height,1+int(page.palette));
     }
     sor_log("Enhanced art: round %u characters %x: %zu pages loaded, %zu did not fit, %zu PowerVR bytes in use; free %lu; %llu ms\n",round,characters,loaded,missing,bytes,
             (unsigned long)pvr_mem_available(),(unsigned long long)((timer_us_gettime64()-start)/1000));
@@ -158,19 +178,47 @@ void dc_renderer_init(){
         if(!titleTextures[i])throw std::runtime_error("PowerVR title texture budget exhausted");
         header(titleHeaders[i],titleTextures[i],r.textureWidth,r.textureHeight,true);
     }
+    {
+        // A pool of light: white, fading from the middle as the host preview's does.
+        glowTexture=pvr_mem_malloc(32*32*2);
+        if(!glowTexture)throw std::runtime_error("PowerVR glow texture allocation failed");
+        alignas(32) static uint16_t pixels[32*32];
+        for(int y=0;y<32;y++)for(int x=0;x<32;x++){
+            const float dx=(x-15.5f)/15.5f,dy=(y-15.5f)/15.5f,d=std::sqrt(dx*dx+dy*dy);
+            const int alpha=d>=1?0:int((1-d)*(1-d)*15+.5f);
+            pixels[y*32+x]=uint16_t(alpha<<12|0xFFF);
+        }
+        pvr_txr_load_ex(pixels,glowTexture,32,32,PVR_TXRLOAD_16BPP);
+        pvr_poly_cxt_t c;
+        pvr_poly_cxt_txr(&c,PVR_LIST_TR_POLY,PVR_TXRFMT_ARGB4444,32,32,glowTexture,PVR_FILTER_BILINEAR);
+        c.txr.env=PVR_TXRENV_MODULATEALPHA;
+        c.blend.src=PVR_BLEND_SRCALPHA;c.blend.dst=PVR_BLEND_ONE;   // added to the picture
+        c.gen.culling=PVR_CULLING_NONE;
+        c.depth.comparison=PVR_DEPTHCMP_GEQUAL;c.depth.write=PVR_DEPTHWRITE_DISABLE;
+        pvr_poly_compile(&glowHeader,&c);
+        c.blend.dst=PVR_BLEND_INVSRCALPHA;
+        pvr_poly_compile(&blobHeader,&c);
+        pvr_poly_cxt_col(&c,PVR_LIST_TR_POLY);
+        c.blend.src=PVR_BLEND_SRCALPHA;c.blend.dst=PVR_BLEND_ONE;
+        c.gen.culling=PVR_CULLING_NONE;
+        c.depth.comparison=PVR_DEPTHCMP_GEQUAL;c.depth.write=PVR_DEPTHWRITE_DISABLE;
+        pvr_poly_compile(&spillHeader,&c);
+    }
     sor_log("PowerVR indexed tile cache: 65536 bytes; sprite layers: 524288 bytes\n");
     load_art();
     sor::cheats::menu.setEnhancedGraphics(SOR_DEFAULT_ENHANCED);
     sor::cheats::menu.setSmoothAnimation(SOR_DEFAULT_SMOOTH);
+    sor::cheats::menu.setDynamicLighting(SOR_DEFAULT_LIGHTING);
     if(!replay_active())sor_flush_log();   // show start-up (art loading) at once
 }
 void dc_renderer_shutdown(){
     if(tiles)pvr_mem_free(tiles);
     for(auto p:spriteTexture)if(p)pvr_mem_free(p);
     if(cheatHintTexture)pvr_mem_free(cheatHintTexture);
+    if(glowTexture)pvr_mem_free(glowTexture);
     for(auto p:titleTextures)if(p)pvr_mem_free(p);
     for(auto p:artTextures)if(p)pvr_mem_free(p);
-    artTextures.clear();artHeaders.clear();art=sor::ArtCatalog();
+    artTextures.clear();artHeaders.clear();shadowHeaders.clear();art=sor::ArtCatalog();
     scene.reset();
 }
 bool dc_render_vdp(VDPState &state,VDPRenderer &renderer,const sor::TitleCaption &title){
@@ -178,6 +226,7 @@ bool dc_render_vdp(VDPState &state,VDPRenderer &renderer,const sor::TitleCaption
     const auto &settings=sor::cheats::menu.settings();
     load_selection(gameRound,gameCharacters,settings.enhancedGraphics,settings.smoothAnimation);
     scene->enhanced=settings.enhancedGraphics;scene->smooth=settings.smoothAnimation;scene->art=&art;
+    scene->lighting=settings.enhancedGraphics&&settings.dynamicLighting;
     if(!scene->buildCached(state,renderer)||scene->count>maxTileQuads)return false;
     const bool enhanced=scene->enhanced;
     const bool same=scene->reused;
@@ -248,12 +297,39 @@ bool dc_render_vdp(VDPState &state,VDPRenderer &renderer,const sor::TitleCaption
     if(enhanced && (!same || !frames)){
         // Depth: the sprite's layer (3 low, 6 high priority), then its link
         // order, earlier sprites in front as on the VDP.
-        spritePacketCount=0;
+        spritePacketCount=0;lightPacketCount=0;
         const float sx=640.f/scene->width,sy=480.f/scene->height;
+        for(size_t i=0;i<scene->glowCount;i++){
+            const auto &g=scene->glows[i];
+            quad(lightPackets[lightPacketCount++],glowHeader,(g.x-g.radiusX)*sx,(g.y-g.radiusY)*sy,g.radiusX*2*sx,g.radiusY*2*sy,2.8f,0,0,1,1);
+            for(auto &v:lightPackets[lightPacketCount-1].vertices)v.argb=argb_of(g.colour,g.strength);
+        }
+        if(scene->lighting){
+            // Light spilt on the ground by the backdrop's lights: per column, rising
+            // to full at the horizon line, then fading (raster_enhanced does the same).
+            const auto &light=scene->sceneLight();
+            const float top=light.horizon()-sor::SceneLight::SPILL_RISE,middle=light.horizon(),bottom=light.horizon()+sor::SceneLight::SPILL_DEPTH;
+            for(int column=0;column<sor::SceneLight::COLS;column++){
+                const auto &a=light.spill(column),&b=light.spill(column+1);
+                if(!a.strength&&!b.strength)continue;
+                const float x=column*sor::SceneLight::CELL*sx,w=sor::SceneLight::CELL*sx;
+                for(int part=0;part<2;part++){
+                    Packet &p=lightPackets[lightPacketCount++];
+                    quad(p,spillHeader,x,(part?middle:top)*sy,w,((part?bottom:middle)-(part?middle:top))*sy,2.8f,0,0,0,0);
+                    for(int k=0;k<4;k++){
+                        const auto &from=(k&1)?b:a;
+                        const bool full=part?!(k&2):(k&2);        // the horizon's vertices
+                        p.vertices[k].argb=argb_of(from.colour,full?from.strength:0);
+                    }
+                }
+            }
+        }
         for(size_t i=0;i<scene->spriteTileCount;i++){
             const auto &t=scene->spriteTiles[i];
             quad(spritePackets[spritePacketCount++],tileHeaders[t.palette*2048+t.tile],t.x*sx,t.y*sy,8*sx,8*sy,
                  (t.layer?6:3)+(79-t.order)*0.01f,t.hflip?1:0,t.vflip?1:0,t.hflip?0:1,t.vflip?0:1);
+            if(t.shade[0]!=255||t.shade[1]!=255||t.shade[2]!=255)
+                for(auto &v:spritePackets[spritePacketCount-1].vertices)v.argb=argb_of(t.shade);
         }
         for(size_t i=0;i<scene->artCount;i++){
             const auto &d=scene->artDraws[i];const auto &f=art.frames()[d.frame];const auto &page=art.pages()[f.page];
@@ -265,7 +341,30 @@ bool dc_render_vdp(VDPState &state,VDPRenderer &renderer,const sor::TitleCaption
             if(v1<=v0)continue;
             quad(spritePackets[spritePacketCount++],artHeaders[f.page],(d.x*2-ax)*sx/2,(top+v0)*sy/2,f.w*sx/2,(v1-v0)*sy/2,
                  (d.layer?6:3)+(79-d.order)*0.01f,d.flip?u1:u0,(f.v+v0)/float(page.height),d.flip?u0:u1,(f.v+v1)/float(page.height));
-            if(!d.tint.identity()){
+            if(d.lit){
+                // Lighting: a tint per corner (the game's fade or flash included), interpolated over the quad.
+                auto &vertices=spritePackets[spritePacketCount-1].vertices;
+                for(int k=0;k<4;k++){vertices[k].argb=argb_of(d.light.corner[k].scale);vertices[k].oargb=argb_of(d.light.corner[k].offset,0);}
+                if(d.shadow){
+                    // Contact shadow: a dark ellipse under the feet, smaller the higher the object is.
+                    const float rx=std::max(6,f.w*sor::VdpScene::contactScale(d.ground-d.y)/256/2),ry=std::max(3.f,float(int(rx)/4)),cx=d.x*2-ax+f.w/2;
+                    quad(lightPackets[lightPacketCount++],blobHeader,(cx-rx)*sx/2,(d.ground*2-ry)*sy/2,rx*sx,ry*sy,2.85f,0,0,1,1);
+                    for(auto &v:lightPackets[lightPacketCount-1].vertices)v.argb=uint32_t(sor::VdpScene::CONTACT_ALPHA)<<24;
+                    // Cast shadows: the whole frame, black, from the ground line towards the
+                    // viewer: a row `above` the feet (art pixels) lies above*length/64 below
+                    // the line, shifted by above*lean/64.
+                    for(const auto &shadow:d.light.shadow){
+                        if(!shadow.alpha)continue;
+                        Packet &p=lightPackets[lightPacketCount++];
+                        quad(p,shadowHeaders[f.page],0,0,0,0,2.9f,d.flip?u1:u0,f.v/float(page.height),d.flip?u0:u1,(f.v+f.h)/float(page.height));
+                        for(int k=0;k<4;k++){
+                            const float above=(k&2)?f.anchorY-f.h:f.anchorY,x=d.x*2-ax+((k&1)?f.w:0)+above*shadow.lean/64;
+                            p.vertices[k].x=x*sx/2;p.vertices[k].y=(d.ground*2+above*shadow.length/64)*sy/2;
+                            p.vertices[k].argb=uint32_t(shadow.alpha)<<24;
+                        }
+                    }
+                }
+            }else if(!d.tint.identity()){
                 // Fades scale the art's colours; flashes add to them.
                 const uint32_t argb=0xff000000u|uint32_t(d.tint.scale[0])<<16|uint32_t(d.tint.scale[1])<<8|d.tint.scale[2];
                 const uint32_t oargb=uint32_t(d.tint.offset[0])<<16|uint32_t(d.tint.offset[1])<<8|d.tint.offset[2];
@@ -273,11 +372,24 @@ bool dc_render_vdp(VDPState &state,VDPRenderer &renderer,const sor::TitleCaption
             }
         }
     }
+    if(enhanced){
+        // Particles, over everything: light is added, smoke covers. They move every
+        // frame, the rest of the light's quads only when the scene changes.
+        if(!same || !frames)staticLightPackets=lightPacketCount;
+        lightPacketCount=staticLightPackets;
+        const float sx=640.f/scene->width,sy=480.f/scene->height;
+        for(size_t i=0;i<scene->particleCount;i++){
+            const auto &p=scene->particleDraws[i];
+            quad(lightPackets[lightPacketCount++],p.additive?glowHeader:blobHeader,(p.x-p.radius)*sx/2,(p.y-p.radius)*sy/2,p.radius*sx,p.radius*sy,6.95f,0,0,1,1);
+            for(auto &v:lightPackets[lightPacketCount-1].vertices)v.argb=argb_of(p.colour,p.alpha);
+        }
+    }
     const auto commands=timer_us_gettime64();
     auto bg=scene->background;pvr_set_bg_color(((bg>>10)&31)/31.f,((bg>>5)&31)/31.f,(bg&31)/31.f);
     pvr_scene_begin();pvr_list_begin(PVR_LIST_PT_POLY);
     pvr_prim(packets,packetCount*sizeof(Packet));
     if(enhanced && spritePacketCount)pvr_prim(spritePackets,spritePacketCount*sizeof(Packet));
+    const bool lights=enhanced&&scene->lighting&&lightPacketCount;
     if(sor::cheats::hintVisible()){
         alignas(32) Packet hint;
         const float sx=640.f/scene->width,sy=480.f/scene->height;
@@ -294,7 +406,13 @@ bool dc_render_vdp(VDPState &state,VDPRenderer &renderer,const sor::TitleCaption
             pvr_prim(&caption,sizeof(caption));
         }
     }
-    pvr_list_finish();pvr_scene_finish();
+    pvr_list_finish();
+    if(lights){
+        pvr_list_begin(PVR_LIST_TR_POLY);
+        pvr_prim(lightPackets,lightPacketCount*sizeof(Packet));
+        pvr_list_finish();
+    }
+    pvr_scene_finish();
     const auto finished=timer_us_gettime64();
     // Aggregate every frame: sparse samples mostly hit unchanged VDP frames
     // and conceal the cost of animation, scrolling, and texture replacement.

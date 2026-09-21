@@ -13,6 +13,8 @@ struct Settings {
     bool enhancedGraphics = false;
     // Enhanced graphics only: in-between poses are shown when art has them.
     bool smoothAnimation = false;
+    // Enhanced graphics only: shadows, and light from the backdrop and from fire.
+    bool dynamicLighting = false;
 };
 
 // Session settings live outside game RAM so stage loads and attract mode cannot
@@ -29,6 +31,7 @@ public:
     bool protectsHealth(uint32_t object, SystemMemory &) const;
     void setEnhancedGraphics(bool on) { settings_.enhancedGraphics = on; }
     void setSmoothAnimation(bool on) { settings_.smoothAnimation = on; }
+    void setDynamicLighting(bool on) { settings_.dynamicLighting = on; }
     // Scripted host runs (SOR_CHEATS in the headless build): start at a round
     // with the infinite options on, to visit content no replay reaches.
     void setScripted(unsigned round) {

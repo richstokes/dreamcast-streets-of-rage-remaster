@@ -74,7 +74,8 @@ muted; `FLYCAST_MUTE=0 ./build-and-run.sh` plays sound.
 When a replacement-art package exists (`build/art/SORART.PAK`, see
 [docs/REMASTER.md](docs/REMASTER.md)), the test ELF embeds it and starts in enhanced
 graphics; `SOR_ENHANCED=0` starts in the original. L + R opens the options menu,
-where GRAPHICS switches between the two at any time.
+where GRAPHICS switches between the two at any time, and LIGHTING adds shadows
+and light from the scene to enhanced graphics (`SOR_LIGHTING=1` starts with it on).
 
 To regenerate the latest game code and build a self-booting CDI image, run:
 

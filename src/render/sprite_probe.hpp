@@ -16,6 +16,8 @@ struct ProbedObject {
     uint8_t type;           // object type
     uint8_t first,count;    // SAT records [first, first + count)
     bool flip;              // mirrored mapping (frame word bit 15)
+    int16_t level=0;        // object +$18: added to the anchor's y; a round's ground value, less in the air
+    bool screen=false;      // object +$01 bit 1: placed on the screen, not in the world (HUD, captions)
 };
 struct SpriteBuild {
     static constexpr unsigned MAX_OBJECTS=80,MAX_RECORDS=80;
@@ -28,7 +30,7 @@ struct SpriteBuild {
 class SpriteProbe {
 public:
     void beginBuild();
-    void beginObject(uint16_t slot,uint8_t type,uint32_t mapping,bool flip,int16_t x,int16_t y,uint16_t tileBase,uint32_t sat,uint32_t set=0);
+    void beginObject(uint16_t slot,uint8_t type,uint32_t mapping,bool flip,int16_t x,int16_t y,uint16_t tileBase,uint32_t sat,uint32_t set=0,int16_t level=0,bool screen=false);
     void endObject(uint32_t sat,const uint8_t *ram);
     // The latest build whose records are the ones in VRAM's sprite table: the
     // RAM SAT reaches VRAM by DMA at the next graphics VBlank, so the build

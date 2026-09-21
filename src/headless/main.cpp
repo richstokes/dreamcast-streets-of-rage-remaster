@@ -24,6 +24,7 @@ sor::TitleCaption sceneTitle;
 // Enhanced-rendering preview (SOR_ENHANCED_CAPTURE=dir:first:last:step, art
 // from SOR_ART): original at 2x on the left, enhanced on the right.
 // SOR_SMOOTH=1: smooth animation (in-between poses; needs a step of 1).
+// SOR_LIGHTING=1: dynamic lighting (shadows, light from the backdrop and from fire).
 struct EnhancedCapture {
     std::string directory;unsigned first=0,last=0,step=1,frame=0;bool pending=false;
     std::vector<uint8_t> package;sor::ArtCatalog art;
@@ -52,6 +53,8 @@ void capture_enhanced(VDPState &state,VDPRenderer &renderer){
     capture.scene->enhanced=true;capture.scene->art=&capture.art;
     static const bool smooth=std::getenv("SOR_SMOOTH")&&std::getenv("SOR_SMOOTH")[0]=='1';
     capture.scene->smooth=smooth;
+    static const bool lighting=std::getenv("SOR_LIGHTING")&&std::getenv("SOR_LIGHTING")[0]=='1';
+    capture.scene->lighting=lighting;
     const bool ok=capture.scene->build(state,renderer);
     state.status_=status;
     if(!ok)return;
@@ -83,9 +86,30 @@ void capture_write(const Framebuffer &fb,int width,int height){
     if(FILE *list=fopen((capture.directory+name).c_str(),"w")){
         const auto &scene=*capture.scene;
         for(size_t i=0;i<scene.artCount;i++){const auto &d=scene.artDraws[i];const auto &f=capture.art.frames()[d.frame];
-            fprintf(list,"art %06X c%04X anchor %d,%d layer %d order %d%s size %dx%d",f.mapping,f.colours,d.x,d.y,d.layer,d.order,d.flip?" flip":"",f.w,f.h);
+            fprintf(list,"art %06X c%04X type %02X anchor %d,%d layer %d order %d%s size %dx%d",f.mapping,f.colours,d.type,d.x,d.y,d.layer,d.order,d.flip?" flip":"",f.w,f.h);
+            if(d.lit){
+                fprintf(list," ground %d",d.ground);
+                for(const auto &shadow:d.light.shadow)fprintf(list," shadow %d/%d@%d",shadow.lean,shadow.length,shadow.alpha);
+                fputs(" light",list);
+                for(const auto &c:d.light.corner)fprintf(list," %d,%d,%d+%d,%d,%d",c.scale[0],c.scale[1],c.scale[2],c.offset[0],c.offset[1],c.offset[2]);
+            }
             if(f.from)fprintf(list," in-between from %06X",f.from);
             fputc('\n',list);}
+        for(size_t i=0;i<scene.glowCount;i++){const auto &g=scene.glows[i];
+            fprintf(list,"glow %d,%d radius %dx%d colour %d,%d,%d strength %d\n",g.x,g.y,g.radiusX,g.radiusY,g.colour[0],g.colour[1],g.colour[2],g.strength);}
+        if(scene.lighting){
+            // The backdrop's light grid, a row of cells per line (rrggbb).
+            const auto &light=scene.sceneLight();
+            fprintf(list,"ambient %d,%d,%d horizon %d lights %u\n",light.ambient[0],light.ambient[1],light.ambient[2],light.horizon(),light.lightCount());
+            fputs("spill",list);
+            for(int i=0;i<=sor::SceneLight::COLS;i++)fprintf(list," %d",light.spill(i).strength);
+            fputc('\n',list);
+            for(int row=0;row<sor::SceneLight::ROWS;row++){
+                fputs("grid",list);
+                for(int column=0;column<sor::SceneLight::COLS;column++){const uint8_t *c=light.cell(row,column);fprintf(list," %02x%02x%02x",c[0],c[1],c[2]);}
+                fputc('\n',list);
+            }
+        }
         fprintf(list,"sprite cells %zu\n",scene.spriteTileCount);fclose(list);
     }
 }

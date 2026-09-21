@@ -12,8 +12,8 @@ void SpriteProbe::beginBuild(){
     b.count=0;b.emitted=0;b.serial=++serial_;
     open_=false;
 }
-void SpriteProbe::beginObject(uint16_t slot,uint8_t type,uint32_t mapping,bool flip,int16_t x,int16_t y,uint16_t tileBase,uint32_t sat,uint32_t set){
-    pending_=ProbedObject{mapping&0xFFFFFF,set&0xFFFFFF,slot,tileBase,x,y,type,0,0,flip};
+void SpriteProbe::beginObject(uint16_t slot,uint8_t type,uint32_t mapping,bool flip,int16_t x,int16_t y,uint16_t tileBase,uint32_t sat,uint32_t set,int16_t level,bool screen){
+    pending_=ProbedObject{mapping&0xFFFFFF,set&0xFFFFFF,slot,tileBase,x,y,type,0,0,flip,level,screen};
     start_=sat&0xFFFFFF;open_=true;
 }
 void SpriteProbe::endObject(uint32_t sat,const uint8_t *ram){

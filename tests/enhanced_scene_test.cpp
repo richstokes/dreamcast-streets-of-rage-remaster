@@ -197,10 +197,76 @@ int main(){
         scene->smooth=false;scene->art=&art;scene->invalidate();
     }
 
+    // Dynamic lighting: an object of the playfield is tinted per corner by the
+    // backdrop beside it (above the horizon), brighter towards the light, and
+    // casts a shadow on its ground line, leaning away from the light. An object
+    // in the air keeps its shadow on the ground. Off: nothing changes.
+    {
+        const auto place=[&](int16_t level){
+            probe.beginBuild();
+            probe.beginObject(0xB800,1,0x054206,false,128+48,128+66,0,0xFFDA00,0,level);
+            probe.endObject(0xFFDA08,ram.data());
+        };
+        place(160);
+        assert(scene->build(state,renderer)&&scene->artCount==1&&!scene->artDraws[0].lit&&!scene->artDraws[0].shadow);
+        // A white block of plane A up on the left of the object.
+        for(int i=0;i<32;i++)state.vram_[64+i]=0xFF;        // tile 2: colour 15 everywhere
+        for(int cy=0;cy<3;cy++)for(int cx=0;cx<4;cx++){const int a=state.planeABase()+(cy*state.planeWidthCells()+cx)*2;state.vram_[a]=0;state.vram_[a+1]=2;}
+        state.regs_[0]|=4;state.regs_[7]=8;                 // full colour, a grey background: shadows show on it
+        std::vector<uint16_t> unlit(640*448),lit(640*448);
+        scene->lighting=false;assert(scene->build(state,renderer));sor::raster_enhanced(*scene,state,unlit.data(),640);
+        scene->lighting=true;assert(scene->build(state,renderer)&&scene->artCount==1);
+        const auto &d=scene->artDraws[0];
+        assert(d.lit&&d.shadow&&d.ground==66);
+        assert(scene->sceneLight().lightCount()>0&&scene->sceneLight().lights()[0].x<48);   // the block is a light
+        assert(scene->sceneLight().spill(1).strength>scene->sceneLight().spill(12).strength);   // and spills on the ground below it
+        const auto &k=d.light.corner;
+        assert(k[0].scale[1]>k[1].scale[1]&&k[0].offset[1]>k[1].offset[1]);   // the left is towards the light
+        assert(k[2].scale[1]<k[0].scale[1]);                                   // the feet are darker
+        assert(d.light.shadow[0].alpha>d.light.shadow[1].alpha&&d.light.shadow[0].lean>0&&d.light.shadow[0].length>0);   // the shadow runs away from it, to the right
+        sor::raster_enhanced(*scene,state,lit.data(),640);
+        const auto red=[](uint16_t c){return c>>10&31;};
+        assert(red(lit[(66*2-1)*640+48*2+1])<red(unlit[(66*2-1)*640+48*2+1]));   // the art's far foot is darker
+        bool shadow=false;
+        for(int y=66*2;y<66*2+4;y++)for(int x=48*2-4;x<48*2+6;x++)shadow|=lit[y*640+x]!=unlit[y*640+x];
+        assert(shadow);                                                        // darkened ground below the feet
+        // In the air (the level is less than the ground's) the shadow stays on the ground
+        // line; a lone object's level counts as the ground only once it has been kept.
+        place(140);
+        assert(scene->build(state,renderer)&&scene->artDraws[0].ground==66+20);
+        // The scene cache tells lit from unlit.
+        scene->invalidate();
+        assert(scene->buildCached(state,renderer)&&!scene->reused);
+        assert(scene->buildCached(state,renderer)&&scene->reused);
+        scene->lighting=false;
+        assert(scene->buildCached(state,renderer)&&!scene->reused&&!scene->artDraws[0].lit);
+        // Emitters add their colour to the corners near them; types outside the playfield are not lit.
+        sor::CornerLight glow;
+        sor::LightEmitter fire{100,50,64,{255,128,0},200};
+        sor::SceneLight::glow(fire,40,40,90,60,glow);
+        assert(glow.corner[1].offset[0]>glow.corner[0].offset[0]&&glow.corner[1].offset[2]==0&&glow.corner[1].offset[0]>glow.corner[1].offset[1]);
+        // Fire throws embers: particles live in the scene, advance with the game's
+        // builds, keep the scene from being reused, and end.
+        {
+            sor::Particles particles;
+            for(int i=0;i<40;i++){particles.fire(100,200,0);particles.advance(1);}
+            assert(particles.alive());
+            sor::ParticleDraw draws[sor::Particles::MAX];
+            const size_t n=particles.draw(0,320,224,draws);
+            assert(n>0&&draws[0].additive&&draws[0].y<200*2);                  // above the flame's foot
+            assert(particles.draw(5000,320,224,draws)==0);                     // scrolled away
+            particles.advance(100);assert(!particles.alive());
+            particles.burst(50,100,0);assert(particles.draw(0,320,224,draws)==7);
+        }
+        assert(sor::emits_light(0x0E,0)&&!sor::emits_light(0x05,0x070B20)&&sor::emits_light(0x05,0x070C1F)&&sor::light_kind(0x05,0x070C51)==sor::LightKind::ROCKET&&!sor::in_playfield(0x0E)&&sor::in_playfield(0x01)&&sor::in_playfield(0x24)&&!sor::in_playfield(0x54));
+        for(int cy=0;cy<3;cy++)for(int cx=0;cx<4;cx++){const int a=state.planeABase()+(cy*state.planeWidthCells()+cx)*2;state.vram_[a+1]=0;}
+        state.regs_[0]&=~4;state.regs_[7]=0;place(160);scene->invalidate();
+    }
+
     // VRAM's table no longer matches the build: the object's pieces come back.
     state.vram_[state.satBase()+7]^=1;
     assert(!probe.displayed(state));
     assert(scene->build(state,renderer));
     assert(scene->artCount==0&&scene->spriteTileCount==5);
-    puts("Enhanced scene: art replaces a probed object in its SAT slot (keyed by colours, per round); other sprites stay cells; stale builds fall back; in-between poses on a pose change");
+    puts("Enhanced scene: art replaces a probed object in its SAT slot (keyed by colours, per round); other sprites stay cells; stale builds fall back; in-between poses on a pose change; dynamic lighting tints per corner and casts shadows");
 }

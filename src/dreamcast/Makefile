@@ -2,7 +2,7 @@ ROOT := ../..
 TARGET := $(ROOT)/build/native/sor.elf
 KOS_BUILD_SUBARCHS = pristine
 include $(KOS_BASE)/Makefile.rules
-SOURCES := $(wildcard $(ROOT)/build/native/upstream/*.cpp) $(wildcard *.cpp) ../render/vdp_scene.cpp ../render/sprite_probe.cpp ../render/art_catalog.cpp ../audio/audio_core.cpp ../audio/dac_driver.cpp
+SOURCES := $(wildcard $(ROOT)/build/native/upstream/*.cpp) $(wildcard *.cpp) ../render/vdp_scene.cpp ../render/sprite_probe.cpp ../render/art_catalog.cpp ../render/scene_light.cpp ../render/scene_particles.cpp ../audio/audio_core.cpp ../audio/dac_driver.cpp
 OBJS := $(SOURCES:.cpp=.o) $(ROOT)/build/native/memory.o $(ROOT)/build/native/save.o
 # Keep the synthesizer and its callbacks visible to the optimizer across files.
 # No fast-math: the PCM regression must remain byte-for-byte identical.

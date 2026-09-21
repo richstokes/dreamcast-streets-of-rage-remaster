@@ -145,7 +145,8 @@ void MegaDriveEnvironment::present(){
 void MegaDriveEnvironment::spriteProbeBuild(){sor::sprite_probe().beginBuild();}
 void MegaDriveEnvironment::spriteProbeObject(uint32_t object,uint32_t mapping,bool flip,uint16_t x,uint16_t y,uint32_t sat){
     sor::sprite_probe().beginObject(uint16_t(object),uint8_t(mem_.readByte(object)),mapping,flip,int16_t(x),int16_t(y),
-                                    uint16_t(mem_.readWord(object+0x0E)),sat,mem_.readLong(object+4));
+                                    uint16_t(mem_.readWord(object+0x0E)),sat,mem_.readLong(object+4),
+                                    int16_t(mem_.readWord(object+0x18)),mem_.readByte(object+1)&2);
 }
 void MegaDriveEnvironment::spriteProbeEnd(uint32_t sat){sor::sprite_probe().endObject(sat,mem_.state.ram);}
 void MegaDriveEnvironment::syncAudio(){
