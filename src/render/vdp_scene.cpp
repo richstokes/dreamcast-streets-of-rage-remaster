@@ -198,7 +198,7 @@ void VdpScene::enhancedSprites(const VDPState &s){
     // pieces; objects that are light shine on the others and on the ground.
     const bool lightOn=lighting&&build;
     light_.setRound(round);
-    LightEmitter emitters[16];unsigned emitterCount=0;
+    LightEmitter emitters[MAX_EMITTERS];unsigned emitterCount=0;
     int16_t pieces[VDPState::SAT_MAX_SPRITES];std::fill_n(pieces,VDPState::SAT_MAX_SPRITES,int16_t(-1));
     // Standing in the playfield (lit, casting shadows), not a light itself.
     const auto inWorld=[](const ProbedObject &obj){return !obj.screen&&in_playfield(obj.type)&&light_kind(obj.type,obj.mapping)==LightKind::NONE;};
@@ -207,7 +207,7 @@ void VdpScene::enhancedSprites(const VDPState &s){
         // The backdrop's light changes when it scrolls or its colours do; tiles
         // animating in place are caught a few builds later.
         // While it scrolls, every fourth build: light a few frames late does not show.
-        lightAge_++;
+        lightAge_+=std::max<uint32_t>(1,std::min<uint32_t>(elapsed,16));   // builds of the game's, not scenes built (host captures skip frames)
         if(!lightValid_||lightAge_>=16||(lightAge_>=4&&(!planesReused||background!=lightBackground_||!equal_bytes(colors,lightColors_,sizeof colors)))){
             light_.build(quads,planeEnd[0],planeEnd[1],colors,background,s);
             std::memcpy(lightColors_,colors,sizeof colors);lightBackground_=background;lightValid_=true;lightAge_=0;lightCollected_=false;
@@ -237,7 +237,12 @@ void VdpScene::enhancedSprites(const VDPState &s){
         // Collecting the lights divides a lot: only when the grid, the wall line or the round is another.
         const int wall=horizon_==32767?height*5/8:horizon_-WALL_ABOVE_LANES;
         if(!lightCollected_||wall!=light_.horizon()||round!=collectedRound_){light_.collect(wall);lightCollected_=true;collectedRound_=round;}
-        for(unsigned o=0;o<build->count&&emitterCount<16;o++){
+        // Lamps on the ground put a small pool of their light around them.
+        for(unsigned i=0;i<light_.lightCount()&&glowCount<MAX_GLOWS;i++){
+            const auto &l=light_.lights()[i];
+            if(l.low)glows[glowCount++]={l.x,int16_t(l.y+6),40,16,{l.colour[0],l.colour[1],l.colour[2]},uint8_t(std::min(70u,unsigned(l.power)/80))};
+        }
+        for(unsigned o=0;o<build->count&&emitterCount<MAX_EMITTERS;o++){
             const auto &obj=build->objects[o];
             if(obj.screen||!emits_light(obj.type,obj.mapping)||obj.first+obj.count>VDPState::SAT_MAX_SPRITES)continue;
             // Fire (the police's napalm) reaches far and lights the ground; fireballs less; sparks are small.
@@ -247,9 +252,9 @@ void VdpScene::enhancedSprites(const VDPState &s){
             emitter_colour(s.cram_+(record(obj.first)[4]>>5&3)*16,hasArt?art->frames()[frameOf[o]].mask:0xFFFE,e.colour);
             emitters[emitterCount++]=e;
             // It lights the wall behind it too: a wide faint glow around the flame itself.
-            if(obj.type!=0x49&&glowCount<32)
+            if(obj.type!=0x49&&glowCount<MAX_GLOWS)
                 glows[glowCount++]={e.x,e.y,int16_t(e.radius*3/4),int16_t(e.radius*3/4),{e.colour[0],e.colour[1],e.colour[2]},uint8_t(fire?26:60)};
-            if(obj.type!=0x49&&glowCount<32)
+            if(obj.type!=0x49&&glowCount<MAX_GLOWS)
                 glows[glowCount++]={int16_t(obj.x-128),int16_t(obj.y-128+std::max(0,groundLevel_-obj.level)),int16_t(e.radius),int16_t(e.radius*3/8),{e.colour[0],e.colour[1],e.colour[2]},uint8_t(e.strength/3)};
         }
         for(unsigned o=0;o<build->count;o++){
@@ -260,7 +265,9 @@ void VdpScene::enhancedSprites(const VDPState &s){
     }
     const auto lightOf=[&](int x0,int y0,int x1,int y1,int ground,const ArtTint &tint,CornerLight &out){
         light_.shade(x0,y0,x1,y1,ground,out);
-        for(unsigned i=0;i<emitterCount;i++)SceneLight::glow(emitters[i],x0,y0,x1,y1,out);
+        SceneLight::GlowSum sum;
+        for(unsigned i=0;i<emitterCount;i++)SceneLight::glow(emitters[i],x0,y0,x1,y1,sum);
+        SceneLight::addGlow(sum,out);
         SceneLight::apply(tint,out);
     };
     // Sprite masking, as in spriteLayers: a sprite at x = 0 blanks every later
@@ -268,7 +275,7 @@ void VdpScene::enhancedSprites(const VDPState &s){
     // The game hides whatever passes behind the HUD this way (a player
     // dropping in at the start of a round).
     bool seenX[256]{},masked[256]{};
-    uint8_t shade[3]{255,255,255};int shadeOwner=-1;
+    uint8_t shade[3]{255,255,255},glow[3]{};int shadeOwner=-1;
     int index=0;
     for(int ordinal=0;ordinal<VDPState::SAT_MAX_SPRITES;ordinal++){
         const uint8_t *e=record(index);
@@ -326,10 +333,10 @@ void VdpScene::enhancedSprites(const VDPState &s){
                         const auto &obj=build->objects[pieces[index]];
                         if(shadeOwner!=pieces[index]){
                             CornerLight c;lightOf(obj.x-128-16,obj.y-128-64,obj.x-128+16,obj.y-128,obj.y-128+std::max(0,groundLevel_-obj.level),ArtTint{},c);
-                            for(int k=0;k<3;k++)shade[k]=uint8_t((c.column[2][0].scale[k]+c.column[2][1].scale[k])/2);
+                            for(int k=0;k<3;k++){shade[k]=uint8_t((c.column[2][0].scale[k]+c.column[2][1].scale[k])/2);glow[k]=uint8_t((c.column[2][0].offset[k]+c.column[2][1].offset[k])/2);}
                             shadeOwner=pieces[index];
                         }
-                        std::copy(shade,shade+3,spriteTiles[spriteTileCount-1].shade);
+                        std::copy(shade,shade+3,spriteTiles[spriteTileCount-1].shade);std::copy(glow,glow+3,spriteTiles[spriteTileCount-1].glow);
                     }
                 }
         }
@@ -527,8 +534,8 @@ void raster_enhanced(const VdpScene &scene,const VDPState &s,uint16_t *out,int p
                         const int c=tileTexel(t.tile,t.hflip?7-u:u,t.vflip?7-v:v);
                         if(!c)continue;
                         uint16_t color=scene.colors[t.palette*16+c];
-                        if(t.shade[0]!=255||t.shade[1]!=255||t.shade[2]!=255)
-                            color=uint16_t(0x8000|(channel(color,0)*t.shade[0]/255)<<10|(channel(color,1)*t.shade[1]/255)<<5|channel(color,2)*t.shade[2]/255);
+                        if(t.shade[0]!=255||t.shade[1]!=255||t.shade[2]!=255||t.glow[0]||t.glow[1]||t.glow[2])
+                            color=uint16_t(0x8000|std::min(31,channel(color,0)*t.shade[0]/255+t.glow[0]*31/255)<<10|std::min(31,channel(color,1)*t.shade[1]/255+t.glow[1]*31/255)<<5|std::min(31,channel(color,2)*t.shade[2]/255+t.glow[2]*31/255));
                         for(int k=0;k<4;k++)plot((t.x+u)*2+(k&1),(t.y+v)*2+(k>>1),color);
                     }
                 }

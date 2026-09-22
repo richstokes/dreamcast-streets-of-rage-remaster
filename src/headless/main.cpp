@@ -102,7 +102,9 @@ void capture_write(const Framebuffer &fb,int width,int height){
         if(scene.lighting){
             // The backdrop's light grid, a row of cells per line (rrggbb).
             const auto &light=scene.sceneLight();
-            fprintf(list,"ambient %d,%d,%d horizon %d lights %u\n",light.ambient[0],light.ambient[1],light.ambient[2],light.horizon(),light.lightCount());
+            fprintf(list,"ambient %d,%d,%d level %d horizon %d lights %u\n",light.ambient[0],light.ambient[1],light.ambient[2],light.level(),light.horizon(),light.lightCount());
+            for(unsigned i=0;i<light.lightCount();i++){const auto &l=light.lights()[i];
+                fprintf(list,"light %d,%d power %u colour %d,%d,%d%s\n",l.x,l.y,l.power,l.colour[0],l.colour[1],l.colour[2],l.low?" lamp":"");}
             fputs("spill",list);
             for(int i=0;i<=sor::SceneLight::COLS;i++)fprintf(list," %d",light.spill(i).strength);
             fputc('\n',list);

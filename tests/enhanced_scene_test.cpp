@@ -247,9 +247,12 @@ int main(){
         scene->lighting=false;
         assert(scene->buildCached(state,renderer)&&!scene->reused&&!scene->artDraws[0].lit);
         // Emitters add their colour to the corners near them; types outside the playfield are not lit.
-        sor::CornerLight glow;
+        sor::CornerLight glow;sor::SceneLight::GlowSum sum;
         sor::LightEmitter fire{100,50,64,{255,128,0},200};
-        sor::SceneLight::glow(fire,40,40,90,60,glow);
+        sor::SceneLight::glow(fire,40,40,90,60,sum);
+        for(int i=0;i<30;i++)sor::SceneLight::glow(fire,40,40,90,60,sum);          // a crowd of flames
+        sor::SceneLight::addGlow(sum,glow);
+        assert(glow.corner(1).offset[0]<=sor::SceneLight::GLOW_MAX);              // never blown out
         assert(glow.corner(1).offset[0]>glow.corner(0).offset[0]&&glow.corner(1).offset[2]==0&&glow.corner(1).offset[0]>glow.corner(1).offset[1]);
         // Fire throws embers: particles live in the scene, advance with the game's
         // builds, keep the scene from being reused, and end.

@@ -87,17 +87,23 @@ public:
     LightSample gather(int x0,int y0,int x1,int y1) const;
     // The lights: cells above the horizon line that outshine the screen. Call after build().
     void collect(int horizon);
-    struct Light {int16_t x,y;uint16_t power;uint8_t colour[3];};
+    struct Light {int16_t x,y;uint16_t power;uint8_t colour[3];bool low;};   // low: on the ground (a lamp on the deck), not in the wall
     const Light *lights() const {return lights_;}
     unsigned lightCount() const {return lightCount_;}
     // Light spilt on the ground below the horizon, at each column boundary (strength 0-255).
     struct Spill {uint8_t colour[3],strength;};
     const Spill &spill(int boundary) const {return spill_[boundary];}
     int horizon() const {return horizon_;}
+    int level() const {return ambientLuminance_;}   // the screen's mean RMS brightness: what a light must outshine
     // The light on an object whose art (or pieces) covers [x0,x1) x [y0,y1), standing on line `ground`.
     void shade(int x0,int y0,int x1,int y1,int ground,CornerLight &) const;
-    // An emitter's light on the same box, added to the corners' offsets.
-    static void glow(const LightEmitter &,int x0,int y0,int x1,int y1,CornerLight &);
+    // Emitters' light on the same box: accumulated (any number of flames), then
+    // added to the vertices' offsets with a soft ceiling, so that a crowd of
+    // flames warms an object without blowing it out to white.
+    struct GlowSum {uint16_t at[CornerLight::COLUMNS][2][3]{};};
+    static void glow(const LightEmitter &,int x0,int y0,int x1,int y1,GlowSum &);
+    static void addGlow(const GlowSum &,CornerLight &);
+    static constexpr int GLOW_MAX=170,GLOW_KNEE=200;
     // A fade or flash of the game's applies to lit art too.
     static void apply(const ArtTint &,CornerLight &);
     uint8_t ambient[3]{255,255,255};

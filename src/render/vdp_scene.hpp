@@ -22,7 +22,7 @@ struct SpriteTile {
     int16_t x,y;
     uint8_t palette,layer,order;
     bool hflip,vflip;
-    uint8_t shade[3]{255,255,255};   // lighting: the owning object's light (scale only)
+    uint8_t shade[3]{255,255,255},glow[3]{0,0,0};   // lighting: the owning object's light (scale and added light)
 };
 struct ArtDraw {
     uint32_t frame;          // index into ArtCatalog::frames()
@@ -78,7 +78,8 @@ public:
     static constexpr unsigned CONTACT_ALPHA=110; // of 255, at the middle of the contact shadow
     // The contact shadow's width, of 256 of the art's, for an object `up` lines above the ground.
     static constexpr int contactScale(int up){return up<=0?150:up>=96?60:150-up*90/96;}
-    GlowDraw glows[32];
+    static constexpr size_t MAX_GLOWS=64,MAX_EMITTERS=24;
+    GlowDraw glows[MAX_GLOWS];
     size_t glowCount=0;
     ParticleDraw particleDraws[Particles::MAX];
     size_t particleCount=0;

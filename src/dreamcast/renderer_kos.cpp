@@ -55,7 +55,7 @@ LitPacket litPackets[80];
 size_t litPacketCount=0;
 pvr_ptr_t glowTexture=nullptr;
 pvr_poly_hdr_t glowHeader,blobHeader,spillHeader;   // light added; matter (contact shadows, smoke); light spilt on the ground
-constexpr size_t maxLightPackets=32+2*sor::SceneLight::COLS+80*(1+3+2)+sor::Particles::MAX;   // glows, spill, per object: contact, shadows, rims
+constexpr size_t maxLightPackets=sor::VdpScene::MAX_GLOWS+2*sor::SceneLight::COLS+80*(1+3+2)+sor::Particles::MAX;   // glows, spill, per object: contact, shadows, rims
 Packet lightPackets[maxLightPackets];
 size_t lightPacketCount=0,staticLightPackets=0;
 int uploadedTop[2]{256,256},uploadedBottom[2]{};
@@ -345,8 +345,13 @@ bool dc_render_vdp(VDPState &state,VDPRenderer &renderer,const sor::TitleCaption
             const auto &t=scene->spriteTiles[i];
             quad(spritePackets[spritePacketCount++],tileHeaders[t.palette*2048+t.tile],t.x*sx,t.y*sy,8*sx,8*sy,
                  (t.layer?6:3)+(79-t.order)*0.01f,t.hflip?1:0,t.vflip?1:0,t.hflip?0:1,t.vflip?0:1);
-            if(t.shade[0]!=255||t.shade[1]!=255||t.shade[2]!=255)
-                for(auto &v:spritePackets[spritePacketCount-1].vertices)v.argb=argb_of(t.shade);
+            if(t.shade[0]!=255||t.shade[1]!=255||t.shade[2]!=255||t.glow[0]||t.glow[1]||t.glow[2]){
+                // A lit object drawn from its pieces: one light for them all. The added
+                // light needs the offset colour, which the shared tile headers do not enable.
+                Packet &p=spritePackets[spritePacketCount-1];
+                p.header.cmd|=PVR_TA_CMD_SPECULAR;
+                for(auto &v:p.vertices){v.argb=argb_of(t.shade);v.oargb=argb_of(t.glow,0);}
+            }
         }
         for(size_t i=0;i<scene->artCount;i++){
             const auto &d=scene->artDraws[i];const auto &f=art.frames()[d.frame];const auto &page=art.pages()[f.page];

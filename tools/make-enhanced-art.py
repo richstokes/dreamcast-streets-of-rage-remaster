@@ -193,14 +193,23 @@ def main():
 
     frames, rounds = {}, {}
     for d in a.dirs:
-        for f in json.loads((d / 'index.json').read_text())['frames']:
+        index = json.loads((d / 'index.json').read_text())['frames']
+        # Whole-set renderings read an object's tiles from VRAM. An object whose
+        # art is streamed (the round 3 boss) has other frames' tiles there, and
+        # its set rendering contradicts the direct captures: its set-only frames
+        # are scrambled and are not used (the original pieces draw instead).
+        unreliable = {t for f in index if f.get('check') == 'contradicted' for t in f['types']}
+        for f in index:
             if not set(f['types']) & WORLD_TYPES:
+                continue
+            check = f.get('check')
+            if check == 'set_only' and set(f['types']) & unreliable:
                 continue
             key = (int(f['mapping'], 16), f['colours'], 0)
             rounds[key] = rounds.get(key, 0) | f.get('rounds', 0)
-            # The ROM extraction (players) wins; then whole-set renderings and
-            # the captures seen most.
-            rank = (2 if 'character' in f else 1 if f.get('check') in ('confirmed', 'set_only', 'direct_culled') else 0, f['seen'])
+            # The ROM extraction (players) wins; then direct captures and
+            # confirmed set renderings; then the rest, by how often seen.
+            rank = (3 if 'character' in f else 2 if check in ('confirmed', 'direct') else 1 if check in ('set_only', 'direct_culled') else 0, f['seen'])
             if key not in frames or rank > frames[key][2]:
                 frames[key] = (f, d, rank)
     # Colours seen only in passing are fades and flashes, not an object's look:

@@ -155,19 +155,32 @@ void SceneLight::collect(int horizon){
         for(int k=0;k<3;k++)columns[x][k]+=bright_[y][x][k]*w>>8;
         columns[x][3]+=w;
     }
-    // The lights: bright cells, merged two by two (every object sums over all of them).
+    // Lamps on or near the ground (from a cell above the wall line down): a cell
+    // much brighter than the screen and coloured, or very bright. Pale ground (a
+    // concrete deck) is neither. They are not part of the wall.
+    bool lamp[ROWS][COLS]{};
+    for(int y=0;y<ROWS;y++)for(int x=0;x<COLS;x++){
+        if(y*CELL+CELL/2<horizon-CELL||lightCount_==MAX_LIGHTS)continue;
+        const uint8_t *c=cell_[y][x];
+        const int bright=brightness(c),chroma=bright-std::min({c[0],c[1],c[2]});
+        if(!(bright>=ambientLuminance_+40&&(chroma>=64||bright>=200)))continue;
+        lamp[y][x]=true;
+        const unsigned power=std::min(65535u,over_[y][x]*2u);
+        lights_[lightCount_++]={int16_t(x*CELL+CELL/2),int16_t(y*CELL+CELL/2),uint16_t(power),{bright_[y][x][0],bright_[y][x][1],bright_[y][x][2]},true};
+    }
+    // The wall's lights: bright cells, merged two by two (every object sums over all of them).
     for(int y=0;y<ROWS;y+=2)for(int x=0;x<COLS;x+=2){
         uint32_t power=0,px=0,py=0,colour[3]{};
         for(int j=y;j<y+2&&j<ROWS&&j*CELL+CELL/2<horizon;j++)for(int i=x;i<x+2&&i<COLS;i++){
             const uint32_t w=over_[j][i];
-            if(w<24*24)continue;
+            if(w<24*24||lamp[j][i])continue;
             power+=w;px+=w*unsigned(i*CELL+CELL/2)>>4;py+=w*unsigned(j*CELL+CELL/2)>>4;
             for(int k=0;k<3;k++)colour[k]+=w*bright_[j][i][k]>>4;
         }
         if(!power||lightCount_==MAX_LIGHTS)continue;
         const uint32_t sixteenth=std::max<uint32_t>(power>>4,1);
         lights_[lightCount_++]={int16_t(px/sixteenth),int16_t(py/sixteenth),uint16_t(std::min<uint32_t>(power,65535)),
-                                {uint8_t(std::min<uint32_t>(255,colour[0]/sixteenth)),uint8_t(std::min<uint32_t>(255,colour[1]/sixteenth)),uint8_t(std::min<uint32_t>(255,colour[2]/sixteenth))}};
+                                {uint8_t(std::min<uint32_t>(255,colour[0]/sixteenth)),uint8_t(std::min<uint32_t>(255,colour[1]/sixteenth)),uint8_t(std::min<uint32_t>(255,colour[2]/sixteenth))},false};
     }
     for(int boundary=0;boundary<=COLS;boundary++){
         // A boundary's light: its two columns', and a little of the next ones'.
@@ -218,8 +231,9 @@ void SceneLight::shade(int x0,int y0,int x1,int y1,int ground,CornerLight &light
     uint32_t power[2]{},place[2]{},height[2]{},colour[2][3]{};
     for(unsigned i=0;i<lightCount_;i++){
         const Light &l=lights_[i];
-        const int dx=l.x-middle,up=horizon_-l.y;
-        const unsigned distance=unsigned(dx*dx+depth*depth+(up*up>>2))>>10;
+        const int dx=l.x-middle,up=l.low?0:horizon_-l.y;
+        const int dz=l.low?(ground-l.y)*3:depth;                     // a lamp on the ground: its own depth
+        const unsigned distance=unsigned(dx*dx+dz*dz+(up*up>>2))>>10;
         const unsigned w=(l.power>>4)*falloff[std::min(distance,255u)]>>8;
         if(!w)continue;
         // Left or right of the object; a light right behind it is both.
@@ -292,13 +306,21 @@ void SceneLight::shade(int x0,int y0,int x1,int y1,int ground,CornerLight &light
     light.shadow[2]={profile.skyLean,profile.skyLength,uint8_t(profile.shadowAlpha*2/3*skyShare/255)};
     if(light.shadow[2].alpha<10)light.shadow[2].alpha=0;
 }
-void SceneLight::glow(const LightEmitter &e,int x0,int y0,int x1,int y1,CornerLight &light){
+void SceneLight::glow(const LightEmitter &e,int x0,int y0,int x1,int y1,GlowSum &sum){
     for(int c=0;c<CornerLight::COLUMNS;c++)for(int row=0;row<2;row++){
         const int dx=x0+(x1-x0)*c/(CornerLight::COLUMNS-1)-e.x,dy=(row?y1:y0)-e.y,distance=isqrt(dx*dx+dy*dy);
         if(distance>=e.radius)continue;
         const int near=(e.radius-distance)*255/e.radius,amount=near*near/255*e.strength/255;
+        for(int k=0;k<3;k++)sum.at[c][row][k]=uint16_t(std::min(65535,sum.at[c][row][k]+e.colour[k]*amount/255));
+    }
+}
+void SceneLight::addGlow(const GlowSum &sum,CornerLight &light){
+    for(int c=0;c<CornerLight::COLUMNS;c++)for(int row=0;row<2;row++){
         ArtTint &tint=light.column[c][row];
-        for(int k=0;k<3;k++)tint.offset[k]=uint8_t(std::min(255,tint.offset[k]+e.colour[k]*amount/255));
+        for(int k=0;k<3;k++){
+            const int v=sum.at[c][row][k];
+            if(v)tint.offset[k]=uint8_t(std::min(255,tint.offset[k]+GLOW_MAX*v/(v+GLOW_KNEE)));
+        }
     }
 }
 void SceneLight::apply(const ArtTint &tint,CornerLight &light){

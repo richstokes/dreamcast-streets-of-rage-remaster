@@ -218,8 +218,9 @@ computes, in integers, the same values for the Dreamcast and the host preview
   two, at most 80), standing in the wall at their place and height with their
   colour and power. Neon that cycles colours changes the light with it. Every
   other tile (by pattern number: stable under scrolling) gives two texels; the
-  grid is rebuilt at most every other build while the planes scroll, and every
-  16 builds otherwise.
+  grid is rebuilt at most every fourth tick of the game while the planes
+  scroll, and every 16 ticks otherwise (ticks, not scenes built: host captures
+  that skip frames would otherwise light from a grid hundreds of frames old).
 - **The whole scene lights an object** (`SceneLight::shade`): every light
   counts, by its distance over the ground (a screen line is about three of the
   ground; the object's distance from the wall comes from its ground line), into
@@ -265,8 +266,20 @@ computes, in integers, the same values for the Dreamcast and the host preview
   `$070C47`-`$070C5B`; the car is `$070B20`-) and hit sparks (`$49`). Their
   The fire the round 6 bosses breathe is frames `$02F3B2`-`$02F42F` of their
   own type (`$57`/`$97`). Their colour (the bright entries of their CRAM line)
-  is added to the vertices of objects near them; fire and flame put a pool of
-  light on the ground and a wide faint glow on the wall behind them. (Mr. X's
+  is added to the vertices of objects near them, accumulated over every flame
+  and then passed through a soft ceiling (`GLOW_MAX`, `GLOW_KNEE`: the police
+  special's 18 flames used to stack to +255 and blow enemies out to white);
+  fire and flame put a pool of light on the ground and a wide faint glow on the
+  wall behind them. An object drawn from its pieces (art not loaded) gets the
+  same light as one flat tint, scale and added light both: the renderer sets
+  the offset-colour bit on its copy of the tile header.
+- **Lamps on the ground** (`collect`, `Light::low`): a cell from one row above
+  the wall line down that is well brighter than the screen and coloured (or
+  very bright) is a light standing on the ground at its place, not part of the
+  wall: the amber lamps along the bridge's parapet (round 4). They light
+  objects by their own distance over the ground and put a small pool around
+  themselves; pale ground (the bridge's concrete) is not coloured and does not
+  qualify. (Mr. X's
   gun flash could not be told from his other frames in the extracted art: not
   a light.)
 - **Particles** (`scene_particles.*`): embers rise from fire, the bazooka's
@@ -290,7 +303,8 @@ computes, in integers, the same values for the Dreamcast and the host preview
 - **Which objects** (`in_playfield`): players, enemies, bosses, props, weapons
   and pickups are lit and cast shadows. Scenery made of sprites (awnings,
   rain), captions and effects are left alone. An object with no art loaded is
-  drawn from its pieces with one flat light and no shadow.
+  drawn from its pieces with one flat light (scale and added light) and no
+  shadow.
 
 Cost (Flycast, 2026-09-21, lit against unlit, enhanced graphics in both):
 
@@ -314,6 +328,14 @@ line changes). Next candidates if it must be cheaper: shade objects every
 other build, fewer shadow quads when many objects are on screen. Flycast does
 not model cache misses: measure on hardware.
 
+Art, not light: the round 3 boss (type `$30`, back in rounds 5 and 8) looked
+scrambled while moving. His art is streamed like the players', so the sweeps'
+whole-set renderings read other frames' tiles from VRAM; `index.json` shows it
+(`contradicted` against the direct captures). `make-enhanced-art.py` now drops
+set-only frames of any object type with a contradiction in that run and ranks
+direct captures with confirmed ones: 1,002 frames in the set, he is drawn
+from his original pieces except in the poses captured directly.
+
 Limits: form is a cylinder's, the same for every pose (the PowerVR's bump
 mapping would need a 16-bit normal map per page, and art already fills its
 memory); the light is only what the backdrop's pixels say;
@@ -328,8 +350,8 @@ line, pools, the wall line, the lights' count, the spill and the grid.
 
 ## Current set (2026-09-21)
 
-940 frames in 67 looks (205 player frames; 379 transient looks dropped), 59
-pages, 1,258,670 package bytes. Mean palette error 3.7 of 255 per channel.
+1,002 frames in 70 looks (205 player frames; 350 transient looks dropped), 63
+pages, 1,406,417 package bytes. Mean palette error 3.7 of 255 per channel.
 PowerVR bytes with one player: 2.6-4.0 MB depending on the round (one
 character is 0.75 MB); two different characters in rounds 5 and 6 exceed the
 budget by a few hundred KB, and the least-seen pages fall back.
