@@ -292,17 +292,31 @@ computes, in integers, the same values for the Dreamcast and the host preview
   rain), captions and effects are left alone. An object with no art loaded is
   drawn from its pieces with one flat light and no shadow.
 
-Cost (Flycast, action replay, 1,611 gameplay frames, 2026-09-21): the scene
-step goes from 0.76 to 1.5 ms a frame; 1,613 VBlanks for 1,611 flips (two late
-frames) against 1,611 / 1,611 unlit; 7 audio underruns against 5. PowerVR
-memory is unchanged but for a 2 KB texture. What was slow on the way, so as
-not to repeat it: divisions per tile quad in `SceneLight::build` (4.2 ms, 24
-frames dropped); particles invalidating the scene cache (every frame rebuilt
-while one was alive). Flycast does not model cache misses: measure on hardware.
+Cost (Flycast, 2026-09-21, lit against unlit, enhanced graphics in both):
 
-Limits: light is per corner, so there is no shading by the art's form (the
-PowerVR's bump mapping would need a 16-bit normal map per page, and art
-already fills its memory); the light is only what the backdrop's pixels say;
+| replay | late frames | audio underruns | scene step |
+|---|---|---|---|
+| action replay, 1,611 gameplay frames | 1 against 0 | 5 against 5 | 1.3 against 0.76 ms |
+| all of Round 1, 26,545 gameplay frames | 80 against 16 | 474 against 133 | 1.5 against 0.68 ms |
+
+So it is not free: busy stretches of a whole round run over the frame more
+often, and the audio underruns with them. The PC sampler
+(`SOR_PC_PROFILE=1`) puts `SceneLight::build` at 1.25 % of gameplay time and
+the integer divisions at 0.75 %; the rest is more quads to build and submit.
+PowerVR memory is unchanged but for a 2 KB texture; main RAM holds about
+130 KB more of packets. What was slow on the way, so as not to repeat it:
+divisions per tile quad in `SceneLight::build` (4.2 ms, 24 frames dropped in
+the action replay); particles invalidating the scene cache (every frame
+rebuilt while one was alive); building the grid every build and collecting
+the lights every build (147 late frames and 526 underruns over Round 1; now
+every fourth build while scrolling, and lights only when the grid or the wall
+line changes). Next candidates if it must be cheaper: shade objects every
+other build, fewer shadow quads when many objects are on screen. Flycast does
+not model cache misses: measure on hardware.
+
+Limits: form is a cylinder's, the same for every pose (the PowerVR's bump
+mapping would need a 16-bit normal map per page, and art already fills its
+memory); the light is only what the backdrop's pixels say;
 shadows are darker where two cross; a sprite mask (dropping in behind the HUD)
 has no shadow; backdrops are relit only by spill and by fire's glow; steam
 and other scenery effects that are part of the planes have no particles

@@ -206,11 +206,11 @@ void VdpScene::enhancedSprites(const VDPState &s){
     if(lightOn){
         // The backdrop's light changes when it scrolls or its colours do; tiles
         // animating in place are caught a few builds later.
-        // While it scrolls, every other build: light a frame late does not show.
+        // While it scrolls, every fourth build: light a few frames late does not show.
         lightAge_++;
-        if(!lightValid_||lightAge_>=16||(lightAge_>=2&&(!planesReused||background!=lightBackground_||!equal_bytes(colors,lightColors_,sizeof colors)))){
+        if(!lightValid_||lightAge_>=16||(lightAge_>=4&&(!planesReused||background!=lightBackground_||!equal_bytes(colors,lightColors_,sizeof colors)))){
             light_.build(quads,planeEnd[0],planeEnd[1],colors,background,s);
-            std::memcpy(lightColors_,colors,sizeof colors);lightBackground_=background;lightValid_=true;lightAge_=0;
+            std::memcpy(lightColors_,colors,sizeof colors);lightBackground_=background;lightValid_=true;lightAge_=0;lightCollected_=false;
         }
         int16_t best=0;unsigned bestCount=0;
         for(unsigned o=0;o<build->count;o++){
@@ -234,7 +234,9 @@ void VdpScene::enhancedSprites(const VDPState &s){
             if(line>64&&line<height)horizon_=int16_t(std::min<int>(horizon_,horizon_==32767?line-24:line));
         }
         // The ground meets the wall some lines above the farthest anyone walks.
-        light_.collect(horizon_==32767?height*5/8:horizon_-WALL_ABOVE_LANES);
+        // Collecting the lights divides a lot: only when the grid, the wall line or the round is another.
+        const int wall=horizon_==32767?height*5/8:horizon_-WALL_ABOVE_LANES;
+        if(!lightCollected_||wall!=light_.horizon()||round!=collectedRound_){light_.collect(wall);lightCollected_=true;collectedRound_=round;}
         for(unsigned o=0;o<build->count&&emitterCount<16;o++){
             const auto &obj=build->objects[o];
             if(obj.screen||!emits_light(obj.type,obj.mapping)||obj.first+obj.count>VDPState::SAT_MAX_SPRITES)continue;

@@ -110,7 +110,8 @@ private:
     uint32_t particleRandom(){particleSeed_^=particleSeed_<<13;particleSeed_^=particleSeed_>>17;particleSeed_^=particleSeed_<<5;return particleSeed_;}
     void particlesStep(const VDPState &,const SpriteBuild *displayed);
     uint16_t lightColors_[64]{},lightBackground_=0;   // what light_ was built from
-    bool lightValid_=false;
+    bool lightValid_=false,lightCollected_=false;
+    unsigned collectedRound_=0;
     unsigned lightAge_=0;
     // The round's ground level (object +$18 of whatever stands on the ground;
     // it differs between rounds): the value most shadow casters share, or one
