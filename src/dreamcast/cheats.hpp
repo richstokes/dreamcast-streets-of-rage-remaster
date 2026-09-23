@@ -14,7 +14,7 @@ struct Settings {
     // Enhanced graphics only: in-between poses are shown when art has them.
     bool smoothAnimation = false;
     // Enhanced graphics only: shadows, and light from the backdrop and from fire.
-    bool dynamicLighting = false;
+    bool dynamicLighting = true;   // on by default (RESTORE DEFAULTS keeps it on)
     // Dynamic lighting only: rain, wet ground, haze, mist and lightning by round.
     bool weather = false;
 };

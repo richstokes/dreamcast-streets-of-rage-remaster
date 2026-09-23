@@ -24,7 +24,7 @@ sor::TitleCaption sceneTitle;
 // Enhanced-rendering preview (SOR_ENHANCED_CAPTURE=dir:first:last:step, art
 // from SOR_ART): original at 2x on the left, enhanced on the right.
 // SOR_SMOOTH=1: smooth animation (in-between poses; needs a step of 1).
-// SOR_LIGHTING=1: dynamic lighting (shadows, light from the backdrop and from fire).
+// SOR_LIGHTING=0: no dynamic lighting (shadows, light from the backdrop and from fire); on by default.
 // SOR_WEATHER=1: the round's weather (rain, wet ground, haze, mist, lightning; with lighting);
 // 2: the same, and lightning strikes two captured frames in (a step of 1 shows it die away).
 unsigned gameRound=0;   // 1-8, from the runtime
@@ -57,7 +57,7 @@ void capture_enhanced(VDPState &state,VDPRenderer &renderer){
     capture.scene->enhanced=true;capture.scene->art=&capture.art;
     static const bool smooth=std::getenv("SOR_SMOOTH")&&std::getenv("SOR_SMOOTH")[0]=='1';
     capture.scene->smooth=smooth;
-    static const bool lighting=std::getenv("SOR_LIGHTING")&&std::getenv("SOR_LIGHTING")[0]=='1';
+    static const bool lighting=!(std::getenv("SOR_LIGHTING")&&std::getenv("SOR_LIGHTING")[0]=='0');
     static const char weather=std::getenv("SOR_WEATHER")?std::getenv("SOR_WEATHER")[0]:'0';
     capture.scene->lighting=lighting&&gamePlaying;capture.scene->weather=(weather=='1'||weather=='2')&&gamePlaying;capture.scene->round=gameRound;
     if(weather=='2'&&capture.frame==capture.first+2)capture.scene->weatherStrike();

@@ -67,12 +67,12 @@ int main() {
     assert(menu.settings().enhancedGraphics);
     down(menu); right(menu); // Animation.
     assert(menu.settings().smoothAnimation);
-    down(menu); right(menu); // Lighting.
-    assert(menu.settings().dynamicLighting);
+    down(menu); right(menu); // Lighting: on by default, so this turns it off.
+    assert(!menu.settings().dynamicLighting);
     down(menu); right(menu); // Weather.
     assert(menu.settings().weather);
     down(menu); tap(menu, &PlayerControlsState::c); // Restore defaults.
-    assert(!menu.settings().enhancedGraphics && !menu.settings().smoothAnimation && !menu.settings().dynamicLighting && !menu.settings().weather);
+    assert(!menu.settings().enhancedGraphics && !menu.settings().smoothAnimation && menu.settings().dynamicLighting && !menu.settings().weather);
     assert(menu.settings().round == 1 && menu.settings().lives == 3);
     assert(!menu.settings().infiniteLives && !menu.settings().infiniteHealth && !menu.settings().infiniteSpecials);
     uint8_t before[65536]; std::memcpy(before, memory.state.ram, sizeof(before));

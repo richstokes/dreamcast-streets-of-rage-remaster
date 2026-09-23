@@ -131,8 +131,9 @@ pauses). Up/down selects, left/right or A changes, B / Start / L + R closes.
   never the game.
 - **Restore defaults.**
 
-Settings last for the session. `SOR_SMOOTH=1`, `SOR_LIGHTING=1` and
-`SOR_WEATHER=1` at build time start with those options on.
+Settings last for the session. Dynamic lighting is on by default (with enhanced
+graphics); `SOR_LIGHTING=0` at build time starts without it. `SOR_SMOOTH=1` and
+`SOR_WEATHER=1` start with those options on.
 
 ## Tests
 

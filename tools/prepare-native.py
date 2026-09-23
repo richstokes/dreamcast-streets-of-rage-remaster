@@ -163,7 +163,8 @@ if '--dreamcast' in sys.argv:
     if enhanced not in ('0','1'):raise SystemExit('SOR_ENHANCED must be 0 or 1')
     smooth=os.environ.get('SOR_SMOOTH','0')
     if smooth not in ('0','1'):raise SystemExit('SOR_SMOOTH must be 0 or 1')
-    lighting=os.environ.get('SOR_LIGHTING','0')
+    # Dynamic lighting is on by default (with enhanced graphics); SOR_LIGHTING=0 starts without it.
+    lighting=os.environ.get('SOR_LIGHTING','1')
     if lighting not in ('0','1'):raise SystemExit('SOR_LIGHTING must be 0 or 1')
     weather=os.environ.get('SOR_WEATHER','0')
     if weather not in ('0','1'):raise SystemExit('SOR_WEATHER must be 0 or 1')

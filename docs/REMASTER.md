@@ -198,9 +198,9 @@ smoother animation needs new poses. ANIMATION: SMOOTH in the options menu
 ## Dynamic lighting (shadows and light)
 
 The game has no light: a sprite has the same colours wherever it stands, and
-nothing casts a shadow. LIGHTING: DYNAMIC in the options menu (L + R;
-`SOR_LIGHTING=1` starts with it on, in the Dreamcast build and the host
-preview), with enhanced graphics, adds both. Drawing only, from the VDP's state
+nothing casts a shadow. LIGHTING: DYNAMIC in the options menu (L + R; on by
+default, in the Dreamcast build and the host preview: `SOR_LIGHTING=0` starts
+without it), with enhanced graphics, adds both. Drawing only, from the VDP's state
 and the sprite probe; the simulation and the original mode are untouched.
 
 **The PowerVR has no programmable shaders**, so there are none: everything is
@@ -349,7 +349,7 @@ has no shadow; backdrops are relit only by spill and by fire's glow; steam
 and other scenery effects that are part of the planes have no particles
 (nothing in the sprite table says where they are).
 
-Check it on the host: `SOR_LIGHTING=1` with `SOR_ENHANCED_CAPTURE`; each frame's
+Check it on the host: `SOR_ENHANCED_CAPTURE` (lighting is on unless `SOR_LIGHTING=0`); each frame's
 text file lists the corners' light, shadows (lean/length@alpha), the ground
 line, pools, the wall line, the lights' count, the spill and the grid.
 
@@ -437,7 +437,7 @@ planes scroll; the haze per line is a table, not a call per quad). Memory: two
 8 KB textures in PowerVR memory; about 25 KB more of packets in main RAM. If
 it must be cheaper: fewer smears and shafts, one rain sheet, the mist's front
 veil dropped. Check it on the host: `SOR_WEATHER=1` (or `2`: lightning strikes two
-captured frames in, for a step of 1) with `SOR_LIGHTING=1` and
+captured frames in, for a step of 1) with lighting on (the default) and
 `SOR_ENHANCED_CAPTURE`; each frame's text file lists the profile, the flash,
 the weather's time and every quad. Note that a capture step over 30 frames
 resets the weather's clock (as it does the particles), so stills show the
