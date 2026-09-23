@@ -1,89 +1,20 @@
-# Prerequisites
-*.d
-
-# Compiled Object files
-*.slo
-*.lo
+# Build products
 *.o
-*.obj
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Linker files
-*.ilk
-
-# Debugger Files
-*.pdb
-
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
-*.so.*
-
-
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
-*.lai
-*.la
+*.d
 *.a
-*.lib
-
-# Executables
-*.exe
-*.out
-*.app
-
-# Build directories
-build/
-Build/
-build-*/
-
-# CMake generated files
-CMakeFiles/
-CMakeCache.txt
-cmake_install.cmake
-Makefile
-install_manifest.txt
-compile_commands.json
-
-# Temporary files
-*.tmp
-*.log
-*.bak
-*.swp
-
-# vcpkg
-vcpkg_installed/
-
-# debug information files
-*.dwo
-
-# test output & cache
-Testing/
-.cache/
-
-# Research clones, user-owned game data, and locally generated derivatives.
-/research/
-/local/
-/dist/
 *.elf
 *.cdi
-*.gdi
+*.log
+build/
+dist/
+__pycache__/
+.pytest_cache/
+.DS_Store
+
+# Your game data and the research clones: never committed.
+/original_rom/
+/research/
+/local/
 *.rom
 *.bin
 *.pak
-*.vms
-*.vmi
-__pycache__/
-.pytest_cache/
-!src/dreamcast/Makefile
-
-/original_rom/
-/orignal_rom/
-.DS_Store
