@@ -49,7 +49,8 @@ specials.
 - The enhanced art is generated from the original frames; hand-drawn art is
   not started. Smooth animation has few in-betweens yet.
 - Full speed with no audio dropouts in Flycast. **Not yet tested on a real
-  Dreamcast.**
+  Dreamcast** — I have ordered one and will try it when it arrives; that said,
+  feedback is welcome if someone wants to try it beforehand.
 
 ## What you need
 
