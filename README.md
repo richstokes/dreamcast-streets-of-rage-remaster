@@ -8,19 +8,15 @@ You need your own copy of the ROM. Nothing derived from it is in this repository
 
 ## Features
 
-**The original game, natively.** The 68000 code is statically translated to
-C++ and runs on the SH-4; there is no emulator on the disc. Original music and
-sound effects (YM2612, PSG and the Z80 drum/voice driver), original timing
-including the slowdown, two players, all eight rounds. 640×480 output.
+**The original game**, statically translated from the 68000 code to run
+natively on the SH-4, with the original music, sound effects and timing, two
+players and all eight rounds. 640×480 output.
 
-**Enhanced graphics**, switchable at any time and never touching the game
-itself ([docs/REMASTER.md](docs/REMASTER.md)):
+**Enhanced graphics**, switchable at any time ([docs/REMASTER.md](docs/REMASTER.md)):
 
 - **2x art** for every player, enemy, boss, weapon, item and effect in all
-  eight rounds (940 frames), with anti-aliased edges and continuous shading in
-  place of the 16-colour dithering. It follows the game's fades and flashes and
-  is loaded per round to fit video memory. Any frame can be replaced with your
-  own hand-drawn art.
+  eight rounds, with anti-aliased edges and smooth shading. Any frame can be
+  replaced with your own hand-drawn art.
 - **Dynamic lighting.** Shop windows, neon, lamps and fire in the backdrop
   become light sources. Characters are lit from the side the light is on, with
   shading across their body and a rim of light on the lit edge; fire, the
@@ -36,11 +32,10 @@ itself ([docs/REMASTER.md](docs/REMASTER.md)):
   shadow. Rain on the street, the bridge and the lift; steam in the factory;
   nothing indoors.
 - **Smooth animation**: in-between poses between the game's own animation
-  frames, where the art package has them.
-- A remastered title screen with period-style lettering.
+  frames.
+- A remastered title screen.
 
-Each of these is its own switch in the options menu. Everything is done with
-the PowerVR's fixed pipeline: there are no shaders on a Dreamcast.
+Each of these is its own switch in the options menu.
 
 **Cheats**: start at any round, choose lives, infinite lives, health and
 specials.
@@ -51,9 +46,8 @@ specials.
   boss, weapons, continue/game over and two-player play
   ([docs/FIDELITY_GATE.md](docs/FIDELITY_GATE.md)). Rounds 2–8 run to the
   ending but have not been compared with the original.
-- The enhanced art is generated from the original frames by an offline redraw;
-  hand-drawn art is not started. Smooth animation has the runtime but few
-  in-betweens, because generating them automatically did not work for this art.
+- The enhanced art is generated from the original frames; hand-drawn art is
+  not started. Smooth animation has few in-betweens yet.
 - Full speed with no audio dropouts in Flycast. **Not yet tested on a real
   Dreamcast.**
 
@@ -76,13 +70,10 @@ specials.
   to make the disc image. Expected at `build/mkdcdisc/build/mkdcdisc`, or set
   `MKDCDISC`.
 - **Python 3.14** (`python3.14` on the path, or set `PYTHON`) for code generation.
-- **Somewhere to run it**: the Flycast emulator, or a Dreamcast with a GDEMU
-  (or similar ODE) or a burned CD-R. The image is a normal self-booting CDI,
-  but so far it has only been run in Flycast, so expect the first hardware run
-  to turn things up ([docs/HARDWARE_TESTS.md](docs/HARDWARE_TESTS.md)).
+- **Flycast**, or a Dreamcast with a GDEMU (or similar) or a burned CD-R.
   `tools/run-flycast.sh` launches Flycast on macOS, looking for `Flycast.app`
   in `~/.local/share/dreamcast/flycast/` then `/Applications/` (set
-  `FLYCAST_BIN`); elsewhere, open the image in Flycast yourself.
+  `FLYCAST_BIN`).
 
 To see what is set up and what is missing, with where to get each thing:
 
@@ -90,10 +81,8 @@ To see what is set up and what is missing, with where to get each thing:
 tools/check-requirements.sh all
 ```
 
-Every build script runs the same checks for what it needs before starting. The
-first build also clones the research repositories listed in
-`tools/upstream-lock.json` (the SoR decompilation and Genesis Plus GX) into
-`research/`.
+The build scripts run the same checks. The first build also clones the research
+repositories listed in `tools/upstream-lock.json` into `research/`.
 
 ## Build a disc image
 
@@ -101,20 +90,18 @@ first build also clones the research repositories listed in
 ./build-cdi.sh
 ```
 
-This checks the ROM, generates the game code, cross-compiles, and writes
-`dist/sor.cdi`. Copy it to your GDEMU card, burn it, or load it in Flycast — on
-macOS:
+This writes `dist/sor.cdi`. Copy it to your GDEMU card, burn it, or load it in
+Flycast; on macOS:
 
 ```bash
 ./tools/run-flycast.sh dist/sor.cdi
 ```
 
-`dist/` contains your game data. Keep it out of git and don't share it.
+`dist/` contains your game data; don't share it.
 
 ## Quick run without a disc
 
-For development there is a faster loop that builds an ELF with the ROM embedded
-and launches Flycast directly (macOS):
+Builds an ELF with the ROM embedded and launches it in Flycast (macOS):
 
 ```bash
 ./build-and-run.sh
@@ -125,9 +112,7 @@ output goes to `build/logs/flycast.log`.
 
 ## Enhanced graphics
 
-The enhanced art package is built from your ROM, not downloaded. It needs the
-host build, a Genesis Plus GX reference core and numpy + Pillow, and takes
-about two minutes:
+The art package is built from your ROM (about two minutes):
 
 ```bash
 tools/build-headless.sh
@@ -139,9 +124,7 @@ tools/make-art-set.sh
 Once `build/art/SORART.PAK` exists, `build-cdi.sh` puts it on the disc and
 `build-and-run.sh` embeds it in the ELF. The disc build starts in original
 graphics unless built with `SOR_ENHANCED=1`; `build-and-run.sh` starts enhanced
-unless `SOR_ENHANCED=0`. Either way the options menu switches at any time.
-Without the package the game plays in original graphics only. Details, and how
-to override frames with your own art: [docs/REMASTER.md](docs/REMASTER.md).
+unless `SOR_ENHANCED=0`. Using your own art: [docs/REMASTER.md](docs/REMASTER.md).
 
 ## Controls
 
@@ -161,11 +144,8 @@ pauses). Up/down selects, left/right or A changes, B / Start / L + R closes.
 
 - **Start round** (1–8) and **starting lives** (1–9), for the next new game.
 - **Infinite lives / health / specials**, for both players.
-- **Graphics**: original or enhanced. **Animation**: smooth adds in-between
-  poses where the art package has them. **Lighting**: dynamic adds light and
-  shadows from the backdrop. **Weather**: rain, wet ground, haze, mist and
-  lightning by round, with dynamic lighting. These change only what is drawn,
-  never the game.
+- **Graphics** (original / enhanced), **Animation** (original / smooth),
+  **Lighting** (original / dynamic), **Weather** (off / on).
 - **Restore defaults.**
 
 Settings last for the session. Dynamic lighting is on by default (with enhanced
@@ -181,10 +161,10 @@ python3 tools/test-generation.py
 ./tools/test-scene.sh
 ```
 
-Comparisons against the original ROM, benchmarks and the full method are in
+Comparisons against the original ROM and benchmarks:
 [docs/REFERENCE.md](docs/REFERENCE.md), [docs/CADENCE.md](docs/CADENCE.md),
-[docs/AUDIO.md](docs/AUDIO.md) and [docs/OPTIMIZATION_LOG.md](docs/OPTIMIZATION_LOG.md).
-Progress notes: [docs/PROGRESS.md](docs/PROGRESS.md). Hardware checklist:
+[docs/AUDIO.md](docs/AUDIO.md), [docs/OPTIMIZATION_LOG.md](docs/OPTIMIZATION_LOG.md).
+Progress: [docs/PROGRESS.md](docs/PROGRESS.md). Hardware checklist:
 [docs/HARDWARE_TESTS.md](docs/HARDWARE_TESTS.md).
 
 ## Licence
