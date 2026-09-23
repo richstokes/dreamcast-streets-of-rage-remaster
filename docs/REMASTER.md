@@ -7,7 +7,7 @@ art. The art comes from an offline pipeline that redraws the original frames;
 **it is not hand-drawn**, and any frame can be overridden with hand-made art.
 Backgrounds, the HUD and text are unchanged.
 
-Read this before touching `src/render/art_catalog.*`, `sprite_probe.*`, `scene_light.*`, `scene_particles.*`,
+Read this before touching `src/render/art_catalog.*`, `sprite_probe.*`, `scene_light.*`, `scene_particles.*`, `scene_weather.*`,
 `VdpScene::enhancedSprites`, `src/headless/extract_frames.cpp`, the loader in
 `src/dreamcast/renderer_kos.cpp` or the art tools. Everything derived from the
 ROM (frames, sheets, packages) stays under `build/`, out of git.
@@ -26,8 +26,9 @@ Review the result in `build/art/sheets/<character or type-XX>.png` (original
 pixel-doubled above, generated below), `build/art/frames/*.png` (every frame)
 and `build/art/SORART.json` (frame counts, palette error, PowerVR bytes per
 round). L + R in game opens the options menu; GRAPHICS switches modes and
-ANIMATION turns on in-between poses (see Smooth animation) and LIGHTING turns
-on shadows and light (see Dynamic lighting).
+ANIMATION turns on in-between poses (see Smooth animation), LIGHTING turns
+on shadows and light (see Dynamic lighting) and WEATHER the round's rain, wet
+ground, haze, mist and lightning (see Weather).
 
 Host preview of a replay, original left and enhanced right, with a text file
 per frame listing the art drawn:
@@ -300,6 +301,10 @@ computes, in integers, the same values for the Dreamcast and the host preview
   above the farthest ground line anything has stood on in the round (pale
   ground behind an object must not count as a light). The probe records `+$18`
   (`level`) and `+$01` bit 1 (`screen`: placed on the screen, not the world).
+- **Only in play**: the runtime says whether a round is being played (mode
+  `$16`); outside it (the title, menus, cutscenes, the ending) the renderer
+  turns the lighting off, so no pool of light or shadow reaches the character
+  select.
 - **Which objects** (`in_playfield`): players, enemies, bosses, props, weapons
   and pickups are lit and cast shadows. Scenery made of sprites (awnings,
   rain), captions and effects are left alone. An object with no art loaded is
@@ -347,6 +352,96 @@ and other scenery effects that are part of the planes have no particles
 Check it on the host: `SOR_LIGHTING=1` with `SOR_ENHANCED_CAPTURE`; each frame's
 text file lists the corners' light, shadows (lean/length@alpha), the ground
 line, pools, the wall line, the lights' count, the spill and the grid.
+
+## Weather (rain, wet ground, haze, mist, lightning)
+
+The game has no weather either. WEATHER: ON in the options menu (`SOR_WEATHER=1`
+starts with it on, in the Dreamcast build and the host preview), with dynamic
+lighting, gives each round an atmosphere from a profile of its own. Drawing
+only, like the lighting, and built from what the lighting already knows: the
+wall line, the lights in the wall, and the art standing on the ground.
+`src/render/scene_weather.*` holds the profiles, the two textures and the
+quads; `VdpScene` ticks it with the particles; the renderer and `raster_enhanced`
+draw the same quads.
+
+- **Profiles** (`weather_profile`): per round, how much rain, how wet the
+  ground is, the haze and its colour, the mist, the lights' shafts and how often
+  lightning strikes. Rain falls on the street (1), the bridge (4) and the lift
+  (7); the street and the bridge are wet and stormy; the inner city (2), the
+  beach (3) and the bridge are hazy, the beach and the bridge misty, the
+  factory (6) full of steam; the ship (5) and the headquarters (8) are rooms
+  and get nothing. Which rounds get what is taste: the table is the place to
+  change it.
+- **Rain**: two sheets of a 64 x 64 texture of eleven long, thin streaks
+  fading at both ends (generated at start-up, `weather_texture`; wraps),
+  scrolled by the weather's time: one in front of everything (big streaks,
+  fast, leaning with the wind), one behind the characters and in front of the
+  wall (smaller, slower, fainter, moving with the world a little), both added
+  to the picture. Not particles: ninety-six drops would
+  look like snow, and the particles are busy with fire and dust. The particles'
+  splashes on the ground come with it, as they do for the game's own rain
+  (type `$17`).
+- **Wet ground**: the art of each object standing on the ground drawn again
+  below its feet, flipped, dimmed and fading away from them (`REFLECT_LENGTH`
+  of its height, the shadow headers: no texture memory), mirrored in the ground
+  line so a jumping object's reflection drops away from it, fainter with
+  height; and the wall's strongest lights (up to twelve) smeared down the
+  ground below them: two halves per light, full in the middle and nothing at
+  the sides, widening and fading, broken into wet patches by the mist's noise
+  texture, which moves with the world. Flat quads read as coloured blocks on
+  the street; this was the first thing to look wrong. Both under the sprites,
+  over the shadows.
+- **Haze** (`weather_fog`): the backdrop's tiles take the fog's colour by their
+  height, full 80 lines above the wall line and none 40 lines below it, the far
+  plane (B) fully and the near one (A) five eighths: vertex colour (what is
+  kept) and offset colour (the fog added) on the tile quads themselves, so no
+  extra quads and nothing per pixel. The tile packets are rebuilt when the
+  round or the wall line changes (`packetsFogKey`). The HUD's window plane is
+  never hazed. The PowerVR's own table fog was not used: it works on z, and
+  here z is the Genesis priority layer, not distance.
+- **Mist**: sheets of soft tileable value noise (the second texture), in the
+  fog's colour towards white, covering: two pairs at the ground line (peaking
+  16 lines below the wall line, gone 70 below it) at different scales and
+  drifts so that the pattern does not show, and a faint veil in front of
+  everything, thicker low down. They drift with time and with the camera at
+  less than its speed, so they read as mid-distance.
+- **Shafts and halos**: with fog, each light in the wall above the wall line
+  throws a fan of its colour (towards the fog's) down to the ground line, added,
+  fading downwards (up to twelve); and glows through the fog with a pool of the
+  existing radial texture at its place.
+- **Lightning** (`Weather::advance`): a strike every 500-1,900 ticks scaled by
+  the profile, sometimes twice; a flash held two ticks then dying away by three
+  quarters a tick. While it shows: a white-blue quad added over everything, and
+  the round's light profile changed for the build (`flashProfile_`): the sky
+  is the light, its shadow takes over with a lean from the bolt, so every
+  shadow swings under the flash. A flash is another scene (`builtFlash_`): the
+  cache is not reused while it changes, a few frames per strike.
+- **Only in play**: the runtime says whether a round is being played (mode
+  `$16`: not the title, the menus, cutscenes or the ending) and the renderer
+  turns the weather off outside it, so no rain or haze reaches the title or the
+  character select. Within a round it draws once the game has displayed a
+  sprite-table build; while the game is paused (no build for 30 frames) the
+  rain stands still rather than vanishing.
+- **Where it draws** (depths): between the planes (1.5, unused so far), over
+  the ground under the sprites (2.92 reflections, 2.95 sheets, smears, shafts),
+  or over everything under the particles (6.9). Nothing over the HUD's 36 lines
+  but the flash. The quads are rebuilt every frame like the particles, without
+  touching the scene cache.
+
+Cost (Flycast, 2026-09-22, the action replay of 1,611 gameplay frames, weather
+against none, enhanced graphics and lighting in both): 6 late frames against
+2, audio underruns 3 against 2, p95 frame 22 against 20.5 ms; the scene step
+1.41 against 1.35 ms and building the commands 1.0 against 0.6 ms (the weather
+quads and reflections every frame, the haze on every tile packet while the
+planes scroll; the haze per line is a table, not a call per quad). Memory: two
+8 KB textures in PowerVR memory; about 25 KB more of packets in main RAM. If
+it must be cheaper: fewer smears and shafts, one rain sheet, the mist's front
+veil dropped. Check it on the host: `SOR_WEATHER=1` (or `2`: lightning strikes two
+captured frames in, for a step of 1) with `SOR_LIGHTING=1` and
+`SOR_ENHANCED_CAPTURE`; each frame's text file lists the profile, the flash,
+the weather's time and every quad. Note that a capture step over 30 frames
+resets the weather's clock (as it does the particles), so stills show the
+rain at time 0.
 
 ## Current set (2026-09-21)
 

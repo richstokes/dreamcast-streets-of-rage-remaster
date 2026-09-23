@@ -60,15 +60,16 @@ void draw(const Menu &model, Framebuffer &fb) {
     text(&fb, pixel, 192, 29, "SESSION ONLY", 4, 5, 6);
     const auto &s = model.settings();
     const char *labels[] = {"START ROUND", "STARTING LIVES", "INFINITE LIVES", "INFINITE HEALTH",
-                            "INFINITE SPECIALS", "GRAPHICS", "ANIMATION", "LIGHTING",
+                            "INFINITE SPECIALS", "GRAPHICS", "ANIMATION", "LIGHTING", "WEATHER",
                             "RESTORE DEFAULTS", "RETURN TO GAME"};
     const char round[] = {char('0' + s.round), ' ', '/', ' ', '8', 0};
     const char lives[] = {char('0' + s.lives), 0};
     const char *values[] = {round, lives, s.infiniteLives ? "ON" : "OFF", s.infiniteHealth ? "ON" : "OFF",
                            s.infiniteSpecials ? "ON" : "OFF", s.enhancedGraphics ? "ENHANCED" : "ORIGINAL",
-                           s.smoothAnimation ? "SMOOTH" : "ORIGINAL", s.dynamicLighting ? "DYNAMIC" : "ORIGINAL", "", ""};
-    for (unsigned row = 0; row < 10; ++row) {
-        const int y = 48 + row * 13;
+                           s.smoothAnimation ? "SMOOTH" : "ORIGINAL", s.dynamicLighting ? "DYNAMIC" : "ORIGINAL",
+                           s.weather ? "ON" : "OFF", "", ""};
+    for (unsigned row = 0; row < 11; ++row) {
+        const int y = 46 + row * 12;
         if (model.row() == row) {
             rect(fb, 23, y - 3, 275, 12, 0, 3, 4);
             text(&fb, pixel, 28, y, ">", 7, 7, 7);
@@ -81,6 +82,7 @@ void draw(const Menu &model, Framebuffer &fb) {
         "BOTH PLAYERS / ROUNDS 1-7 ONLY", "PRESENTATION ONLY / SAME GAME",
         "IN-BETWEEN POSES / ENHANCED GRAPHICS ONLY",
         "SHADOWS AND LIGHT / ENHANCED GRAPHICS ONLY",
+        "RAIN FOG AND LIGHTNING / DYNAMIC LIGHTING ONLY",
         "A: RESET ALL CHEAT SETTINGS", "A: RETURN / SETTINGS APPLY"};
     text(&fb, pixel, 23, 183, help[model.row()], 5, 6, 7);
     text(&fb, pixel, 23, 199, "UP/DOWN: SELECT  LEFT/RIGHT: CHANGE", 5, 6, 7);

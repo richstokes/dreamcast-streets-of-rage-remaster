@@ -3,7 +3,7 @@
 set -euo pipefail
 root=$(cd -- "$(dirname -- "$0")" && pwd)
 rom=${1:-${SOR_ROM:-"$root/original_rom/Bare Knuckle - Ikari no Tetsuken ~ Streets of Rage (World).md"}}
-python3 "$root/tools/rom.py" "$rom" --require-known
+"$root/tools/check-requirements.sh" "rom=$rom" python git kos mkdcdisc
 if [ ! -d "$root/research/StreetsOfRageProject/RageDecompiler/tools" ]; then
     python3 "$root/tools/bootstrap.py"
 fi

@@ -22,6 +22,7 @@
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 rom=${1:-${SOR_ROM:-"$root/original_rom/Bare Knuckle - Ikari no Tetsuken ~ Streets of Rage (World).md"}}
+"$root/tools/check-requirements.sh" "rom=$rom" art
 py="$root/build/tools-venv/bin/python3"; core="$root/build/gpgx-profile/genesis_plus_gx_libretro.dylib"
 headless="$root/build/headless/sor-headless"
 work="$root/build/art-set"; frames="$root/build/frames-set"

@@ -4,6 +4,7 @@
 # build/gpgx-profile/genesis_plus_gx_libretro.dylib, used with genesis_reference.py --profile.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+"$root/tools/check-requirements.sh" host research
 rm -rf "$root/build/gpgx-profile"
 cp -R "$root/research/Genesis-Plus-GX" "$root/build/gpgx-profile"
 cat "$root/tools/gpgx-profile-hook.c" >> "$root/build/gpgx-profile/core/debug/cpuhook.c"

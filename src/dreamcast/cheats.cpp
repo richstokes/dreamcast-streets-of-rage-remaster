@@ -32,7 +32,7 @@ void refill(SystemMemory &memory, uint32_t address, unsigned count, uint32_t hud
 }
 
 void Menu::input(const PlayerControlsState &pad) {
-    constexpr unsigned rows = 10;
+    constexpr unsigned rows = 11;
     const unsigned held = buttons(pad), pressed = held & ~previous_;
     previous_ = held;
     if (!pad.connected) return;
@@ -57,10 +57,11 @@ void Menu::input(const PlayerControlsState &pad) {
     case 5: settings_.enhancedGraphics = !settings_.enhancedGraphics; break;
     case 6: settings_.smoothAnimation = !settings_.smoothAnimation; break;
     case 7: settings_.dynamicLighting = !settings_.dynamicLighting; break;
-    case 8:
+    case 8: settings_.weather = !settings_.weather; break;
+    case 9:
         if (confirm) { settings_ = {}; overrideRound_ = overrideLives_ = true; }
         break;
-    case 9: if (confirm) visible_ = false; break;
+    case 10: if (confirm) visible_ = false; break;
     }
 }
 

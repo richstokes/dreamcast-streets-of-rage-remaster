@@ -1,11 +1,16 @@
 #!/bin/sh
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+"$root/tools/check-requirements.sh" flycast
 flycast=${FLYCAST_BIN:-"$HOME/.local/share/dreamcast/flycast/Flycast.app/Contents/MacOS/Flycast"}
 if [ ! -x "$flycast" ]; then flycast=/Applications/Flycast.app/Contents/MacOS/Flycast; fi
 mkdir -p "$root/build/logs"
 image=${1:-$root/dist/sor.cdi}
 case "$image" in /*) ;; *) image="$PWD/$image" ;; esac
+if [ ! -f "$image" ]; then
+    echo "No image at $image. Build one first: ./build-cdi.sh (disc) or ./build-and-run.sh (test ELF)." >&2
+    exit 1
+fi
 if [ "$(uname -s)" = Darwin ]; then
     # Best effort only: Flycast may override these flags and show its window.
     app=${flycast%/Contents/MacOS/*}

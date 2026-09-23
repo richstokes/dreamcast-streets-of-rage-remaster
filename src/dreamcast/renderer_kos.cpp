@@ -35,6 +35,7 @@ static_assert(sizeof(Packet)==160);
 Packet packets[maxTileQuads+2];
 size_t packetCount=0;
 bool packetsValid=false,packetsEnhanced=false;
+uint32_t packetsFogKey=0;   // the haze the tile packets carry: none, or the round and the wall line
 // Enhanced graphics: hardware sprite cells and replacement-art frames, one
 // quad each, rebuilt when the scene changes (docs/REMASTER.md).
 constexpr size_t maxSpritePackets=sor::VdpScene::MAX_SPRITE_TILES+80;
@@ -55,7 +56,11 @@ LitPacket litPackets[80];
 size_t litPacketCount=0;
 pvr_ptr_t glowTexture=nullptr;
 pvr_poly_hdr_t glowHeader,blobHeader,spillHeader;   // light added; matter (contact shadows, smoke); light spilt on the ground
-constexpr size_t maxLightPackets=sor::VdpScene::MAX_GLOWS+2*sor::SceneLight::COLS+80*(1+3+2)+sor::Particles::MAX;   // glows, spill, per object: contact, shadows, rims
+// Weather (src/render/scene_weather.hpp): rain streaks and mist, 64 x 64
+// alpha textures that wrap; the rain is added, the mist covers.
+pvr_ptr_t weatherTextures[2]{};
+pvr_poly_hdr_t streakHeader,noiseHeader;
+constexpr size_t maxLightPackets=sor::VdpScene::MAX_GLOWS+2*sor::SceneLight::COLS+80*(1+3+2+1)+sor::Particles::MAX+sor::MAX_WEATHER_QUADS;   // glows, spill, per object: contact, shadows, rims, reflection; particles; weather
 Packet lightPackets[maxLightPackets];
 size_t lightPacketCount=0,staticLightPackets=0;
 int uploadedTop[2]{256,256},uploadedBottom[2]{};
@@ -169,10 +174,11 @@ void load_selection(unsigned round,unsigned characters,bool enhanced,bool smooth
             (unsigned long)pvr_mem_available(),(unsigned long long)((timer_us_gettime64()-start)/1000));
     if(!replay_active())sor_flush_log();
 }
-unsigned gameRound=1,gameCharacters=0;
+unsigned gameRound=1,gameCharacters=0;bool gamePlaying=false;
 }
 // Followed outside play too: the round intro is when a round's art should load.
-void dc_renderer_game_state(unsigned round,unsigned characters){gameRound=round;gameCharacters=characters;}
+// `playing`: in a round (not the title, menus, cutscenes or the ending): the weather's.
+void dc_renderer_game_state(unsigned round,unsigned characters,bool playing){gameRound=round;gameCharacters=characters;gamePlaying=playing;}
 void dc_renderer_init(){
     scene=std::make_unique<sor::VdpScene>();
     tiles=pvr_mem_malloc(2048*32);
@@ -221,11 +227,29 @@ void dc_renderer_init(){
         c.depth.comparison=PVR_DEPTHCMP_GEQUAL;c.depth.write=PVR_DEPTHWRITE_DISABLE;
         pvr_poly_compile(&spillHeader,&c);
     }
+    for(int t=0;t<2;t++){
+        // Weather: rain streaks (added) and mist (covering), white with the texture's alpha.
+        constexpr int size=sor::WEATHER_TEXTURE;
+        weatherTextures[t]=pvr_mem_malloc(size*size*2);
+        if(!weatherTextures[t])throw std::runtime_error("PowerVR weather texture allocation failed");
+        alignas(32) static uint16_t pixels[size*size];
+        const uint8_t *alpha=sor::weather_texture(t?sor::WeatherTexture::NOISE:sor::WeatherTexture::STREAK);
+        for(int i=0;i<size*size;i++)pixels[i]=uint16_t((alpha[i]>>4)<<12|0xFFF);
+        pvr_txr_load_ex(pixels,weatherTextures[t],size,size,PVR_TXRLOAD_16BPP);
+        pvr_poly_cxt_t c;
+        pvr_poly_cxt_txr(&c,PVR_LIST_TR_POLY,PVR_TXRFMT_ARGB4444,size,size,weatherTextures[t],PVR_FILTER_BILINEAR);
+        c.txr.env=PVR_TXRENV_MODULATEALPHA;
+        c.blend.src=PVR_BLEND_SRCALPHA;c.blend.dst=t?PVR_BLEND_INVSRCALPHA:PVR_BLEND_ONE;
+        c.gen.culling=PVR_CULLING_NONE;
+        c.depth.comparison=PVR_DEPTHCMP_GEQUAL;c.depth.write=PVR_DEPTHWRITE_DISABLE;
+        pvr_poly_compile(t?&noiseHeader:&streakHeader,&c);
+    }
     sor_log("PowerVR indexed tile cache: 65536 bytes; sprite layers: 524288 bytes\n");
     load_art();
     sor::cheats::menu.setEnhancedGraphics(SOR_DEFAULT_ENHANCED);
     sor::cheats::menu.setSmoothAnimation(SOR_DEFAULT_SMOOTH);
     sor::cheats::menu.setDynamicLighting(SOR_DEFAULT_LIGHTING);
+    sor::cheats::menu.setWeather(SOR_DEFAULT_WEATHER);
     if(!replay_active())sor_flush_log();   // show start-up (art loading) at once
 }
 void dc_renderer_shutdown(){
@@ -233,6 +257,7 @@ void dc_renderer_shutdown(){
     for(auto p:spriteTexture)if(p)pvr_mem_free(p);
     if(cheatHintTexture)pvr_mem_free(cheatHintTexture);
     if(glowTexture)pvr_mem_free(glowTexture);
+    for(auto p:weatherTextures)if(p)pvr_mem_free(p);
     for(auto p:titleTextures)if(p)pvr_mem_free(p);
     for(auto p:artTextures)if(p)pvr_mem_free(p);
     artTextures.clear();artHeaders.clear();shadowHeaders.clear();rimHeaders.clear();art=sor::ArtCatalog();
@@ -243,7 +268,9 @@ bool dc_render_vdp(VDPState &state,VDPRenderer &renderer,const sor::TitleCaption
     const auto &settings=sor::cheats::menu.settings();
     load_selection(gameRound,gameCharacters,settings.enhancedGraphics,settings.smoothAnimation);
     scene->enhanced=settings.enhancedGraphics;scene->smooth=settings.smoothAnimation;scene->art=&art;
-    scene->lighting=settings.enhancedGraphics&&settings.dynamicLighting;scene->round=gameRound;
+    // Light and weather only in a round: the title, menus and cutscenes are drawn as they are.
+    scene->lighting=settings.enhancedGraphics&&settings.dynamicLighting&&gamePlaying;scene->round=gameRound;
+    scene->weather=scene->lighting&&settings.weather&&gamePlaying;
     if(!scene->buildCached(state,renderer)||scene->count>maxTileQuads)return false;
     const bool enhanced=scene->enhanced;
     const bool same=scene->reused;
@@ -298,18 +325,37 @@ bool dc_render_vdp(VDPState &state,VDPRenderer &renderer,const sor::TitleCaption
         uploadedTop[p]=scene->spriteTop[p];uploadedBottom[p]=scene->spriteBottom[p];
     }
     const auto uploaded=timer_us_gettime64();
-    if(!packetsValid || !scene->planesReused || opacityChanged || packetsEnhanced!=enhanced){
+    // Weather: haze. The backdrop's tiles take the fog's colour by their height
+    // (vertex colour and offset colour), the far plane more: no extra quads.
+    const uint32_t fogKey=scene->weatherOn()&&scene->weatherProfile().fog?0x80000000u|uint32_t(scene->round)<<16|uint32_t(scene->sceneLight().horizon()&0xFFFF):0;
+    if(!packetsValid || !scene->planesReused || opacityChanged || packetsEnhanced!=enhanced || packetsFogKey!=fogKey){
         packetCount=0;
         std::fill_n(planeTiles,2048,false);
         float sx=640.f/scene->width,sy=480.f/scene->height;
+        // The haze per line, once: thousands of quads share a few hundred lines.
+        static uint8_t fogLine[2][257];
+        if(fogKey)for(int y=0;y<=scene->height&&y<=256;y++){fogLine[0][y]=uint8_t(scene->fogAt(y,false));fogLine[1][y]=uint8_t(scene->fogAt(y,true));}
         for(size_t i=0;i<scene->count;i++){
             const auto &q=scene->quads[i];
             planeTiles[q.tile]=true; // Includes empty tiles that may become visible.
             if(!opaque[q.tile])continue;
             quad(packets[packetCount++],tileHeaders[q.palette*2048+q.tile],q.x*sx,q.y*sy,q.w*sx,q.h*sy,q.depth,q.u0/8.f,q.v0/8.f,q.u1/8.f,q.v1/8.f);
+            if(fogKey&&i<scene->planeEnd[1]){
+                const uint8_t *line=fogLine[i<scene->planeEnd[0]];
+                const int f0=line[q.y],f1=line[q.y+q.h];
+                if(!f0&&!f1)continue;
+                Packet &p=packets[packetCount-1];
+                p.header.cmd|=PVR_TA_CMD_SPECULAR;
+                const uint8_t *fog=scene->weatherProfile().fogColour;
+                for(int k=0;k<4;k++){
+                    const int f=(k&2)?f1:f0;
+                    const uint8_t keep[3]={uint8_t(255-f),uint8_t(255-f),uint8_t(255-f)},add[3]={uint8_t(fog[0]*f/255),uint8_t(fog[1]*f/255),uint8_t(fog[2]*f/255)};
+                    p.vertices[k].argb=argb_of(keep);p.vertices[k].oargb=argb_of(add,0);
+                }
+            }
         }
         if(!enhanced)for(int p=0;p<2;p++)quad(packets[packetCount++],spriteHeaders[p],0,0,640,480,p?6:3,0,0,scene->width/512.f,scene->height/256.f);
-        packetsValid=true;packetsEnhanced=enhanced;
+        packetsValid=true;packetsEnhanced=enhanced;packetsFogKey=fogKey;
     }
     if(enhanced && (!same || !frames)){
         // Depth: the sprite's layer (3 low, 6 high priority), then its link
@@ -403,6 +449,15 @@ bool dc_render_vdp(VDPState &state,VDPRenderer &renderer,const sor::TitleCaption
                             p.vertices[k].argb=uint32_t(shadow.alpha)<<24;
                         }
                     }
+                    // Wet ground: the art again, mirrored in the ground line (an object in
+                    // the air reflects as far below it as it is above), dimmed, fading away
+                    // from the feet and with height.
+                    if(const int reflect=sor::VdpScene::reflectAlpha(scene->reflectAlpha(),d.ground-d.y)){
+                        Packet &p=lightPackets[lightPacketCount++];
+                        quad(p,shadowHeaders[f.page],left,(2*d.ground-d.y)*sy,f.w*sx/2,f.anchorY*sor::REFLECT_LENGTH/64*sy/2,2.92f,
+                             d.flip?u1:u0,(f.v+f.anchorY)/float(page.height),d.flip?u0:u1,f.v/float(page.height));
+                        for(int k=0;k<4;k++)p.vertices[k].argb=argb_of(sor::REFLECT_TINT,(k&2)?0:reflect);
+                    }
                 }
                 continue;
             }
@@ -425,6 +480,21 @@ bool dc_render_vdp(VDPState &state,VDPRenderer &renderer,const sor::TitleCaption
             const auto &p=scene->particleDraws[i];
             quad(lightPackets[lightPacketCount++],p.additive?glowHeader:blobHeader,(p.x-p.radius)*sx/2,(p.y-p.radius)*sy/2,p.radius*sx,p.radius*sy,6.95f,0,0,1,1);
             for(auto &v:lightPackets[lightPacketCount-1].vertices)v.argb=argb_of(p.colour,p.alpha);
+        }
+        // The weather's sheets of rain and mist, the lights' smears and shafts
+        // and the flash of lightning: between the planes, over the ground under
+        // the sprites, or over everything (under the particles).
+        for(size_t i=0;i<scene->weatherQuadCount;i++){
+            const auto &q=scene->weatherQuads[i];
+            Packet &p=lightPackets[lightPacketCount++];
+            const float depth=q.depth==sor::WeatherQuad::BEHIND?1.5f:q.depth==sor::WeatherQuad::GROUND?2.95f:6.9f;
+            quad(p,q.texture==sor::WeatherTexture::STREAK?streakHeader:q.texture==sor::WeatherTexture::NOISE?noiseHeader:spillHeader,0,0,0,0,depth,0,0,0,0);
+            for(int k=0;k<4;k++){
+                auto &v=p.vertices[k];
+                v.x=q.x[k]*sx/2;v.y=q.y[k]*sy/2;
+                v.u=q.u[k]/float(sor::WEATHER_TEXTURE);v.v=q.v[k]/float(sor::WEATHER_TEXTURE);
+                v.argb=argb_of(q.colour,q.alpha[k]);
+            }
         }
     }
     const auto commands=timer_us_gettime64();

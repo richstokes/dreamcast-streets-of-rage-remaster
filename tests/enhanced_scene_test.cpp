@@ -6,6 +6,7 @@
 #include "vdp_scene.hpp"
 #include "sprite_probe.hpp"
 #include "art_catalog.hpp"
+#include <algorithm>
 #include <cassert>
 #include <cstdio>
 #include <cstring>
@@ -277,10 +278,87 @@ int main(){
         state.regs_[0]&=~4;state.regs_[7]=0;place(160);scene->invalidate();
     }
 
+    // Weather: a round's profile; textures that wrap; lightning that strikes and
+    // dies away; quads for rain, mist, the lights' smears and shafts; haze by
+    // height; the wet ground's reflection; the scene cache under lightning.
+    {
+        assert(sor::weather_profile(1).rain&&sor::weather_profile(1).wet&&!sor::weather_profile(5).any()&&!sor::weather_profile(0).any());
+        const uint8_t *streak=sor::weather_texture(sor::WeatherTexture::STREAK);
+        unsigned lit=0;for(int i=0;i<64*64;i++)lit+=streak[i]>0;
+        assert(lit>100&&lit<64*64/4);                                             // thin streaks on nothing
+        assert(sor::weather_sample(sor::WeatherTexture::NOISE,5*16+3,7*16+9)==sor::weather_sample(sor::WeatherTexture::NOISE,(5+64)*16+3,(7-64)*16+9));   // wraps
+        assert(sor::weather_sample(sor::WeatherTexture::NONE,0,0)==255);
+        sor::Weather storm;const auto &street=sor::weather_profile(1);
+        storm.advance(1,street);assert(!storm.flash()&&storm.time()==1);
+        unsigned strikes=0,held=0;int peak=0,last=0;
+        for(int t=0;t<20000;t++){
+            storm.advance(1,street);
+            if(storm.flash()==255&&last!=255)strikes++;
+            if(storm.flash()==255&&last==255)held++;
+            peak=std::max(peak,storm.flash());last=storm.flash();
+        }
+        assert(strikes>=3&&strikes<=40&&peak==255&&held>=strikes);            // a few a minute, each held a couple of ticks
+        sor::Weather calm;calm.advance(20000,sor::weather_profile(5));assert(!calm.flash()&&calm.time()==20000);
+        sor::WeatherQuad quads[sor::MAX_WEATHER_QUADS];
+        const sor::WeatherLight lights[2]={{100,40,30000,{255,200,120},false},{50,150,30000,{255,255,255},true}};
+        size_t n=sor::weather_quads(street,calm,0,320,224,120,lights,2,quads);
+        unsigned streaks=0,smears=0,shafts=0;
+        for(size_t i=0;i<n;i++){
+            streaks+=quads[i].texture==sor::WeatherTexture::STREAK;
+            smears+=quads[i].texture==sor::WeatherTexture::NOISE&&quads[i].y[0]==240;
+            shafts+=quads[i].texture==sor::WeatherTexture::NONE&&quads[i].y[0]==80;
+        }
+        assert(n<=sor::MAX_WEATHER_QUADS&&streaks==2&&smears==2&&shafts==1);   // a smear is two halves; the lamp on the ground has neither
+        n=sor::weather_quads(sor::weather_profile(3),calm,0,320,224,120,nullptr,0,quads);
+        unsigned noise=0;for(size_t i=0;i<n;i++)noise+=quads[i].texture==sor::WeatherTexture::NOISE;
+        assert(noise==5);                                                       // the beach: mist, no rain
+        const auto &beach=sor::weather_profile(3);
+        assert(sor::weather_fog(beach,20,120,true)>sor::weather_fog(beach,100,120,true));    // thicker up the backdrop
+        assert(sor::weather_fog(beach,20,120,true)>sor::weather_fog(beach,20,120,false));    // the far plane more
+        assert(!sor::weather_fog(beach,200,120,true)&&!sor::weather_fog(sor::weather_profile(5),20,120,true));
+        // In a scene: the street's weather draws over a lit object; the wet ground
+        // reflects it below the feet; the scene is reused while only the weather
+        // moves, and rebuilt when lightning strikes (the sky casts the shadows).
+        const auto place=[&](int16_t level){
+            probe.beginBuild();
+            probe.beginObject(0xB800,1,0x054206,false,128+48,128+66,0,0xFFDA00,0,level);
+            probe.endObject(0xFFDA08,ram.data());
+        };
+        for(int cy=0;cy<3;cy++)for(int cx=0;cx<4;cx++){const int a=state.planeABase()+(cy*state.planeWidthCells()+cx)*2;state.vram_[a]=0;state.vram_[a+1]=2;}
+        state.regs_[0]|=4;state.regs_[7]=8;
+        place(160);
+        scene->lighting=true;scene->weather=true;scene->round=1;scene->invalidate();
+        assert(!scene->weatherOn());                                            // nothing until the game runs its objects
+        std::vector<uint16_t> dry(640*448),wet(640*448);
+        scene->weather=false;assert(scene->build(state,renderer));sor::raster_enhanced(*scene,state,dry.data(),640);
+        scene->weather=true;assert(scene->build(state,renderer)&&scene->artCount==1&&scene->weatherQuadCount>0);
+        assert(scene->weatherOn()&&scene->weatherProfile().rain&&scene->reflectAlpha()>0);
+        assert(sor::VdpScene::reflectAlpha(200,0)==200&&sor::VdpScene::reflectAlpha(200,48)==100&&!sor::VdpScene::reflectAlpha(200,120));
+        sor::raster_enhanced(*scene,state,wet.data(),640);
+        assert((wet[(66*2)*640+48*2-1]>>10&31)>(dry[(66*2)*640+48*2-1]>>10&31));   // the red art, reflected under its feet
+        assert(scene->fogAt(0,true)>0&&scene->fogAt(0,true)>scene->fogAt(0,false));
+        scene->invalidate();
+        assert(scene->buildCached(state,renderer)&&!scene->reused);
+        assert(scene->buildCached(state,renderer)&&scene->reused);
+        bool struck=false;
+        for(int t=0;t<6000&&!struck;t++){
+            place(160);
+            assert(scene->buildCached(state,renderer));
+            if(scene->weatherState().flash()){
+                struck=true;
+                assert(!scene->reused&&scene->artDraws[0].light.shadow[2].alpha>0);   // lightning: another scene, the sky's shadow
+            }else assert(scene->reused);
+        }
+        assert(struck);
+        scene->weather=false;scene->lighting=false;scene->round=0;
+        for(int cy=0;cy<3;cy++)for(int cx=0;cx<4;cx++){const int a=state.planeABase()+(cy*state.planeWidthCells()+cx)*2;state.vram_[a+1]=0;}
+        state.regs_[0]&=~4;state.regs_[7]=0;place(160);scene->invalidate();
+    }
+
     // VRAM's table no longer matches the build: the object's pieces come back.
     state.vram_[state.satBase()+7]^=1;
     assert(!probe.displayed(state));
     assert(scene->build(state,renderer));
     assert(scene->artCount==0&&scene->spriteTileCount==5);
-    puts("Enhanced scene: art replaces a probed object in its SAT slot (keyed by colours, per round); other sprites stay cells; stale builds fall back; in-between poses on a pose change; dynamic lighting tints per corner and casts shadows");
+    puts("Enhanced scene: art replaces a probed object in its SAT slot (keyed by colours, per round); other sprites stay cells; stale builds fall back; in-between poses on a pose change; dynamic lighting tints per corner and casts shadows; weather rains, reflects, hazes and strikes");
 }

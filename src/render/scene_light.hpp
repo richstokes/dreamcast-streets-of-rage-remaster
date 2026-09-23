@@ -81,6 +81,7 @@ struct LightEmitter {
 class SceneLight {
 public:
     static constexpr int CELL=16,COLS=20,ROWS=16;
+    static constexpr unsigned MAX_LIGHTS=80;
     static constexpr int SPILL_DEPTH=44,SPILL_RISE=14;   // lines of ground the windows' light reaches; its soft upper edge
     // quads [0, endB) are plane B's, [endB, endA) plane A's.
     void build(const TileQuad *quads,size_t endB,size_t endA,const uint16_t *colors,uint16_t background,const VDPState &);
@@ -108,13 +109,13 @@ public:
     static void apply(const ArtTint &,CornerLight &);
     uint8_t ambient[3]{255,255,255};
     void setRound(unsigned round){profile_=&light_profile(round);}
+    void setProfile(const LightProfile *profile){profile_=profile;}   // a round's profile changed for a while (lightning)
     const LightProfile &profile() const {return *profile_;}
     const uint8_t *cell(int row,int column) const {return cell_[row][column];}
 private:
     uint8_t cell_[ROWS][COLS][3]{};
     uint8_t bright_[ROWS][COLS][3]{};  // the cell's colour, its bright texels counting most
     uint16_t over_[ROWS][COLS]{};      // (the cell's RMS brightness over the screen's)^2
-    static constexpr unsigned MAX_LIGHTS=80;
     Light lights_[MAX_LIGHTS];
     unsigned lightCount_=0;
     Spill spill_[COLS+1]{};

@@ -41,18 +41,22 @@ uint16_t VdpScene::rgb1555(unsigned r,unsigned g,unsigned b){
 }
 bool VdpScene::buildCached(VDPState &s,VDPRenderer &){
     // VRAM: no write since the cached frame (a write of equal bytes rebuilds).
-    reused=cacheValid && enhanced==builtEnhanced_ && lighting==builtLighting_ && round==builtRound_ && !inbetween_ && same_render_regs(s,previous)
+    reused=cacheValid && enhanced==builtEnhanced_ && lighting==builtLighting_ && weather==builtWeather_ && round==builtRound_ && !inbetween_ && same_render_regs(s,previous)
         && s.vramGeneration_==previous.vramGeneration_
         && equal_bytes(s.cram_,previous.cram_,sizeof(s.cram_))
         && equal_bytes(s.vsram_,previous.vsram_,sizeof(s.vsram_))
         && equal_bytes(s.sat_,previous.sat_,sizeof(s.sat_));
     if(reused){
-        // Particles move on their own: they do not make the scene another.
-        if(enhanced&&lighting)particlesStep(s,art&&!art->empty()?sprite_probe().displayed(s):nullptr);
-        planesReused=true;
-        s.status_|=spriteFlags;
-        if(s.displayEnabled())s.vCounter_=height-1;
-        return true;
+        // Particles and the weather move on their own: they do not make the
+        // scene another. Lightning does: it lights everything.
+        if(enhanced&&lighting){particlesStep(s,art&&!art->empty()?sprite_probe().displayed(s):nullptr);weatherStep();}
+        if(weather_.flash()==builtFlash_){
+            planesReused=true;
+            s.status_|=spriteFlags;
+            if(s.displayEnabled())s.vCounter_=height-1;
+            return true;
+        }
+        reused=false;
     }
     int mapBytes=s.planeWidthCells()*s.planeHeightCells()*2;
     bool geometrySame=cacheValid && same_geometry_regs(s,previous)
@@ -62,7 +66,7 @@ bool VdpScene::buildCached(VDPState &s,VDPRenderer &){
         && unchanged_region(s,previous,s.windowBase(),(s.h40Mode()?64:32)*32*2)
         && unchanged_region(s,previous,s.hscrollBase(),s.hscrollMode()==0?4:s.activeHeight()*4);
     const auto status=s.status_;s.status_&=~0x60;
-    builtEnhanced_=enhanced;builtLighting_=lighting;builtRound_=round;
+    builtEnhanced_=enhanced;builtLighting_=lighting;builtWeather_=weather;builtRound_=round;
     cacheValid=buildImpl(s,geometrySame);spriteFlags=s.status_&0x60;s.status_|=status;
     if(cacheValid)previous=s;
     return cacheValid;
@@ -198,11 +202,25 @@ void VdpScene::enhancedSprites(const VDPState &s){
     // pieces; objects that are light shine on the others and on the ground.
     const bool lightOn=lighting&&build;
     light_.setRound(round);
+    weatherQuadCount=0;
+    if(lighting)particlesStep(s,build);else{particles_.clear();particleCount=0;weather_.clear();weatherActive_=false;}
+    // Lightning: for a few ticks the sky is the light, and the bolt casts the shadows.
+    builtFlash_=uint8_t(weatherOn()?weather_.flash():0);
+    if(builtFlash_){
+        const int f=builtFlash_;
+        flashProfile_=light_.profile();
+        flashProfile_.sky[0]=225;flashProfile_.sky[1]=232;flashProfile_.sky[2]=255;
+        flashProfile_.skyTint=uint8_t(std::max<int>(flashProfile_.skyTint,f*3/4));
+        flashProfile_.skyShare=uint8_t(std::max<int>(flashProfile_.skyShare,f));
+        flashProfile_.skyLean=int8_t(weather_.lean());flashProfile_.skyLength=22;
+        flashProfile_.shadowAlpha=uint8_t(std::min(255,flashProfile_.shadowAlpha+f/3));
+        flashProfile_.unlit=uint8_t(std::min(255,flashProfile_.unlit+f/4));
+        light_.setProfile(&flashProfile_);
+    }
     LightEmitter emitters[MAX_EMITTERS];unsigned emitterCount=0;
     int16_t pieces[VDPState::SAT_MAX_SPRITES];std::fill_n(pieces,VDPState::SAT_MAX_SPRITES,int16_t(-1));
     // Standing in the playfield (lit, casting shadows), not a light itself.
     const auto inWorld=[](const ProbedObject &obj){return !obj.screen&&in_playfield(obj.type)&&light_kind(obj.type,obj.mapping)==LightKind::NONE;};
-    if(lighting)particlesStep(s,build);else{particles_.clear();particleCount=0;}
     if(lightOn){
         // The backdrop's light changes when it scrolls or its colours do; tiles
         // animating in place are caught a few builds later.
@@ -237,6 +255,14 @@ void VdpScene::enhancedSprites(const VDPState &s){
         // Collecting the lights divides a lot: only when the grid, the wall line or the round is another.
         const int wall=horizon_==32767?height*5/8:horizon_-WALL_ABOVE_LANES;
         if(!lightCollected_||wall!=light_.horizon()||round!=collectedRound_){light_.collect(wall);lightCollected_=true;collectedRound_=round;}
+        // Weather: the wall's lights glow through the fog.
+        if(weatherOn()&&weatherProfile().shafts&&weatherProfile().fog)
+            for(unsigned i=0;i<light_.lightCount()&&glowCount<MAX_GLOWS;i++){
+                const auto &l=light_.lights()[i];
+                if(l.low||l.power<2500)continue;
+                const int norm=std::min(255,int(l.power/128)),radius=16+norm/10;
+                glows[glowCount++]={l.x,l.y,int16_t(radius),int16_t(radius),{l.colour[0],l.colour[1],l.colour[2]},uint8_t(weatherProfile().shafts*norm/255*weatherProfile().fog/255*60/255)};
+            }
         // Lamps on the ground put a small pool of their light around them.
         for(unsigned i=0;i<light_.lightCount()&&glowCount<MAX_GLOWS;i++){
             const auto &l=light_.lights()[i];
@@ -343,16 +369,29 @@ void VdpScene::enhancedSprites(const VDPState &s){
         if(!link||link>=VDPState::SAT_MAX_SPRITES)break;
         index=link;
     }
+    weatherStep();
+}
+void VdpScene::weatherStep(){
+    weatherQuadCount=0;
+    if(!weatherOn()||!weatherProfile().any())return;
+    WeatherLight lights[SceneLight::MAX_LIGHTS];
+    for(unsigned i=0;i<light_.lightCount();i++){const auto &l=light_.lights()[i];lights[i]={l.x,l.y,l.power,{l.colour[0],l.colour[1],l.colour[2]},l.low};}
+    weatherQuadCount=weather_quads(weatherProfile(),weather_,camera_,width,height,light_.horizon(),lights,light_.lightCount(),weatherQuads);
 }
 void VdpScene::particlesStep(const VDPState &s,const SpriteBuild *build){
     // A tick of theirs per sprite-table build of the game's; emitters feed them.
     // They stop with the game (no build displayed: a menu, a cutscene).
     const uint32_t elapsed=build?build->serial-particleSerial_:0;
-    if(!build||elapsed>30){particles_.clear();particleCount=0;trackedCount_=0;if(build)particleSerial_=build->serial;return;}
+    // Paused (no build for a while): the weather stands still; no build at all (a
+    // menu, a cutscene): there is none.
+    weatherActive_=build!=nullptr;
+    if(!build||elapsed>30){particles_.clear();particleCount=0;trackedCount_=0;if(build)particleSerial_=build->serial;else weather_.clear();return;}
     particleSerial_=build->serial;
     const unsigned ticks=std::min<uint32_t>(elapsed,3);
     const int camera=-scroll(s,0,std::min(height-1,std::max(0,int(light_.horizon())+8)));
+    camera_=camera;
     particles_.advance(ticks);
+    if(weatherOn())weather_.advance(ticks,weatherProfile());else weather_.clear();
     uint16_t sparks[16];unsigned sparkCount=0;
     for(unsigned o=0;o<build->count;o++){
         const auto &obj=build->objects[o];
@@ -391,7 +430,9 @@ void VdpScene::particlesStep(const VDPState &s,const SpriteBuild *build){
             for(unsigned o=0;o<build->count;o++)there|=build->objects[o].slot==was.slot&&build->objects[o].type==was.type;
             if(!there)particles_.debris(was.x,was.y-16,camera);
         }
-        if(rain)for(unsigned t=0;t<ticks*2;t++){
+        // The game's rain and the weather's land on the ground.
+        const unsigned drops=(rain?2u:0u)+(weatherOn()?weatherProfile().rain*3u/255u:0u);
+        if(drops)for(unsigned t=0;t<ticks*drops;t++){
             const int top=std::min(height-8,light_.horizon()+20);
             particles_.splash(int(particleRandom()%unsigned(width)),top+int(particleRandom()%unsigned(height-4-top)),camera);
         }
@@ -465,7 +506,30 @@ void raster_enhanced(const VdpScene &scene,const VDPState &s,uint16_t *out,int p
         for(int ch=0;ch<3;ch++)result|=uint16_t(std::min(31,channel(pixel,ch)*keep/255+add[ch])<<(10-ch*5));
         pixel=result;
     };
+    // A quad of weather: horizontal top and bottom edges, texture and alpha
+    // interpolated between the corners, added or covering.
+    const auto weatherQuad=[&](const WeatherQuad &q){
+        const int y0=q.y[0],y1=q.y[2];
+        if(y1<=y0)return;
+        for(int y=std::max(0,y0);y<std::min(h,y1);y++){
+            const int t=(y-y0)*256/(y1-y0);
+            const int xl=q.x[0]+(q.x[2]-q.x[0])*t/256,xr=q.x[1]+(q.x[3]-q.x[1])*t/256;
+            if(xr<=xl)continue;
+            const int ul=q.u[0]*16+(q.u[2]-q.u[0])*16*t/256,ur=q.u[1]*16+(q.u[3]-q.u[1])*16*t/256;
+            const int vl=q.v[0]*16+(q.v[2]-q.v[0])*16*t/256,vr=q.v[1]*16+(q.v[3]-q.v[1])*16*t/256;
+            const int al=q.alpha[0]+(q.alpha[2]-q.alpha[0])*t/256,ar=q.alpha[1]+(q.alpha[3]-q.alpha[1])*t/256;
+            for(int x=std::max(0,xl);x<std::min(w,xr);x++){
+                const int s=(x-xl)*256/(xr-xl);
+                const int alpha=(al+(ar-al)*s/256)*weather_sample(q.texture,ul+(ur-ul)*s/256,vl+(vr-vl)*s/256)/255;
+                if(!alpha)continue;
+                const int add[3]={q.colour[0]*alpha/255*31/255,q.colour[1]*alpha/255*31/255,q.colour[2]*alpha/255*31/255};
+                blend(x,y,add,q.additive?255:255-alpha);
+            }
+        }
+    };
+    const auto weatherAt=[&](WeatherQuad::Depth depth){for(size_t i=0;i<scene.weatherQuadCount;i++)if(scene.weatherQuads[i].depth==depth)weatherQuad(scene.weatherQuads[i]);};
     for(int depth=1;depth<=6;depth++){
+        if(depth==2)weatherAt(WeatherQuad::BEHIND);
         if(depth==3){
             // Lighting, on the ground: over the low planes, under every sprite
             // and the high-priority tiles. Pools of light are added; shadows are
@@ -522,7 +586,23 @@ void raster_enhanced(const VdpScene &scene,const VDPState &s,uint16_t *out,int p
                         }
                     }
                 }
+                // Wet ground: the art again, mirrored in the ground line, dimmed, fading
+                // away from the feet and with height.
+                if(const int reflect=VdpScene::reflectAlpha(scene.reflectAlpha(),d.ground-d.y)){
+                    const int rows=f.anchorY*REFLECT_LENGTH/64,top=(2*d.ground-d.y)*2;
+                    for(int row=0;row<rows;row++){
+                        const int v=f.anchorY-1-row*64/REFLECT_LENGTH,alpha=reflect*(rows-row)/rows;
+                        if(v<0)break;
+                        for(int u=0;u<f.w;u++){
+                            const uint16_t c=scene.art->texel(page,size_t(f.v+v)*page.width+f.u+(d.flip?f.w-1-u:u));
+                            if(!(c&0x8000))continue;
+                            int add[3];for(int ch=0;ch<3;ch++)add[ch]=channel(c,ch)*REFLECT_TINT[ch]/255*alpha/255;
+                            blend(left+u,top+row,add,255-alpha);
+                        }
+                    }
+                }
             }
+            weatherAt(WeatherQuad::GROUND);
         }
         if(depth==3||depth==6){
             const int layer=depth==6;
@@ -582,15 +662,25 @@ void raster_enhanced(const VdpScene &scene,const VDPState &s,uint16_t *out,int p
             }
         }
         for(size_t i=0;i<scene.count;i++){const auto &q=scene.quads[i];if(q.depth!=depth)continue;
+            // Weather: haze on the backdrop's planes (not the HUD's window), by height.
+            const bool haze=scene.weatherOn()&&i<scene.planeEnd[1];
+            const int f0=haze?scene.fogAt(q.y,i<scene.planeEnd[0]):0,f1=haze?scene.fogAt(q.y+q.h,i<scene.planeEnd[0]):0;
             for(int y=0;y<q.h;y++)for(int x=0;x<q.w;x++){
                 const int u=q.u1>q.u0?q.u0+x:q.u0-1-x,v=q.v1>q.v0?q.v0+y:q.v0-1-y;
                 const int c=tileTexel(q.tile,u,v);
                 if(!c)continue;
-                const uint16_t color=scene.colors[q.palette*16+c];
+                uint16_t color=scene.colors[q.palette*16+c];
+                if(f0||f1){
+                    const int f=f0+(f1-f0)*(y*2+1)/(q.h*2);
+                    const uint8_t *fog=scene.weatherProfile().fogColour;
+                    const uint16_t was=color;color=0x8000;
+                    for(int ch=0;ch<3;ch++)color|=uint16_t(std::min(31,channel(was,ch)*(255-f)/255+fog[ch]*f/255*31/255)<<(10-ch*5));
+                }
                 for(int k=0;k<4;k++)plot((q.x+x)*2+(k&1),(q.y+y)*2+(k>>1),color);
             }
         }
     }
+    weatherAt(WeatherQuad::FRONT);
     // Particles, over everything: light is added, smoke covers.
     for(size_t i=0;i<scene.particleCount;i++){const auto &p=scene.particleDraws[i];
         const int r=p.radius;

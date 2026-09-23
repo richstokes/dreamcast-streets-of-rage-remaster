@@ -2,9 +2,7 @@
 
 A native Dreamcast (SH-4, KallistiOS) port of Streets of Rage 1, built from the
 original game's code rather than an emulator, with an optional enhanced
-graphics mode on top. Work in progress: it has so far only been run in the
-Flycast emulator, the enhanced art is machine-generated rather than hand-drawn,
-and only Round 1 has been verified against the original.
+graphics mode on top.
 
 You need your own copy of the ROM. Nothing derived from it is in this repository.
 
@@ -41,11 +39,22 @@ You need your own copy of the ROM. Nothing derived from it is in this repository
   to make the disc image. Expected at `build/mkdcdisc/build/mkdcdisc`, or set
   `MKDCDISC`.
 - **Python 3.14** (`python3.14` on the path, or set `PYTHON`) for code generation.
-- **Flycast** to run it. `tools/run-flycast.sh` is macOS-only and looks for
-  `Flycast.app` in `~/.local/share/dreamcast/flycast/` then `/Applications/`
-  (set `FLYCAST_BIN`). On other systems just open the image in Flycast yourself.
+- **Somewhere to run it**: the Flycast emulator, or a Dreamcast with a GDEMU
+  (or similar ODE) or a burned CD-R. The image is a normal self-booting CDI,
+  but so far it has only been run in Flycast, so expect the first hardware run
+  to turn things up ([docs/HARDWARE_TESTS.md](docs/HARDWARE_TESTS.md)).
+  `tools/run-flycast.sh` launches Flycast on macOS, looking for `Flycast.app`
+  in `~/.local/share/dreamcast/flycast/` then `/Applications/` (set
+  `FLYCAST_BIN`); elsewhere, open the image in Flycast yourself.
 
-The first build clones the research repositories listed in
+To see what is set up and what is missing, with where to get each thing:
+
+```bash
+tools/check-requirements.sh all
+```
+
+Every build script runs the same checks for what it needs before starting. The
+first build also clones the research repositories listed in
 `tools/upstream-lock.json` (the SoR decompilation and Genesis Plus GX) into
 `research/`.
 
@@ -56,8 +65,8 @@ The first build clones the research repositories listed in
 ```
 
 This checks the ROM, generates the game code, cross-compiles, and writes
-`dist/sor.cdi` (self-booting; works in Flycast, and on a GDEMU or burned CD-R
-when hardware testing starts). Load it in Flycast, or on macOS:
+`dist/sor.cdi`. Copy it to your GDEMU card, burn it, or load it in Flycast — on
+macOS:
 
 ```bash
 ./tools/run-flycast.sh dist/sor.cdi
@@ -117,11 +126,13 @@ pauses). Up/down selects, left/right or A changes, B / Start / L + R closes.
 - **Infinite lives / health / specials**, for both players.
 - **Graphics**: original or enhanced. **Animation**: smooth adds in-between
   poses where the art package has them. **Lighting**: dynamic adds light and
-  shadows from the backdrop. These change only what is drawn, never the game.
+  shadows from the backdrop. **Weather**: rain, wet ground, haze, mist and
+  lightning by round, with dynamic lighting. These change only what is drawn,
+  never the game.
 - **Restore defaults.**
 
-Settings last for the session. `SOR_SMOOTH=1` and `SOR_LIGHTING=1` at build
-time start with those options on.
+Settings last for the session. `SOR_SMOOTH=1`, `SOR_LIGHTING=1` and
+`SOR_WEATHER=1` at build time start with those options on.
 
 ## Tests
 

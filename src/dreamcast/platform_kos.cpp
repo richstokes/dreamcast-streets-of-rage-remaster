@@ -10,8 +10,8 @@
 void dc_renderer_init();
 void dc_renderer_shutdown();
 bool dc_render_vdp(VDPState &,VDPRenderer &,const sor::TitleCaption &);
-void dc_renderer_game_state(unsigned round,unsigned characters);
-void platform_game_state(unsigned round,unsigned characters,bool){dc_renderer_game_state(round,characters);}
+void dc_renderer_game_state(unsigned round,unsigned characters,bool playing);
+void platform_game_state(unsigned round,unsigned characters,bool playing){dc_renderer_game_state(round,characters,playing);}
 static bool useGpu=true,previousToggle=false;
 bool platform_render_vdp(VDPState &s,VDPRenderer &r,const sor::TitleCaption &title){return useGpu && dc_render_vdp(s,r,title);}
 static pvr_ptr_t texture;

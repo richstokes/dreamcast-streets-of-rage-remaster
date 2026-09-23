@@ -2,9 +2,11 @@
 #include "art_catalog.hpp"
 #include "scene_light.hpp"
 #include "scene_particles.hpp"
+#include "scene_weather.hpp"
 #include "VDPState.hpp"
 #include "VDPRenderer.hpp"
 #include "sprite_probe.hpp"
+#include <algorithm>
 #include <cstdint>
 #include <cstddef>
 namespace sor {
@@ -72,7 +74,25 @@ public:
     static constexpr unsigned INBETWEEN_TICKS=2;
     // Dynamic lighting of the enhanced drawing: see scene_light.hpp.
     bool lighting=false;
-    unsigned round=0;                            // 1-8 (0: unknown): the round's light profile
+    unsigned round=0;                            // 1-8 (0: unknown): the round's light and weather profiles
+    // Weather (scene_weather.hpp): rain, wet ground, haze, mist, shafts and
+    // lightning by the round's profile. With lighting only (it draws with the
+    // lights and the wall line).
+    bool weather=false;
+    // On while the game runs its objects (a sprite-table build has been displayed);
+    // the runtime keeps it off outside a round (the title, menus, cutscenes).
+    bool weatherOn() const {return enhanced&&lighting&&weather&&weatherActive_;}
+    const WeatherProfile &weatherProfile() const {return weather_profile(weatherOn()?round:0);}
+    const Weather &weatherState() const {return weather_;}
+    void weatherStrike(){weather_.strikeNow();}   // previews: lightning at the next build
+    WeatherQuad weatherQuads[MAX_WEATHER_QUADS];
+    size_t weatherQuadCount=0;
+    // Haze on a backdrop line (0-255 of the fog's colour), and the wet ground's
+    // reflection of art standing on it (its alpha at the feet; 0: none).
+    int fogAt(int y,bool farPlane) const {return weather_fog(weatherProfile(),y,light_.horizon(),farPlane);}
+    int reflectAlpha() const {return weatherOn()?reflect_alpha(weatherProfile()):0;}
+    // ... for an object `up` lines above the ground: fainter the higher.
+    static constexpr int reflectAlpha(int alpha,int up){return alpha*(96-std::clamp(up,0,96))/96;}
     static constexpr int RIM_SHIFT=2;            // art pixels the rim light's copy of the art is moved towards the lights
     static constexpr int WALL_ABOVE_LANES=16;
     static constexpr unsigned CONTACT_ALPHA=110; // of 255, at the middle of the contact shadow
@@ -96,8 +116,14 @@ private:
     VDPState previous;
     bool cacheValid=false;
     uint16_t spriteFlags=0;
-    bool builtEnhanced_=false,builtLighting_=false;
+    bool builtEnhanced_=false,builtLighting_=false,builtWeather_=false;
     unsigned builtRound_=0;
+    Weather weather_;
+    bool weatherActive_=false;
+    uint8_t builtFlash_=0;           // the lightning the scene was lit by: another flash is another scene
+    LightProfile flashProfile_;      // the round's profile under lightning
+    int camera_=0;
+    void weatherStep();
     SceneLight light_;
     Particles particles_;
     uint16_t sparkSlots_[16]{};        // hit sparks on screen at the last build: a new one bursts

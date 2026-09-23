@@ -165,10 +165,12 @@ if '--dreamcast' in sys.argv:
     if smooth not in ('0','1'):raise SystemExit('SOR_SMOOTH must be 0 or 1')
     lighting=os.environ.get('SOR_LIGHTING','0')
     if lighting not in ('0','1'):raise SystemExit('SOR_LIGHTING must be 0 or 1')
+    weather=os.environ.get('SOR_WEATHER','0')
+    if weather not in ('0','1'):raise SystemExit('SOR_WEATHER must be 0 or 1')
     # Debug only: Dreamcast B toggles the software comparison renderer (about
     # 85 ms a frame, original graphics). Off by default: B is within reach in play.
     toggle=os.environ.get('SOR_SOFTWARE_TOGGLE','0')
     if toggle not in ('0','1'):raise SystemExit('SOR_SOFTWARE_TOGGLE must be 0 or 1')
     config=D/'sor_audio_config.hpp'
-    text='#pragma once\n#define SOR_ENABLE_EXPERIMENTAL_AUDIO '+audio+'\n#define SOR_ENABLE_NATIVE_DAC '+native+'\n#define SOR_ENABLE_AICA_DAC '+split+'\n#define SOR_ENABLE_AUDIO_PROFILE '+profile+'\n#define SOR_ENABLE_PC_PROFILE '+pcprofile+'\n#define SOR_PC_PROFILE_FIRST '+pcfirst+'\n#define SOR_PC_PROFILE_LAST '+pclast+'\n#define SOR_DEFAULT_ENHANCED '+enhanced+'\n#define SOR_DEFAULT_SMOOTH '+smooth+'\n#define SOR_DEFAULT_LIGHTING '+lighting+'\n#define SOR_SOFTWARE_TOGGLE '+toggle+'\n'
+    text='#pragma once\n#define SOR_ENABLE_EXPERIMENTAL_AUDIO '+audio+'\n#define SOR_ENABLE_NATIVE_DAC '+native+'\n#define SOR_ENABLE_AICA_DAC '+split+'\n#define SOR_ENABLE_AUDIO_PROFILE '+profile+'\n#define SOR_ENABLE_PC_PROFILE '+pcprofile+'\n#define SOR_PC_PROFILE_FIRST '+pcfirst+'\n#define SOR_PC_PROFILE_LAST '+pclast+'\n#define SOR_DEFAULT_ENHANCED '+enhanced+'\n#define SOR_DEFAULT_SMOOTH '+smooth+'\n#define SOR_DEFAULT_LIGHTING '+lighting+'\n#define SOR_DEFAULT_WEATHER '+weather+'\n#define SOR_SOFTWARE_TOGGLE '+toggle+'\n'
     if not config.exists() or config.read_text()!=text:config.write_text(text)

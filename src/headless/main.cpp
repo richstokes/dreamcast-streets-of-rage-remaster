@@ -25,7 +25,10 @@ sor::TitleCaption sceneTitle;
 // from SOR_ART): original at 2x on the left, enhanced on the right.
 // SOR_SMOOTH=1: smooth animation (in-between poses; needs a step of 1).
 // SOR_LIGHTING=1: dynamic lighting (shadows, light from the backdrop and from fire).
+// SOR_WEATHER=1: the round's weather (rain, wet ground, haze, mist, lightning; with lighting);
+// 2: the same, and lightning strikes two captured frames in (a step of 1 shows it die away).
 unsigned gameRound=0;   // 1-8, from the runtime
+bool gamePlaying=false; // in a round (not the title, menus, cutscenes or the ending): the weather's
 struct EnhancedCapture {
     std::string directory;unsigned first=0,last=0,step=1,frame=0;bool pending=false;
     std::vector<uint8_t> package;sor::ArtCatalog art;
@@ -55,7 +58,9 @@ void capture_enhanced(VDPState &state,VDPRenderer &renderer){
     static const bool smooth=std::getenv("SOR_SMOOTH")&&std::getenv("SOR_SMOOTH")[0]=='1';
     capture.scene->smooth=smooth;
     static const bool lighting=std::getenv("SOR_LIGHTING")&&std::getenv("SOR_LIGHTING")[0]=='1';
-    capture.scene->lighting=lighting;capture.scene->round=gameRound;
+    static const char weather=std::getenv("SOR_WEATHER")?std::getenv("SOR_WEATHER")[0]:'0';
+    capture.scene->lighting=lighting&&gamePlaying;capture.scene->weather=(weather=='1'||weather=='2')&&gamePlaying;capture.scene->round=gameRound;
+    if(weather=='2'&&capture.frame==capture.first+2)capture.scene->weatherStrike();
     const bool ok=capture.scene->build(state,renderer);
     state.status_=status;
     if(!ok)return;
@@ -116,13 +121,23 @@ void capture_write(const Framebuffer &fb,int width,int height){
         }
         {unsigned covering=0;for(size_t i=0;i<scene.particleCount;i++)covering+=!scene.particleDraws[i].additive;
          fprintf(list,"particles %zu (covering %u)\n",scene.particleCount,covering);}
+        if(scene.weatherOn()){
+            const auto &p=scene.weatherProfile();
+            fprintf(list,"weather rain %d wet %d fog %d mist %d shafts %d lightning %d flash %d time %u quads %zu\n",
+                    p.rain,p.wet,p.fog,p.mist,p.shafts,p.lightning,scene.weatherState().flash(),scene.weatherState().time(),scene.weatherQuadCount);
+            for(size_t i=0;i<scene.weatherQuadCount;i++){const auto &q=scene.weatherQuads[i];
+                fprintf(list,"weather quad %s %s %s x %d,%d,%d,%d y %d-%d alpha %d,%d,%d,%d colour %d,%d,%d\n",
+                        q.texture==sor::WeatherTexture::STREAK?"streak":q.texture==sor::WeatherTexture::NOISE?"noise":"flat",
+                        q.depth==sor::WeatherQuad::BEHIND?"behind":q.depth==sor::WeatherQuad::GROUND?"ground":"front",q.additive?"added":"covering",
+                        q.x[0],q.x[1],q.x[2],q.x[3],q.y[0],q.y[2],q.alpha[0],q.alpha[1],q.alpha[2],q.alpha[3],q.colour[0],q.colour[1],q.colour[2]);}
+        }
         fprintf(list,"sprite cells %zu\n",scene.spriteTileCount);fclose(list);
     }
 }
 }
 const uint8_t *platform_embedded_rom(size_t &size){size=0;return nullptr;}
 const uint8_t *platform_embedded_art(size_t &size){size=0;return nullptr;}
-void platform_game_state(unsigned round,unsigned,bool playing){gameRound=round;sor::extract_frames_round(playing?round:0);}
+void platform_game_state(unsigned round,unsigned,bool playing){gameRound=round;gamePlaying=playing;sor::extract_frames_round(playing?round:0);}
 void platform_video_init(){}
 void platform_video_shutdown(){}
 bool platform_render_vdp(VDPState &state,VDPRenderer &renderer,const sor::TitleCaption &title){

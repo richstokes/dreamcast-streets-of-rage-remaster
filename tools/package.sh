@@ -1,11 +1,13 @@
 #!/bin/bash
 set -euo pipefail
 root=$(cd -- "$(dirname -- "$0")/.." && pwd)
-rom=${1:-${SOR_ROM:-"$root/local/SOR.bin"}}
+rom=${1:-${SOR_ROM:-"$root/original_rom/Bare Knuckle - Ikari no Tetsuken ~ Streets of Rage (World).md"}}
+"$root/tools/check-requirements.sh" "rom=$rom" mkdcdisc
 python3 "$root/tools/rom.py" "$rom" --require-known --output "$root/build/disc-rom.json"
 "$root/tools/build-dreamcast.sh"
 export SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH:-1789498800}
 mkdcdisc=${MKDCDISC:-"$root/build/mkdcdisc/build/mkdcdisc"}
+[ -x "$mkdcdisc" ] || mkdcdisc=$(command -v mkdcdisc)
 mkdir -p "$root/build/disc" "$root/dist"
 cp "$rom" "$root/build/disc/SOR.BIN"
 # Replacement art for enhanced graphics (a local build product: placeholder
