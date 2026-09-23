@@ -6,17 +6,54 @@ graphics mode on top.
 
 You need your own copy of the ROM. Nothing derived from it is in this repository.
 
+## Features
+
+**The original game, natively.** The 68000 code is statically translated to
+C++ and runs on the SH-4; there is no emulator on the disc. Original music and
+sound effects (YM2612, PSG and the Z80 drum/voice driver), original timing
+including the slowdown, two players, all eight rounds. 640×480 output.
+
+**Enhanced graphics**, switchable at any time and never touching the game
+itself ([docs/REMASTER.md](docs/REMASTER.md)):
+
+- **2x art** for every player, enemy, boss, weapon, item and effect in all
+  eight rounds (940 frames), with anti-aliased edges and continuous shading in
+  place of the 16-colour dithering. It follows the game's fades and flashes and
+  is loaded per round to fit video memory. Any frame can be replaced with your
+  own hand-drawn art.
+- **Dynamic lighting.** Shop windows, neon, lamps and fire in the backdrop
+  become light sources. Characters are lit from the side the light is on, with
+  shading across their body and a rim of light on the lit edge; fire, the
+  bazooka's flame and hit sparks light what is near them.
+- **Shadows** cast on the ground from those lights, swinging round and
+  lengthening as a character walks past a window, plus a contact shadow that
+  lifts in a jump. Light spills onto the ground below the wall.
+- **Particles**: embers from fire, sparks and smoke from the bazooka, bursts
+  from hits.
+- **Weather**, per round: rain in two parallax sheets with splashes, wet
+  ground reflecting the characters and the lights, haze and mist, light shafts
+  through the fog, and lightning that flashes the scene and throws its own
+  shadow. Rain on the street, the bridge and the lift; steam in the factory;
+  nothing indoors.
+- **Smooth animation**: in-between poses between the game's own animation
+  frames, where the art package has them.
+- A remastered title screen with period-style lettering.
+
+Each of these is its own switch in the options menu. Everything is done with
+the PowerVR's fixed pipeline: there are no shaders on a Dreamcast.
+
+**Cheats**: start at any round, choose lives, infinite lives, health and
+specials.
+
 ## Status
 
-- **Original mode** plays from power-on with the original music and sound.
-  Round 1 matches the original ROM frame for frame in emulation, including the
+- Round 1 matches the original ROM frame for frame in emulation, including the
   boss, weapons, continue/game over and two-player play
-  ([docs/FIDELITY_GATE.md](docs/FIDELITY_GATE.md)). All eight rounds run to the
-  ending but rounds 2–8 have not been compared with the original.
-- **Enhanced mode** replaces every player, enemy, boss, weapon and effect sprite
-  with 2x art, and can add dynamic lighting and shadows. The art comes from an
-  offline redraw of the original frames; hand-drawn art is not started
-  ([docs/REMASTER.md](docs/REMASTER.md)).
+  ([docs/FIDELITY_GATE.md](docs/FIDELITY_GATE.md)). Rounds 2–8 run to the
+  ending but have not been compared with the original.
+- The enhanced art is generated from the original frames by an offline redraw;
+  hand-drawn art is not started. Smooth animation has the runtime but few
+  in-betweens, because generating them automatically did not work for this art.
 - Full speed with no audio dropouts in Flycast. **Not yet tested on a real
   Dreamcast.**
 
