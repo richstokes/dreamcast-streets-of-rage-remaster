@@ -3,7 +3,7 @@ TARGET := $(ROOT)/build/native/sor.elf
 KOS_BUILD_SUBARCHS = pristine
 include $(KOS_BASE)/Makefile.rules
 SOURCES := $(wildcard $(ROOT)/build/native/upstream/*.cpp) $(wildcard *.cpp) ../render/vdp_scene.cpp ../render/sprite_probe.cpp ../render/art_catalog.cpp ../render/scene_light.cpp ../render/scene_particles.cpp ../render/scene_weather.cpp ../audio/audio_core.cpp ../audio/dac_driver.cpp
-OBJS := $(SOURCES:.cpp=.o) $(ROOT)/build/native/memory.o $(ROOT)/build/native/save.o
+OBJS := $(SOURCES:.cpp=.o) $(ROOT)/build/native/memory.o
 # Keep the synthesizer and its callbacks visible to the optimizer across files.
 # No fast-math: the PCM regression must remain byte-for-byte identical.
 # Repeat -O3 on the link command: KOS supplies a later -O2 in KOS_LDFLAGS,
@@ -28,8 +28,6 @@ EMBEDDED := $(ROOT)/build/native/embedded-rom.o $(wildcard $(ROOT)/build/native/
 $(ROOT)/build/native/sor-test.elf: $(OBJS) $(EMBEDDED)
 	kos-c++ -O3 -flto -o $@ $(OBJS) $(EMBEDDED) -lz -lm
 $(ROOT)/build/native/memory.o: $(ROOT)/src/core/memory.c
-	kos-cc -c $< -o $@
-$(ROOT)/build/native/save.o: $(ROOT)/src/core/save.c
 	kos-cc -c $< -o $@
 clean:
 	rm -f $(OBJS) $(TARGET)

@@ -12,7 +12,6 @@
 #include <cstdlib>
 #include <complex>
 #include <cstring>
-#include <string>
 #include <vector>
 
 namespace {
@@ -132,6 +131,7 @@ int main(int argc, char **argv) {
     const long ggate = std::atol(argv[5]);
     const auto native_raw = mono(read_all(argv[6], 0));
     const long ngate = std::atol(argv[7]), frames = std::atol(argv[8]);
+    // The port's output: the YM2612 rate (master clock / 7 / 144), 1008 clocks a sample.
     const double nrate = 53693175.0 / 7 / 144, nper = 896040.0 / 1008;
 
     // Resample native to the Genesis capture rate (linear interpolation).

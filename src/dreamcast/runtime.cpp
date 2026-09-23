@@ -1,10 +1,10 @@
 #include "diagnostics.hpp"
 #include "platform.hpp"
 #include "MegaDriveEnvironment.hpp"
-#include "Logger.hpp"
 #include "replay.hpp"
 #include "cheats.hpp"
 #include "sprite_probe.hpp"
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 #include <stdexcept>
@@ -34,15 +34,16 @@ MegaDriveEnvironment::~MegaDriveEnvironment(){free(rom_);platform_audio_shutdown
 void MegaDriveEnvironment::loadROM(const std::string &path){
     FILE *f=fopen(path.c_str(),"rb");
     size_t embeddedSize=0;const auto embedded=platform_embedded_rom(embeddedSize);
-    if(!f && embedded && embeddedSize==524288){
+    if(!f && embedded){
+        if(embeddedSize!=524288)throw std::runtime_error("Embedded ROM is not 524288 bytes");
         mem_.state.rom=embedded;mem_.state.rom_size=524288;audio_.setROM(mem_.state.rom,mem_.state.rom_size);
-        sor_log("SOR native: using embedded test ROM; direct ELF boot\n");return;
+        sor_log("SOR native: using embedded ROM; direct ELF boot\n");return;
     }
-    if(!f)throw std::runtime_error("Missing /cd/SOR.BIN; use disc image or embedded test ELF");
+    if(!f)throw std::runtime_error("Missing /cd/SOR.BIN and no embedded ROM");
     rom_=static_cast<uint8_t*>(malloc(524288)); if(!rom_){fclose(f);throw std::runtime_error("ROM allocation failed");}
     if(fread(rom_,1,524288,f)!=524288 || fgetc(f)!=EOF){fclose(f);throw std::runtime_error("ROM size mismatch");}
     fclose(f); mem_.state.rom=rom_; mem_.state.rom_size=524288;audio_.setROM(mem_.state.rom,mem_.state.rom_size);
-    sor_log("SOR native: ROM loaded; %s audio\n",audio_.enabled?"experimental":"disabled");
+    sor_log("SOR native: ROM loaded; %s audio\n",audio_.enabled?"enabled":"disabled");
 }
 uint32_t MegaDriveEnvironment::readBus(void *ctx,uint32_t a,unsigned w){
     auto &e=*static_cast<MegaDriveEnvironment*>(ctx);
@@ -50,7 +51,6 @@ uint32_t MegaDriveEnvironment::readBus(void *ctx,uint32_t a,unsigned w){
     if(a>=0xa00000 && a<0xa10000){e.cycles_+=7;e.syncAudio();} // Z80-bus access latency: one 68000 cycle (Genesis Plus GX)
     if(a>=0xc00000 && a<0xc00010){
         uint32_t v=(a&0xc)==4?e.port_.readControlPort():((a&0xc)==8?e.port_.readHVCounter():e.port_.readDataPort());
-        if((a&0xc)==8&&getenv("SOR_HV_DEBUG")){static int n=0;if(n++<60)sor_log("HVREAD frame=%lu value=%04x last=%06lx frame_clock=%llu\n",(unsigned long)e.frames_,v,(unsigned long)e.last_,(unsigned long long)(e.cycles_-e.frameCycles_));}
         return w==1?((a&1)?v&255:v>>8):v;
     }
     if(a>=0xa00000 && a<0xa02000){
@@ -97,7 +97,8 @@ void MegaDriveEnvironment::writeBus(void *ctx,uint32_t a,unsigned w,uint32_t v){
 #endif
         e.audio_.ram[a&8191]=w==1?v:v>>8;if(w==2)e.audio_.ram[(a+1)&8191]=v;return;}
     if(a==0xa10003 || a==0xa10005){e.th_[a==0xa10005]=v&64;return;}
-    // Emulated 68000 time since the frame began places each write in the next block.
+    // YM2612 and PSG writes carry emulated 68000 time since the frame began,
+    // which places each at its sample of the next rendered block.
     if(a>=0xa04000&&a<=0xa04003){
         // A data write keeps the YM2612 busy for 32 of its cycles (42 master
         // clocks each) from the next YM clock (Genesis Plus GX, discrete chip).
@@ -114,7 +115,7 @@ void MegaDriveEnvironment::writeBus(void *ctx,uint32_t a,unsigned w,uint32_t v){
 #endif
         e.audio_.setBusRequest(v&0x100);return;}
     if(a==0xa11200){e.audio_.setReset(!(v&0x100));return;}
-    if((a>=0xa10000&&a<0xa14004)||(a>=0xa04000&&a<=0xa04003)||a==0xc00011)return;
+    if(a>=0xa10000&&a<0xa14004)return;
     e.mem_.state.faults++;e.mem_.state.last_fault_address=a;
 }
 void MegaDriveEnvironment::present(){
@@ -127,10 +128,10 @@ void MegaDriveEnvironment::present(){
             case 0x5E90A:characters|=8;break;   // Blaze
         }
         // Last argument: in a round (not the title, menus, cutscenes or the ending).
-        platform_game_state(unsigned(mem_.readWord(0xffff02)&7)+1,characters,mem_.readWord(0xffff00)==0x16);
+        platform_game_state(unsigned(mem_.readWord(0xffff02)&7)+1,characters,mem_.readWord(0xffff00)==sor::cheats::playingMode);
     }
     const sor::TitleCaption title(state_,mem_.readWord(0xffff00));
-    if(platform_render_vdp(state_,renderer_,title)){
+    if(platform_render_vdp(state_,title)){
         if(frames_%600==0){auto stats=platform_memory_stats();sor_log("PVR frame=%lu render_us=%llu heap_used=%lu vram_free=%lu\n",(unsigned long)frames_,(unsigned long long)(platform_time_us()-start),(unsigned long)stats.heap_used,(unsigned long)stats.vram_free);}
         return;
     }
@@ -152,7 +153,7 @@ void MegaDriveEnvironment::spriteProbeEnd(uint32_t sat){sor::sprite_probe().endO
 void MegaDriveEnvironment::syncAudio(){
     audio_.sync68k(uint32_t(cycles_-frameCycles_));
     cycles_+=audio_.takeBusStall();
-    audioSyncAt_=audio_.dacPlaying()?cycles_+1500*7:~uint64_t(0);
+    audioSyncAt_=audio_.dacPlaying()?cycles_+dacSyncClocks:~uint64_t(0);
 }
 void MegaDriveEnvironment::waitForInterrupt(){
     settleInstruction();
@@ -161,7 +162,6 @@ void MegaDriveEnvironment::waitForInterrupt(){
 #endif
     // The CPU idles until the next VBlank; a boundary already crossed (for
     // example during a DMA stall) is the one being waited for.
-    if(getenv("SOR_PHASE_DEBUG")&&frames_>478&&frames_<492)sor_log("PHASE wait frame=%lu used=%llu of 896040 mode=%04x counter=%u\n",(unsigned long)frames_,(unsigned long long)(cycles_+frameClocks-nextVblank_),mem_.readWord(0xffff00),mem_.readWord(0xfffb08));
 #ifdef SOR_PC_HISTOGRAM
     // Host analysis: where in each frame FIRST..LAST the game starts waiting.
     if(const char *b=getenv("SOR_WAIT_LOG")){unsigned long lo=0,hi=0;sscanf(b,"%lu:%lu",&lo,&hi);
@@ -178,9 +178,8 @@ void MegaDriveEnvironment::waitForInterrupt(){
 void MegaDriveEnvironment::paceInterrupt(){
     // Emulated time crossed a VBlank while the CPU was running. In gameplay
     // that is a lag frame on the original too; log the first few.
-    if(getenv("SOR_PHASE_DEBUG")&&frames_>478&&frames_<492)sor_log("PHASE crossed frame=%lu mode=%04x counter=%u last=%06lx\n",(unsigned long)frames_,mem_.readWord(0xffff00),mem_.readWord(0xfffb08),(unsigned long)last_);
     static unsigned lagFrames=0;
-    if(mem_.readWord(0xffff00)==0x16 && lagFrames++<40)
+    if(mem_.readWord(0xffff00)==sor::cheats::playingMode && lagFrames++<40)
         sor_log("LAG frame=%lu last=%06lx mask=%d\n",(unsigned long)frames_,(unsigned long)last_,cpuInterruptMask());
     frameBoundary();
 }
@@ -189,18 +188,18 @@ void MegaDriveEnvironment::frameBoundary(){
     histogramFrame(frames_);
 #endif
     platform_observe_frame(frames_,mem_.state,fb_);
-    alignas(32) int16_t samples[890*2],dacSamples[890*2];
+    alignas(32) int16_t samples[NativeAudio::maxFrameSamples*2],dacSamples[NativeAudio::maxFrameSamples*2];
     int16_t *dac=platform_audio_split_dac()?dacSamples:nullptr;
     const auto audioStart=platform_time_us();
     unsigned count=audio_.renderFrame(samples,platform_audio_profile()&&frames_%600==599?platform_time_us:nullptr,dac);if(idleToVblank_)audio_.takeBusStall();idleToVblank_=false;audioSyncAt_=audio_.dacPlaying()?nextVblank_-frameClocks:~uint64_t(0);const auto synthDone=platform_time_us();if(count)platform_audio_submit(samples,count,dac);
-    if(audio_.enabled&&frames_%600==599)sor_log("AUDIO frame=%lu synth_us=%llu stream_us=%llu ym=%llu psg=%llu dac=%llu z80_faults=%llu\n",(unsigned long)frames_,(unsigned long long)(synthDone-audioStart),(unsigned long long)(platform_time_us()-synthDone),(unsigned long long)audio_.ymWrites,(unsigned long long)audio_.psgWrites,(unsigned long long)audio_.dacWrites,(unsigned long long)audio_.z80Faults);
     if(audio_.enabled&&frames_%600==599){
+        sor_log("AUDIO frame=%lu synth_us=%llu stream_us=%llu ym=%llu psg=%llu dac=%llu z80_faults=%llu\n",(unsigned long)frames_,(unsigned long long)(synthDone-audioStart),(unsigned long long)(platform_time_us()-synthDone),(unsigned long long)audio_.ymWrites,(unsigned long long)audio_.psgWrites,(unsigned long long)audio_.dacWrites,(unsigned long long)audio_.z80Faults);
         uint32_t digest=2166136261u;
         for(unsigned i=0;i<count*2;i++){uint16_t v=int(samples[i])+(dac?dac[i]:0);digest=(digest^(v&255))*16777619u;digest=(digest^(v>>8))*16777619u;}
         sor_log("AUDIO_PCM frame=%lu frames=%u fnv=%08lx\n",(unsigned long)frames_,count,(unsigned long)digest);
+        sor_log("DAC_NATIVE starts=%llu samples=%llu batch_frames=%llu interleaved_frames=%llu\n",audio_.nativeDacStarts,audio_.nativeDacSamples,audio_.batchFrames,audio_.interleavedFrames);
+        if(platform_audio_profile())sor_log("AUDIO_PARTS z80=%llu fm=%llu psg=%llu dynamic_ops=%lu ssg_ops=%lu live_ops=%lu fm_clock_us=%llu fm_output_us=%llu audible_ops=%lu\n",audio_.profile[0],audio_.profile[1],audio_.profile[2],(unsigned long)(audio_.fmWorkload&255),(unsigned long)((audio_.fmWorkload>>8)&255),(unsigned long)((audio_.fmWorkload>>16)&255),audio_.profile[3],audio_.profile[4],(unsigned long)(audio_.fmWorkload>>24));
     }
-    if(audio_.enabled&&frames_%600==599)sor_log("DAC_NATIVE starts=%llu samples=%llu batch_frames=%llu interleaved_frames=%llu\n",audio_.nativeDacStarts,audio_.nativeDacSamples,audio_.batchFrames,audio_.interleavedFrames);
-    if(audio_.enabled&&platform_audio_profile()&&frames_%600==599)sor_log("AUDIO_PARTS z80=%llu fm=%llu psg=%llu dynamic_ops=%lu ssg_ops=%lu live_ops=%lu fm_clock_us=%llu fm_output_us=%llu audible_ops=%lu\n",audio_.profile[0],audio_.profile[1],audio_.profile[2],(unsigned long)(audio_.fmWorkload&255),(unsigned long)((audio_.fmWorkload>>8)&255),(unsigned long)((audio_.fmWorkload>>16)&255),audio_.profile[3],audio_.profile[4],(unsigned long)(audio_.fmWorkload>>24));
     const auto presentStart=platform_time_us();
     present(); pads_.poll(mem_.state.ram); frames_++;
     frameCycles_=nextVblank_; vblankFlag_+=frameClocks; nextVblank_=vblankFlag_+vintDelay(); vintPending_=true;
@@ -252,7 +251,7 @@ void MegaDriveEnvironment::stateSync(){
         throw std::runtime_error("SOR_STATE_SYNC: reference is not in a VBlank wait loop");
     const uint8_t *ram=f.data()+at;
     const auto ramLong=[&](uint32_t a){a&=0xffff;return uint32_t(ram[a])<<24|ram[a+1]<<16|ram[a+2]<<8|ram[a+3];};
-    if(mem_.readWord(0xffff00)!=0x16||mem_.readByte(0xfffa00)!=ram[0xfa00])return;
+    if(mem_.readWord(0xffff00)!=sor::cheats::playingMode||mem_.readByte(0xfffa00)!=ram[0xfa00])return;
     uint32_t regs[17];exchangeCpuState(regs,false);
     if(regs[15]!=r[15]||mem_.readLong(regs[15])!=ramLong(r[15]))return;
     done=true;
@@ -312,8 +311,3 @@ void MegaDriveEnvironment::reportUnhandledDispatch(m_long a){
     dumpUnhandledDispatchCpuState(); throw std::runtime_error("Untranslated dispatch");
 }
 
-void MegaDriveEnvironment::debugState(){
-    sor_log("DIAG frame=%lu mode=%04x mailbox=%02x irq=%d last=%06lx cycles=%llu faults=%lu addr=%06lx\n",(unsigned long)frames_,mem_.readWord(0xffff00),mem_.readByte(0xfffa00),irqLevel(),(unsigned long)last_,(unsigned long long)cycles_,(unsigned long)mem_.state.faults,(unsigned long)mem_.state.last_fault_address);
-    sor_log("P1 type=%02x pos=%04x,%04x,%04x state=%04x health=%04x held=%02x SAT=%02x%02x%02x%02x\n",mem_.readByte(0xffb800),mem_.readWord(0xffb810),mem_.readWord(0xffb814),mem_.readWord(0xffb818),mem_.readWord(0xffb830),mem_.readWord(0xffb832),mem_.readByte(0xfffc04),state_.sat_[0],state_.sat_[1],state_.sat_[2],state_.sat_[3]);
-    dumpUnhandledDispatchCpuState();
-}

@@ -27,7 +27,7 @@ py="$root/build/tools-venv/bin/python3"; core="$root/build/gpgx-profile/genesis_
 headless="$root/build/headless/sor-headless"
 work="$root/build/art-set"; frames="$root/build/frames-set"
 rm -rf "$work" "$frames" "$root/build/frames-players"; mkdir -p "$work" "$frames"
-python3 - "$root" "$work" "${SWEEP_FRAMES:-36000}" <<'PY'
+"$py" - "$root" "$work" "${SWEEP_FRAMES:-36000}" <<'PY'
 import json,sys
 root,work,sweep=sys.argv[1],sys.argv[2],int(sys.argv[3])
 def variant(src,key):
@@ -55,29 +55,33 @@ for name,ahead,back in (('sweep','RIGHT','LEFT'),('sweep-rtl','LEFT','RIGHT')):
         c=cycle(ahead,back,i%6==5);seg+=c;n+=sum(s['frames'] for s in c);i+=1
     json.dump({'segments':seg},open(f'{work}/{name}.json','w'))
 PY
+# Background jobs: `wait` alone ignores their exit status, so each is waited for.
+pids=
 for c in adam axel blaze; do
-    "$py" "$root/tools/bot-play.py" "$core" "$rom" "$work/$c-prologue.json" 16000 "$work/$c-bot.json" --weaken > /dev/null &
-    "$py" "$root/tools/bot-play.py" "$core" "$rom" "$work/$c-prologue.json" 16000 "$work/$c-bot-items.json" --weaken --throws --pickups > /dev/null &
-done; wait
+    "$py" "$root/tools/bot-play.py" "$core" "$rom" "$work/$c-prologue.json" 16000 "$work/$c-bot.json" --weaken > "$work/$c-bot.log" &
+    pids="$pids $!"
+    "$py" "$root/tools/bot-play.py" "$core" "$rom" "$work/$c-prologue.json" 16000 "$work/$c-bot-items.json" --weaken --throws --pickups > "$work/$c-bot-items.log" &
+    pids="$pids $!"
+done
+for pid in $pids; do wait "$pid"; done
 for scenario in "$work"/*.json; do
-    name=$(basename "$scenario" .json); python3 "$root/tools/replay.py" "$scenario" "$work/$name.bin" > /dev/null
+    name=$(basename "$scenario" .json); "$py" "$root/tools/replay.py" "$scenario" "$work/$name.bin" > /dev/null
 done
 extract() { # name replay [round]
     mkdir -p "$frames/$1"
-    if [ -n "${3:-}" ]; then
-        SOR_EXTRACT_FRAMES="$frames/$1" SOR_CHEATS=$3 "$headless" "$rom" "$2" /dev/null > /dev/null 2>&1
-    else
-        SOR_EXTRACT_FRAMES="$frames/$1" "$headless" "$rom" "$2" /dev/null > /dev/null 2>&1
-    fi
+    SOR_EXTRACT_FRAMES="$frames/$1" ${3:+SOR_CHEATS=$3} "$headless" "$rom" "$2" /dev/null > "$work/extract-$1.log" 2>&1
 }
+pids=
 for replay in "$work"/*.bin; do
     name=$(basename "$replay" .bin)
     case $name in *-prologue|sweep|sweep-rtl) continue;; esac
     extract "$name" "$replay" &
+    pids="$pids $!"
 done
-for round in 1 2 3 4 5 6 7; do extract "round$round" "$work/sweep.bin" $round & done
+for round in 1 2 3 4 5 6 7; do extract "round$round" "$work/sweep.bin" $round & pids="$pids $!"; done
 extract round8 "$work/sweep-rtl.bin" 8 &
-wait
+pids="$pids $!"
+for pid in $pids; do wait "$pid"; done
 "$py" "$root/tools/extract-player-frames.py" "$rom" "$root/build/frames-players" "$frames"/*
 rm -rf "$root/build/frames-inbetween"
 "$py" "$root/tools/make-inbetweens.py" "$rom" "$root/build/frames-inbetween" "$root/build/frames-players" "$frames"/* \

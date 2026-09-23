@@ -7,10 +7,7 @@ such, from Genesis Plus GX profiles, which include DRAM refresh and so are
 charged with charge() rather than pace().
 """
 
-def replace_once(text, old, new):
-    if text.count(old) != 1:
-        raise RuntimeError('Pinned game source changed; review cadence patch: ' + old[:60])
-    return text.replace(old, new)
+from patching import replace_once
 
 
 # Hand-written routines charged their mean cost per call (Genesis Plus GX

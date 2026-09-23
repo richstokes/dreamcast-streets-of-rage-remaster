@@ -10,7 +10,6 @@
 #include <cstdint>
 #include <cstddef>
 namespace sor {
-class ArtCatalog;
 struct TileQuad {
     uint16_t tile;
     uint16_t x,y,w,h;
@@ -53,16 +52,16 @@ public:
     alignas(32) uint16_t sprites[2][512*256]{};
     uint16_t colors[64]{},background=0;
     int width=320,height=224;
-    bool build(VDPState &,VDPRenderer &);
-    bool buildCached(VDPState &,VDPRenderer &);
+    bool build(VDPState &);
+    bool buildCached(VDPState &);
     bool reused=false,planesReused=false;
     int spriteTop[2]{256,256},spriteBottom[2]{};
     static uint16_t rgb1555(unsigned r,unsigned g,unsigned b);
-    // Enhanced mode: sprites become spriteTiles and artDraws instead of the
-    // two composited layers (which are still built: they also produce the
-    // VDP's sprite overflow and collision status bits the game can read).
-    // Objects with no art in `art` keep their original pieces. VDP sprite
-    // limits per line do not apply to the enhanced drawing.
+    // Enhanced mode: sprites become spriteTiles and artDraws; the two composited
+    // layers are not built (their by-product, the VDP's sprite overflow and
+    // collision status bits, is never read by the game). Objects with no art
+    // in `art` keep their original pieces. VDP sprite limits per line do not
+    // apply to the enhanced drawing.
     bool enhanced=false;
     const ArtCatalog *art=nullptr;
     // Smooth animation: when an object with art changes pose and the art has an
@@ -89,7 +88,7 @@ public:
     size_t weatherQuadCount=0;
     // Haze on a backdrop line (0-255 of the fog's colour), and the wet ground's
     // reflection of art standing on it (its alpha at the feet; 0: none).
-    int fogAt(int y,bool farPlane) const {return weather_fog(weatherProfile(),y,light_.horizon(),farPlane);}
+    int fogAt(int y,bool farPlane) const {return weather_fog(weatherProfile(),y,light_.wallLine(),farPlane);}
     int reflectAlpha() const {return weatherOn()?reflect_alpha(weatherProfile()):0;}
     // ... for an object `up` lines above the ground: fainter the higher.
     static constexpr int reflectAlpha(int alpha,int up){return alpha*(96-std::clamp(up,0,96))/96;}
@@ -107,7 +106,7 @@ public:
     static constexpr size_t MAX_SPRITE_TILES=80*16;
     SpriteTile spriteTiles[MAX_SPRITE_TILES];
     size_t spriteTileCount=0;
-    ArtDraw artDraws[80];
+    ArtDraw artDraws[SpriteBuild::MAX_OBJECTS];
     size_t artCount=0;
     // The art changed (another round's pages): the cached scene's art draws are stale.
     void invalidate(){cacheValid=false;}
@@ -133,8 +132,6 @@ private:
     struct Tracked{uint16_t slot;int16_t x,y,level;uint8_t type;};
     Tracked tracked_[SpriteBuild::MAX_OBJECTS];
     unsigned trackedCount_=0;
-    uint32_t particleSeed_=0x9E3779B9u;
-    uint32_t particleRandom(){particleSeed_^=particleSeed_<<13;particleSeed_^=particleSeed_>>17;particleSeed_^=particleSeed_<<5;return particleSeed_;}
     void particlesStep(const VDPState &,const SpriteBuild *displayed);
     uint16_t lightColors_[64]{},lightBackground_=0;   // what light_ was built from
     bool lightValid_=false,lightCollected_=false;
@@ -143,8 +140,8 @@ private:
     // The round's ground level (object +$18 of whatever stands on the ground;
     // it differs between rounds): the value most shadow casters share, or one
     // a lone object has kept for a while (a jump changes it every tick).
-    // horizon_: the farthest ground line anything has stood on (lanes are about 36 lines deep).
-    int16_t groundLevel_=0,loneLevel_=0,horizon_=0;
+    // farthestGround_: the farthest ground line anything has stood on (lanes are about 36 lines deep).
+    int16_t groundLevel_=0,loneLevel_=0,farthestGround_=0;
     unsigned loneBuilds_=0;
     bool groundKnown_=false;
     // The pose each object with art was last drawn in.

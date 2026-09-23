@@ -11,6 +11,7 @@
 #include "extract_frames.hpp"
 #include "cheats.hpp"
 #include "art_catalog.hpp"
+#include "audio_core.hpp"
 #include <vector>
 
 namespace {
@@ -28,7 +29,7 @@ sor::TitleCaption sceneTitle;
 // SOR_WEATHER=1: the round's weather (rain, wet ground, haze, mist, lightning; with lighting);
 // 2: the same, and lightning strikes two captured frames in (a step of 1 shows it die away).
 unsigned gameRound=0;   // 1-8, from the runtime
-bool gamePlaying=false; // in a round (not the title, menus, cutscenes or the ending): the weather's
+bool gamePlaying=false; // in a round (not the title, menus, cutscenes or the ending): gates lighting and weather
 struct EnhancedCapture {
     std::string directory;unsigned first=0,last=0,step=1,frame=0;bool pending=false;
     std::vector<uint8_t> package;sor::ArtCatalog art;
@@ -49,7 +50,7 @@ void capture_setup(){
         capture.scene=std::make_unique<sor::VdpScene>();
     }
 }
-void capture_enhanced(VDPState &state,VDPRenderer &renderer){
+void capture_enhanced(VDPState &state){
     capture_setup();
     capture.frame++;capture.pending=false;
     if(!capture.scene||capture.frame<capture.first||capture.frame>capture.last||(capture.frame-capture.first)%capture.step)return;
@@ -61,7 +62,7 @@ void capture_enhanced(VDPState &state,VDPRenderer &renderer){
     static const char weather=std::getenv("SOR_WEATHER")?std::getenv("SOR_WEATHER")[0]:'0';
     capture.scene->lighting=lighting&&gamePlaying;capture.scene->weather=(weather=='1'||weather=='2')&&gamePlaying;capture.scene->round=gameRound;
     if(weather=='2'&&capture.frame==capture.first+2)capture.scene->weatherStrike();
-    const bool ok=capture.scene->build(state,renderer);
+    const bool ok=capture.scene->build(state);
     state.status_=status;
     if(!ok)return;
     capture.width=capture.scene->width*2;capture.height=capture.scene->height*2;
@@ -107,7 +108,7 @@ void capture_write(const Framebuffer &fb,int width,int height){
         if(scene.lighting){
             // The backdrop's light grid, a row of cells per line (rrggbb).
             const auto &light=scene.sceneLight();
-            fprintf(list,"ambient %d,%d,%d level %d horizon %d lights %u\n",light.ambient[0],light.ambient[1],light.ambient[2],light.level(),light.horizon(),light.lightCount());
+            fprintf(list,"ambient %d,%d,%d level %d wall %d lights %u\n",light.ambient[0],light.ambient[1],light.ambient[2],light.level(),light.wallLine(),light.lightCount());
             for(unsigned i=0;i<light.lightCount();i++){const auto &l=light.lights()[i];
                 fprintf(list,"light %d,%d power %u colour %d,%d,%d%s\n",l.x,l.y,l.power,l.colour[0],l.colour[1],l.colour[2],l.low?" lamp":"");}
             fputs("spill",list);
@@ -134,19 +135,31 @@ void capture_write(const Framebuffer &fb,int width,int height){
         fprintf(list,"sprite cells %zu\n",scene.spriteTileCount);fclose(list);
     }
 }
+// The framebuffer (3-bit RGB) as a binary PPM.
+void write_ppm(const Framebuffer &fb,const std::string &path,const char *what){
+    FILE *out=fopen(path.c_str(),"wb");
+    if(!out)throw std::runtime_error(std::string(what)+" open failed");
+    fprintf(out,"P6\n320 224\n255\n");
+    const auto *pixels=static_cast<const uint8_t*>(fb.getRawPointer());
+    for(int i=0;i<320*224;i++){
+        const uint8_t rgb[]={uint8_t(pixels[i*3+2]*255/7),uint8_t(pixels[i*3+1]*255/7),uint8_t(pixels[i*3]*255/7)};
+        if(fwrite(rgb,1,3,out)!=3){fclose(out);throw std::runtime_error(std::string(what)+" write failed");}
+    }
+    if(fclose(out))throw std::runtime_error(std::string(what)+" close failed");
+}
 }
 const uint8_t *platform_embedded_rom(size_t &size){size=0;return nullptr;}
 const uint8_t *platform_embedded_art(size_t &size){size=0;return nullptr;}
 void platform_game_state(unsigned round,unsigned,bool playing){gameRound=round;gamePlaying=playing;sor::extract_frames_round(playing?round:0);}
 void platform_video_init(){}
 void platform_video_shutdown(){}
-bool platform_render_vdp(VDPState &state,VDPRenderer &renderer,const sor::TitleCaption &title){
+bool platform_render_vdp(VDPState &state,const sor::TitleCaption &title){
     static unsigned presented=0;
     sor::extract_frames(state,++presented);
-    capture_enhanced(state,renderer);
+    capture_enhanced(state);
     if(std::getenv("SOR_VALIDATE_GPU_SCENE")){
         if(!scene)scene=std::make_unique<sor::VdpScene>();
-        sceneState=scene->buildCached(state,renderer)?&state:nullptr;
+        sceneState=scene->buildCached(state)?&state:nullptr;
         sceneTitle=title;
     }
     return false;
@@ -169,15 +182,7 @@ void platform_video_present(const Framebuffer &fb,int width,int height){
 void platform_poll_controllers(PlayersControlState &){throw std::runtime_error("Headless replay exhausted or missing");}
 void platform_cheat_menu_present(const Framebuffer &fb){
     if(!replay_finished())return;
-    FILE *capture=fopen(capturePath.c_str(),"wb");
-    if(!capture)throw std::runtime_error("Menu capture open failed");
-    fprintf(capture,"P6\n320 224\n255\n");
-    const auto *pixels=static_cast<const uint8_t*>(fb.getRawPointer());
-    for(int i=0;i<320*224;i++){
-        const uint8_t rgb[]={uint8_t(pixels[i*3+2]*255/7),uint8_t(pixels[i*3+1]*255/7),uint8_t(pixels[i*3]*255/7)};
-        if(fwrite(rgb,1,3,capture)!=3){fclose(capture);throw std::runtime_error("Menu capture write failed");}
-    }
-    if(fclose(capture))throw std::runtime_error("Menu capture close failed");
+    write_ppm(fb,capturePath,"Menu capture");
     throw ReplayFinished{};
 }
 uint64_t platform_time_us(){return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();}
@@ -187,15 +192,7 @@ void platform_observe_frame(uint32_t frame,const sor_memory &memory,const Frameb
     if(memory.faults) throw std::runtime_error("Unmapped device access in headless simulation");
     if(fwrite(memory.ram,1,sizeof(memory.ram),trace)!=sizeof(memory.ram)) throw std::runtime_error("Trace write failed");
     if(replay_finished()){
-        FILE *capture=fopen(capturePath.c_str(),"wb");
-        if(!capture) throw std::runtime_error("Capture open failed");
-        fprintf(capture,"P6\n320 224\n255\n");
-        const auto *pixels=static_cast<const uint8_t*>(fb.getRawPointer());
-        for(int i=0;i<320*224;i++){
-            const uint8_t rgb[]={uint8_t(pixels[i*3+2]*255/7),uint8_t(pixels[i*3+1]*255/7),uint8_t(pixels[i*3]*255/7)};
-            if(fwrite(rgb,1,3,capture)!=3){fclose(capture);throw std::runtime_error("Capture write failed");}
-        }
-        if(fclose(capture)) throw std::runtime_error("Capture close failed");
+        write_ppm(fb,capturePath,"Capture");
         throw ReplayFinished{};
     }
 }
@@ -218,7 +215,7 @@ int main(int argc,char **argv){
 namespace {FILE *audioCapture=nullptr;}
 void platform_audio_init(unsigned){if(const char *path=std::getenv("SOR_AUDIO_CAPTURE")){audioCapture=fopen(path,"wb");if(!audioCapture)throw std::runtime_error("Audio capture open failed");}}
 void platform_audio_submit(const int16_t *samples,unsigned frames,const int16_t *dac){
-    int16_t mixed[1780];if(dac){for(unsigned i=0;i<frames*2;i++)mixed[i]=int(samples[i])+dac[i];samples=mixed;}
+    int16_t mixed[NativeAudio::maxFrameSamples*2];if(dac){for(unsigned i=0;i<frames*2;i++)mixed[i]=int(samples[i])+dac[i];samples=mixed;}
     if(audioCapture && fwrite(samples,4,frames,audioCapture)!=frames)throw std::runtime_error("Audio capture failed");}
 void platform_audio_shutdown(){if(audioCapture){fclose(audioCapture);audioCapture=nullptr;}}
 

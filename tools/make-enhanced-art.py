@@ -16,7 +16,7 @@ frame is redrawn at twice the resolution (src/render/art_catalog.hpp):
   3. Colour: 8-bit PowerVR textures; each palette is quantised from its
      frames without dithering.
   4. Frames are cropped to their opaque pixels and the pages stored
-     zlib-compressed (SORART04).
+     zlib-compressed (SORART06).
 
 Frames are keyed by mapping address and colour key (art_catalog.hpp): the same
 enemy frame under different colours is separate art. Pages are grouped by the
@@ -87,6 +87,9 @@ def redraw_edges(rgba):
     return out
 
 
+
+WEIGHT = np.float32([0.55, 0.77, 0.32])   # perceptual channel weights: green counts most, blue least
+
 def smooth(rgba, passes, sigma_space, sigma_colour):
     """Bilateral filter over opaque pixels; alpha is unchanged."""
     alpha = rgba[..., 3] > 0
@@ -101,17 +104,13 @@ def smooth(rgba, passes, sigma_space, sigma_colour):
         for dy, dx in offsets:
             other = padded[radius + dy: radius + dy + h, radius + dx: radius + dx + w]
             # Perceptual weighting: differences in green count most, blue least.
-            diff = ((other - image) * np.float32([0.55, 0.77, 0.32])) ** 2
+            diff = ((other - image) * WEIGHT) ** 2
             wgt = np.exp(-(dy * dy + dx * dx) / (2 * sigma_space ** 2) - diff.sum(-1) / (2 * sigma_colour ** 2))
             wgt *= mask[radius + dy: radius + dy + h, radius + dx: radius + dx + w]
             total += other * wgt[..., None]; weight += wgt
         image = np.where(alpha[..., None], total / np.maximum(weight, 1e-6)[..., None], image)
     out = rgba.copy(); out[..., :3] = np.clip(image + 0.5, 0, 255).astype(np.uint8)
     return out
-
-
-WEIGHT = np.float32([0.55, 0.77, 0.32])   # perceptual channel weights
-
 
 def quantise(colours, counts, n):
     """n representative colours: farthest-point seeding, so rare tones (a red
@@ -212,8 +211,6 @@ def main():
             rank = (3 if 'character' in f else 2 if check in ('confirmed', 'direct') else 1 if check in ('set_only', 'direct_culled') else 0, f['seen'])
             if key not in frames or rank > frames[key][2]:
                 frames[key] = (f, d, rank)
-    # Colours seen only in passing are fades and flashes, not an object's look:
-    # they get no art, and the game's own pieces are drawn for them.
     # Fades and flashes are not an object's look. A step of a fade is another
     # look of the same frame with every colour darker (or, flashing, lighter),
     # seen for less time; a look barely seen at all is dropped too. They get no
@@ -391,7 +388,7 @@ def main():
     # Where each round's memory goes: art texels by object type (largest first).
     by_type = {}
     for k, g, im in zip(keys, groups, images):
-        if g[2] or g[2] & 0x80: continue
+        if g[2] or g[3]: continue
         for r in range(8):
             if g[0] >> r & 1:
                 t = '%02x' % min(frames[k][0]['types'])

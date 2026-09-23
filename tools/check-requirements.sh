@@ -29,8 +29,7 @@ check_rom() {
             'or pass its path as the first argument (or SOR_ROM).'
     elif ! err=$(python3 "$root/tools/rom.py" "$rom" --require-known 2>&1 > /dev/null); then
         fail "ROM: $rom is not the supported dump" "$err" \
-            'Needed: Streets of Rage (World) revision 00, 524,288 bytes, plain big-endian,' \
-            'SHA-256 dd44f120446654bb91c448762f3e0cd0d9b034f35d0e3266a4dc34402ada95c0.' \
+            'Needed: Streets of Rage (World) revision 00, 524,288 bytes, plain big-endian.' \
             'Other revisions, headered or byte-swapped dumps are not supported.'
     else ok "ROM: $rom"; fi
 }

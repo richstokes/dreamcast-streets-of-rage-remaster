@@ -109,7 +109,7 @@ bool has_resident_set(const sor::ProbedObject &obj){
     return !rom.empty()&&obj.type!=1&&obj.type!=7&&obj.set>=0x200&&obj.set<rom.size();
 }
 // Every frame of an object's animation set, from the VRAM of this moment.
-void extract_set(const VDPState &s,const sor::ProbedObject &obj,int line,unsigned frameNumber){
+void extract_set(const VDPState &s,const sor::ProbedObject &obj,unsigned frameNumber){
     const unsigned first=word(obj.set);
     if(first<2||first>1024||(first&1))return;
     std::set<uint32_t> records;
@@ -142,7 +142,6 @@ void extract_set(const VDPState &s,const sor::ProbedObject &obj,int line,unsigne
         c.set=obj.set;c.used|=used;setMask[obj.set]|=used;
         c.fromSet[std::move(v)]++;
     }
-    (void)line;
 }
 void write_pam(const std::string &path,const Variant &v){
     if(FILE *pam=fopen(path.c_str(),"wb")){
@@ -184,7 +183,7 @@ void extract_frames(const VDPState &s,unsigned frameNumber){
             auto &sample=setSamples[{obj.set,obj.tileBase,colour_key(s.cram_+line*16,uint16_t(setMask[obj.set]?setMask[obj.set]:0xFFFE))}];
             if(run>=45&&sample.count<3&&(!sample.count||frameNumber>=sample.last+120)){
                 sample={frameNumber,sample.count+1};
-                extract_set(s,obj,line,frameNumber);
+                extract_set(s,obj,frameNumber);
             }
         }
         Variant v;unsigned used=0;

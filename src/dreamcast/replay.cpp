@@ -5,7 +5,7 @@
 #include <stdexcept>
 namespace {
 struct Segment{uint32_t frames;uint16_t p1,p2,address;uint8_t mask,value;uint32_t flags;};
-constexpr unsigned maxSegments=4096; // 80 KiB
+constexpr unsigned maxSegments=4096; // 64 KiB
 Segment segments[maxSegments];unsigned count=0,index=0;uint32_t remaining=0,played=0;
 uint32_t le(const uint8_t *b,unsigned n){uint32_t v=0;for(unsigned i=0;i<n;i++)v|=uint32_t(b[i])<<(i*8);return v;}
 PlayerControlsState decode(uint16_t b){

@@ -1,6 +1,7 @@
 #include "cheats.hpp"
 #include "platform.hpp"
 #include "replay.hpp"
+#include "audio_core.hpp"
 
 namespace sor::cheats {
 namespace {
@@ -102,10 +103,11 @@ void poll(PlayersControlState &pads, const uint8_t *ram) {
     // No game instructions, IRQs or RAM writes run inside this modal loop.
     // Game changes are applied later at the existing safe VBlank-wait hook.
     static Framebuffer frame;
-    static const int16_t silence[889 * 2]{};
+    static const int16_t silence[NativeAudio::maxFrameSamples * 2]{};
     do {
         draw(menu, frame);
-        platform_audio_submit(silence, 889);
+        // The split-DAC path (SOR_DAC_AICA) requires a DAC stem: silence for both.
+        platform_audio_submit(silence, NativeAudio::maxFrameSamples, silence);
         platform_cheat_menu_present(frame);
         if (!replay_poll(pads, ram)) platform_poll_controllers(pads);
         menu.input(pads.player1);

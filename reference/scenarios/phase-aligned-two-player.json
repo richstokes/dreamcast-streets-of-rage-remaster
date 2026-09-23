@@ -1,6 +1,6 @@
 {
   "name": "Two-player encounter with simulation half-cycle anchor",
-  "status": "Diagnostic synchronization only; no WRAM edits or cheats. Not full combat coverage.",
+  "description": "Two players from a state gate.",
   "segments": [
     {
       "frames": 360,

@@ -1,7 +1,6 @@
 #include "scene_particles.hpp"
 #include <algorithm>
 namespace sor {
-uint32_t Particles::random(){random_^=random_<<13;random_^=random_>>17;random_^=random_<<5;return random_;}
 void Particles::spawn(Kind kind,int screenX,int screenY,int camera,int vx,int vy,unsigned life){
     // Full: the oldest makes room (the nearest its end).
     size_t slot=count_;
@@ -58,7 +57,7 @@ size_t Particles::draw(int camera,int width,int height,ParticleDraw *out) const{
     for(size_t i=0;i<count_;i++){
         const Particle &p=particles_[i];
         const int x=p.x/8-camera*2,y=p.y/8;                        // half pixels
-        if(x<-16||y<72||x>width*2+16||y>height*2+16)continue;      // not over the HUD
+        if(x<-16||y<HUD_LINES*2||x>width*2+16||y>height*2+16)continue;
         const int left=p.life*255/p.span;                           // 255 new, 0 gone
         ParticleDraw d{int16_t(x),int16_t(y),2,{255,255,255},255,true};
         switch(p.kind){

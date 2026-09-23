@@ -5,12 +5,12 @@
 #include <algorithm>
 #include <span>
 int main(){
- NativeAudio disabled(false);int16_t silence[1780];disabled.setReset(true);disabled.setBusRequest(false);disabled.writeYM(0,0x28);disabled.writePSG(0x90);assert(disabled.renderFrame(silence)==0&&disabled.readYM(0)==0);
- NativeAudio a,b;int16_t x[1780],y[1780];unsigned total=0;
+ NativeAudio disabled(false);int16_t silence[NativeAudio::maxFrameSamples*2];disabled.setReset(true);disabled.setBusRequest(false);disabled.writeYM(0,0x28);disabled.writePSG(0x90);assert(disabled.renderFrame(silence)==0&&disabled.readYM(0)==0);
+ NativeAudio a,b;int16_t x[NativeAudio::maxFrameSamples*2],y[NativeAudio::maxFrameSamples*2];unsigned total=0;
  for(auto *s:{&a,&b}){s->writePSG(0x84);s->writePSG(0x08);s->writePSG(0x90);}
  int lo=32767,hi=-32768;
  for(int frame=0;frame<120;frame++){
-  unsigned n=a.renderFrame(x);assert(n==b.renderFrame(y)&&n<=890);total+=n;
+  unsigned n=a.renderFrame(x);assert(n==b.renderFrame(y)&&n<=NativeAudio::maxFrameSamples);total+=n;
   assert(!memcmp(x,y,n*4));for(unsigned i=0;i<n*2;i++){lo=std::min(lo,int(x[i]));hi=std::max(hi,int(x[i]));}
  }
  assert(total==uint64_t(896040)*120/1008 && lo<0 && hi>0);

@@ -1,6 +1,6 @@
 {
   "name": "NTSC-U cold boot, default Adam, movement and attack smoke",
-  "status": "Genesis emulated inputs exercised; no full parity claim",
+  "description": "Cold boot, default character (Adam), walking and attacks: the smoke test.",
   "segments": [
     {
       "frames": 360,

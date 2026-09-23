@@ -9,10 +9,13 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <zlib.h>
 #include <memory>
 #include <vector>
+// For checks whose expression has side effects: evaluated under NDEBUG too.
+#define CHECK(x) do{if(!(x)){std::fprintf(stderr,"%s:%d: %s\n",__FILE__,__LINE__,#x);std::abort();}}while(0)
 namespace {
 void put16(std::vector<uint8_t> &v,unsigned x){v.push_back(uint8_t(x));v.push_back(uint8_t(x>>8));}
 void put32(std::vector<uint8_t> &v,uint32_t x){put16(v,x&0xFFFF);put16(v,x>>16);}
@@ -43,7 +46,7 @@ int main(){
     const uint16_t mask=0b110,key=sor::colour_key(state.cram_,mask);
     const auto package=[&](uint16_t colours,uint16_t rounds,uint8_t character){
         std::vector<uint8_t> page(64);for(int i=0;i<64;i++)page[i]=i<8*4&&i%8<4?1:0;   // top-left 4x4
-        std::vector<uint8_t> z(compressBound(64));uLongf zn=z.size();assert(compress(z.data(),&zn,page.data(),64)==Z_OK);
+        std::vector<uint8_t> z(compressBound(64));uLongf zn=z.size();CHECK(compress(z.data(),&zn,page.data(),64)==Z_OK);
         std::vector<uint8_t> pak(std::begin("SORART04"),std::end("SORART04")-1);
         put32(pak,1);put32(pak,1);put32(pak,2);
         for(int palette=0;palette<2;palette++)for(int i=0;i<256;i++)put16(pak,palette==1&&i==1?0xFC00:0);   // red
@@ -52,9 +55,8 @@ int main(){
         return pak;
     };
     const auto pak=package(key,0b101,2);
-    sor::ArtCatalog art;assert(art.load(pak.data(),pak.size()));
+    sor::ArtCatalog art;CHECK(art.load(pak.data(),pak.size()));
     assert(art.find(0x054206,state.cram_)&&!art.find(0x054207,state.cram_));
-    // Only the current round's pages are found.
     // Only pages of the current round and of a character in play are found;
     // nor is a page the loader could not fit.
     art.select(2,1<<2);assert(!art.find(0x054206,state.cram_));
@@ -63,13 +65,12 @@ int main(){
     art.setUnloaded(0);assert(!art.find(0x054206,state.cram_));
     art.select(0,0);assert(art.find(0x054206,state.cram_));
     // Pages can be left packed and inflated on request (the Dreamcast's loader).
-    sor::ArtCatalog lazy;assert(lazy.load(pak.data(),pak.size(),false)&&!lazy.pages()[0].indices);
-    std::vector<uint8_t> inflated(64);assert(lazy.inflate(lazy.pages()[0],inflated.data())&&inflated[0]==1&&inflated[4]==0);
+    sor::ArtCatalog lazy;CHECK(lazy.load(pak.data(),pak.size(),false)&&!lazy.pages()[0].indices);
+    std::vector<uint8_t> inflated(64);CHECK(lazy.inflate(lazy.pages()[0],inflated.data())&&inflated[0]==1&&inflated[4]==0);
 
     auto scene=std::make_unique<sor::VdpScene>();
-    VDPTile tile(state);Framebuffer fb;VDPRenderer renderer(state,tile,fb);
     scene->enhanced=true;scene->art=&art;
-    assert(scene->build(state,renderer));
+    CHECK(scene->build(state));
     assert(scene->artCount==1);
     const auto &d=scene->artDraws[0];
     assert(d.x==48&&d.y==66&&d.order==0&&d.layer==0&&!d.flip);
@@ -85,12 +86,12 @@ int main(){
     // Other colours in the line (a flash, a fade, a recoloured enemy): the
     // art is not for them, and the object's pieces are drawn.
     state.cram_[2]^=0x0E0;
-    assert(scene->build(state,renderer)&&scene->artCount==0&&scene->spriteTileCount==5);
+    CHECK(scene->build(state)&&scene->artCount==0&&scene->spriteTileCount==5);
     state.cram_[2]^=0x0E0;
-    assert(scene->build(state,renderer)&&scene->artCount==1);
+    CHECK(scene->build(state)&&scene->artCount==1);
     // A colour of the line the art does not use (stage colour cycling) changes nothing.
     state.cram_[9]^=0x0E0;
-    assert(scene->build(state,renderer)&&scene->artCount==1);
+    CHECK(scene->build(state)&&scene->artCount==1);
 
     // Fades and flashes (SORART06: each frame carries its look's CRAM line).
     // The game subtracts a step per channel, clamped at black, or adds one,
@@ -99,7 +100,7 @@ int main(){
     {
         auto pak6=package(key,0xFF,0);pak6[7]='6';
         put32(pak6,0);for(int i=0;i<16;i++)put16(pak6,state.cram_[i]);     // from, line
-        sor::ArtCatalog fading;assert(fading.load(pak6.data(),pak6.size()));
+        sor::ArtCatalog fading;CHECK(fading.load(pak6.data(),pak6.size()));
         scene->art=&fading;
         uint16_t saved[16];std::memcpy(saved,state.cram_,sizeof saved);
         const auto step=[&](int red,int green){
@@ -114,7 +115,7 @@ int main(){
         step(-1,-2);                                        // fading out: red one step, green two
         assert(!fading.find(0x054206,state.cram_));         // exact colours only, without a tint
         assert(fading.find(0x054206,state.cram_,&tint)&&tint.scale[0]<255&&tint.scale[1]<=tint.scale[0]&&tint.scale[2]==255&&!tint.offset[0]);
-        assert(scene->build(state,renderer)&&scene->artCount==1&&!scene->artDraws[0].tint.identity());
+        CHECK(scene->build(state)&&scene->artCount==1&&!scene->artDraws[0].tint.identity());
         std::vector<uint16_t> faded(640*448);
         sor::raster_enhanced(*scene,state,faded.data(),640);
         const uint16_t was=out[(66*2-4)*640+48*2-2],is=faded[(66*2-4)*640+48*2-2];
@@ -141,7 +142,7 @@ int main(){
         probe.beginObject(0xB800,1,0x054206,false,128+48,128+66,0,0xFFDA10);
         probe.endObject(0xFFDA18,ram.data());
         scene->art=&art;
-        assert(scene->build(state,renderer)&&scene->artCount==1);
+        CHECK(scene->build(state)&&scene->artCount==1);
         assert(scene->artDraws[0].lineFrom==65&&scene->artDraws[0].lineTo==32767);   // art spans lines 64-65
         assert(scene->spriteTileCount==1&&scene->spriteTiles[0].x==200);            // the HUD sprite only
         for(int i=0;i<4;i++)record(state,ram.data(),i,0,0,0,0,0);
@@ -156,7 +157,7 @@ int main(){
     // first to it, on a page of its own (character bit 7), green.
     {
         std::vector<uint8_t> page(64,1);
-        std::vector<uint8_t> z(compressBound(64));uLongf zn=z.size();assert(compress(z.data(),&zn,page.data(),64)==Z_OK);
+        std::vector<uint8_t> z(compressBound(64));uLongf zn=z.size();CHECK(compress(z.data(),&zn,page.data(),64)==Z_OK);
         std::vector<uint8_t> pak(std::begin("SORART05"),std::end("SORART05")-1);
         put32(pak,2);put32(pak,3);put32(pak,2);
         for(int palette=0;palette<2;palette++)for(int i=0;i<256;i++)put16(pak,palette==1&&i==1?0xFC00:0);
@@ -167,7 +168,7 @@ int main(){
             put32(pak,mapping);put16(pak,key);put16(pak,mask);put16(pak,page);put16(pak,u);put16(pak,0);put16(pak,4);put16(pak,4);put16(pak,2);put16(pak,4);put32(pak,from);
         };
         frame(0x054300,1,0,0x054206);frame(0x054206,0,0,0);frame(0x054300,0,4,0);
-        sor::ArtCatalog poses;assert(poses.load(pak.data(),pak.size())&&poses.hasInbetweens());
+        sor::ArtCatalog poses;CHECK(poses.load(pak.data(),pak.size())&&poses.hasInbetweens());
         const sor::ArtFrame *second=poses.find(0x054300,state.cram_),*between=poses.between(0x054206,0x054300,state.cram_);
         assert(second&&between&&second!=between&&between->page==1&&!poses.between(0x054300,0x054206,state.cram_));
         // A new pose brings new tiles: VRAM changes with it, as in the game.
@@ -178,28 +179,28 @@ int main(){
             probe.beginBuild();
             probe.beginObject(0xB800,1,mapping,false,128+48,128+66,0,0xFFDA00);
             probe.endObject(0xFFDA08,ram.data());
-            assert(scene->buildCached(state,renderer)&&scene->artCount==1);
+            CHECK(scene->buildCached(state)&&scene->artCount==1);
             return &poses.frames()[scene->artDraws[0].frame];
         };
         scene->art=&poses;scene->invalidate();
         // Off: the new pose at once, and an unchanged frame is reused.
-        drawn(0x054206);assert(drawn(0x054300)==second);
+        drawn(0x054206);CHECK(drawn(0x054300)==second);
         drawn(0x054300);assert(scene->reused);
         // On: the in-between for INBETWEEN_TICKS builds (no reuse meanwhile), then the pose.
         scene->smooth=true;
         drawn(0x054206);
-        for(unsigned i=0;i<sor::VdpScene::INBETWEEN_TICKS;i++){assert(drawn(0x054300)==between);assert(!scene->reused);}
-        assert(drawn(0x054300)==second);
+        for(unsigned i=0;i<sor::VdpScene::INBETWEEN_TICKS;i++){CHECK(drawn(0x054300)==between);assert(!scene->reused);}
+        CHECK(drawn(0x054300)==second);
         drawn(0x054300);assert(scene->reused);
         // No in-between for the way back; nor when its page is not selected.
-        assert(drawn(0x054206)->mapping==0x054206);
+        CHECK(drawn(0x054206)->mapping==0x054206);
         poses.select(0,0,false);scene->invalidate();
-        assert(drawn(0x054300)==second);
+        CHECK(drawn(0x054300)==second);
         scene->smooth=false;scene->art=&art;scene->invalidate();
     }
 
     // Dynamic lighting: an object of the playfield is tinted per corner by the
-    // backdrop beside it (above the horizon), brighter towards the light, and
+    // backdrop beside it (above the wall line), brighter towards the light, and
     // casts a shadow on its ground line, leaning away from the light. An object
     // in the air keeps its shadow on the ground. Off: nothing changes.
     {
@@ -209,14 +210,14 @@ int main(){
             probe.endObject(0xFFDA08,ram.data());
         };
         place(160);
-        assert(scene->build(state,renderer)&&scene->artCount==1&&!scene->artDraws[0].lit&&!scene->artDraws[0].shadow);
+        CHECK(scene->build(state)&&scene->artCount==1&&!scene->artDraws[0].lit&&!scene->artDraws[0].shadow);
         // A white block of plane A up on the left of the object.
         for(int i=0;i<32;i++)state.vram_[64+i]=0xFF;        // tile 2: colour 15 everywhere
         for(int cy=0;cy<3;cy++)for(int cx=0;cx<4;cx++){const int a=state.planeABase()+(cy*state.planeWidthCells()+cx)*2;state.vram_[a]=0;state.vram_[a+1]=2;}
         state.regs_[0]|=4;state.regs_[7]=8;                 // full colour, a grey background: shadows show on it
         std::vector<uint16_t> unlit(640*448),lit(640*448);
-        scene->lighting=false;assert(scene->build(state,renderer));sor::raster_enhanced(*scene,state,unlit.data(),640);
-        scene->lighting=true;assert(scene->build(state,renderer)&&scene->artCount==1);
+        scene->lighting=false;CHECK(scene->build(state));sor::raster_enhanced(*scene,state,unlit.data(),640);
+        scene->lighting=true;CHECK(scene->build(state)&&scene->artCount==1);
         const auto &d=scene->artDraws[0];
         assert(d.lit&&d.shadow&&d.ground==66);
         assert(scene->sceneLight().lightCount()>0&&scene->sceneLight().lights()[0].x<48);   // the block is a light
@@ -234,19 +235,19 @@ int main(){
         assert(shadow);                                                        // darkened ground below the feet
         // A round's profile: the beach has the moon (its own shadow, leaning right) and no spill.
         assert(!d.light.shadow[2].alpha);
-        scene->round=3;assert(scene->build(state,renderer));
+        scene->round=3;CHECK(scene->build(state));
         assert(scene->artDraws[0].light.shadow[2].alpha>0&&scene->artDraws[0].light.shadow[2].lean>0&&!scene->sceneLight().spill(1).strength);
-        scene->round=0;assert(scene->build(state,renderer));
+        scene->round=0;CHECK(scene->build(state));
         // In the air (the level is less than the ground's) the shadow stays on the ground
         // line; a lone object's level counts as the ground only once it has been kept.
         place(140);
-        assert(scene->build(state,renderer)&&scene->artDraws[0].ground==66+20);
+        CHECK(scene->build(state)&&scene->artDraws[0].ground==66+20);
         // The scene cache tells lit from unlit.
         scene->invalidate();
-        assert(scene->buildCached(state,renderer)&&!scene->reused);
-        assert(scene->buildCached(state,renderer)&&scene->reused);
+        CHECK(scene->buildCached(state)&&!scene->reused);
+        CHECK(scene->buildCached(state)&&scene->reused);
         scene->lighting=false;
-        assert(scene->buildCached(state,renderer)&&!scene->reused&&!scene->artDraws[0].lit);
+        CHECK(scene->buildCached(state)&&!scene->reused&&!scene->artDraws[0].lit);
         // Emitters add their colour to the corners near them; types outside the playfield are not lit.
         sor::CornerLight glow;sor::SceneLight::GlowSum sum;
         sor::LightEmitter fire{100,50,64,{255,128,0},200};
@@ -300,7 +301,7 @@ int main(){
         assert(strikes>=3&&strikes<=40&&peak==255&&held>=strikes);            // a few a minute, each held a couple of ticks
         sor::Weather calm;calm.advance(20000,sor::weather_profile(5));assert(!calm.flash()&&calm.time()==20000);
         sor::WeatherQuad quads[sor::MAX_WEATHER_QUADS];
-        const sor::WeatherLight lights[2]={{100,40,30000,{255,200,120},false},{50,150,30000,{255,255,255},true}};
+        const sor::Light lights[2]={{100,40,30000,{255,200,120},false},{50,150,30000,{255,255,255},true}};
         size_t n=sor::weather_quads(street,calm,0,320,224,120,lights,2,quads);
         unsigned streaks=0,smears=0,shafts=0;
         for(size_t i=0;i<n;i++){
@@ -330,20 +331,20 @@ int main(){
         scene->lighting=true;scene->weather=true;scene->round=1;scene->invalidate();
         assert(!scene->weatherOn());                                            // nothing until the game runs its objects
         std::vector<uint16_t> dry(640*448),wet(640*448);
-        scene->weather=false;assert(scene->build(state,renderer));sor::raster_enhanced(*scene,state,dry.data(),640);
-        scene->weather=true;assert(scene->build(state,renderer)&&scene->artCount==1&&scene->weatherQuadCount>0);
+        scene->weather=false;CHECK(scene->build(state));sor::raster_enhanced(*scene,state,dry.data(),640);
+        scene->weather=true;CHECK(scene->build(state)&&scene->artCount==1&&scene->weatherQuadCount>0);
         assert(scene->weatherOn()&&scene->weatherProfile().rain&&scene->reflectAlpha()>0);
         assert(sor::VdpScene::reflectAlpha(200,0)==200&&sor::VdpScene::reflectAlpha(200,48)==100&&!sor::VdpScene::reflectAlpha(200,120));
         sor::raster_enhanced(*scene,state,wet.data(),640);
         assert((wet[(66*2)*640+48*2-1]>>10&31)>(dry[(66*2)*640+48*2-1]>>10&31));   // the red art, reflected under its feet
         assert(scene->fogAt(0,true)>0&&scene->fogAt(0,true)>scene->fogAt(0,false));
         scene->invalidate();
-        assert(scene->buildCached(state,renderer)&&!scene->reused);
-        assert(scene->buildCached(state,renderer)&&scene->reused);
+        CHECK(scene->buildCached(state)&&!scene->reused);
+        CHECK(scene->buildCached(state)&&scene->reused);
         bool struck=false;
         for(int t=0;t<6000&&!struck;t++){
             place(160);
-            assert(scene->buildCached(state,renderer));
+            CHECK(scene->buildCached(state));
             if(scene->weatherState().flash()){
                 struck=true;
                 assert(!scene->reused&&scene->artDraws[0].light.shadow[2].alpha>0);   // lightning: another scene, the sky's shadow
@@ -358,7 +359,7 @@ int main(){
     // VRAM's table no longer matches the build: the object's pieces come back.
     state.vram_[state.satBase()+7]^=1;
     assert(!probe.displayed(state));
-    assert(scene->build(state,renderer));
+    CHECK(scene->build(state));
     assert(scene->artCount==0&&scene->spriteTileCount==5);
     puts("Enhanced scene: art replaces a probed object in its SAT slot (keyed by colours, per round); other sprites stay cells; stale builds fall back; in-between poses on a pose change; dynamic lighting tints per corner and casts shadows; weather rains, reflects, hazes and strikes");
 }

@@ -16,8 +16,8 @@ struct ProbedObject {
     uint8_t type;           // object type
     uint8_t first,count;    // SAT records [first, first + count)
     bool flip;              // mirrored mapping (frame word bit 15)
-    int16_t level=0;        // object +$18: added to the anchor's y; a round's ground value, less in the air
-    bool screen=false;      // object +$01 bit 1: placed on the screen, not in the world (HUD, captions)
+    int16_t level;          // object +$18: added to the anchor's y; a round's ground value, less in the air
+    bool screen;            // object +$01 bit 1: placed on the screen, not in the world (HUD, captions)
 };
 struct SpriteBuild {
     static constexpr unsigned MAX_OBJECTS=80,MAX_RECORDS=80;

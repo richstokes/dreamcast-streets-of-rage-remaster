@@ -45,7 +45,7 @@ int main(){
     }
     VDPState reference=state;VDPTile tile(state),refTile(reference);Framebuffer fb,refFB;
     VDPRenderer renderer(state,tile,fb),refRenderer(reference,refTile,refFB);
-    if(!scene->buildCached(state,renderer))return 2;
+    if(!scene->buildCached(state))return 2;
     // Model the partial VRAM upload across changing scenes. It must equal a
     // full texture upload, including rows vacated or hidden by display disable.
     for(int p=0;p<2;p++){
@@ -63,7 +63,7 @@ int main(){
     // A status-port read may clear collision/overflow between identical frames.
     // Reusing drawing commands must still reproduce those hardware side effects.
     state.status_&=~0x60;reference.status_&=~0x60;
-    if(!scene->buildCached(state,renderer)||!scene->reused)return 3;
+    if(!scene->buildCached(state)||!scene->reused)return 3;
     refRenderer.renderFrame();
     if(state.status_!=reference.status_ || state.vCounter_!=reference.vCounter_){puts("VDP status mismatch");return 1;}
  }

@@ -1,6 +1,5 @@
 #include "diagnostics.hpp"
 #include <cstdarg>
-#include <algorithm>
 namespace {
 // Replays defer serial output to the end of their measured window; a long
 // replay's slow-frame lines need more than 64 KiB.

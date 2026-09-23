@@ -43,11 +43,14 @@ public:
     void loadZ80(const uint8_t *zram,uint32_t bank,bool reset,bool busRequest,const uint16_t *regs,const uint8_t *misc);
     void logTimedWrite(uint64_t clock,unsigned port,uint8_t value);
     uint32_t fmWorkload=0;
-    uint64_t profile[5]{}; // At most 890 stereo frames.
+    uint64_t profile[5]{};
     uint64_t nativeDacSamples=0,nativeDacStarts=0;
     uint64_t batchFrames=0,interleavedFrames=0;
     uint64_t ymWrites=0,psgWrites=0,dacWrites=0,z80Faults=0;
-    static constexpr unsigned sampleRate=53693175/7/144;
+    // NTSC master clock: 7 clocks per 68000 cycle, 144 per YM2612 sample (1008).
+    static constexpr unsigned frameClocks=896040,sampleClocks=1008,sampleRate=53693175/7/144;
+    // renderFrame() outputs 888 or 889 stereo frames (896040/1008 = 888.93).
+    static constexpr unsigned maxFrameSamples=(frameClocks+sampleClocks-1)/sampleClocks;
 private:
     unsigned renderBlock(int16_t *stereo,uint64_t (*clock)(),int16_t *dacStereo);
     struct Impl;std::unique_ptr<Impl> impl;

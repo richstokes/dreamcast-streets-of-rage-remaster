@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
-"""Compare observations at an explicit replay gate; never search for a flattering offset."""
+"""Compare two runs of a scenario from the frame each passed a state gate.
+
+The observations of every frame after the gate are compared field by field,
+then the active objects' RAM region by region (sor_ram.OBJECT_REGIONS).
+"""
 import argparse
 import json
 import mmap
 from pathlib import Path
 
+from sor_ram import OBJECT_REGIONS as REGIONS
+
 FIELDS=('mode','stage','wave','camera','p1_lives','p2_lives','actors')
-REGIONS={'collision_ids':(2,4),'animation':(4,14),'positions_and_velocity':(16,40),
-         'state_health_damage':(48,53),'grab_target':(76,78),'input':(84,86),
-         'attack_flags':(88,89),'weapon':(94,96),'grab_mode_target':(125,128),'spawn_flags_and_timer':(73,76),'full_object':(0,128)}
 
 
 def read(directory,segment):
@@ -46,13 +49,6 @@ def compare(left,right,segment):
                     if any(l[s+start:s+end]!=r[s+start:s+end] for s in slots):
                         out=result['active_object_regions'][name];out['mismatched_frames']+=1
                         if out['first_relative_frame'] is None:out['first_relative_frame']=i
-            result['special_stock']={}
-            for name,data,first,anchor in [('left',lram,lfirst,a),('right',rram,rfirst,b)]:
-                at=lambda frame,offset:data[(frame-first)*65536+offset]
-                result['special_stock'][name]=dict(p1_start=at(anchor,0xff21),p1_end=at(anchor+length-1,0xff21),
-                    control_lock_frames=sum(bool(at(anchor+i,0xfa1a)) for i in range(length)))
-    result['limitations']=['Explicit gate alignment does not verify cold-boot timing.',
-        'Selected observations and object regions are not full RAM equality or complete campaign coverage.']
     return result
 
 

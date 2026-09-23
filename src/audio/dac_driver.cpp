@@ -1,5 +1,6 @@
 #include "dac_driver.hpp"
 #include <algorithm>
+#include <iterator>
 bool NativeDacDriver::recognizes(const uint8_t *ram){
     // Code identity only: exclude the mutable delta table and previous delta.
     uint32_t hash=2166136261u;
@@ -41,15 +42,15 @@ NativeDacDriver::Program NativeDacDriver::makeProgram(const Step *steps,unsigned
     return p;
 }
 const NativeDacDriver::Program NativeDacDriver::programs_[9]={
-    makeProgram(highProgram_,sizeof(highProgram_)/sizeof(highProgram_[0])),
-    makeProgram(highNormalProgram_,sizeof(highNormalProgram_)/sizeof(highNormalProgram_[0])),
-    makeProgram(lowProgram_,sizeof(lowProgram_)/sizeof(lowProgram_[0])),
-    makeProgram(lowNormalProgram_,sizeof(lowNormalProgram_)/sizeof(lowNormalProgram_[0])),
-    makeProgram(zeroSetupProgram_,sizeof(zeroSetupProgram_)/sizeof(zeroSetupProgram_[0])),
-    makeProgram(zeroLoopProgram_,sizeof(zeroLoopProgram_)/sizeof(zeroLoopProgram_[0])),
-    makeProgram(highTailProgram_,sizeof(highTailProgram_)/sizeof(highTailProgram_[0])),
-    makeProgram(finishByteProgram_,sizeof(finishByteProgram_)/sizeof(finishByteProgram_[0])),
-    makeProgram(endProgram_,sizeof(endProgram_)/sizeof(endProgram_[0])),
+    makeProgram(highProgram_,std::size(highProgram_)),
+    makeProgram(highNormalProgram_,std::size(highNormalProgram_)),
+    makeProgram(lowProgram_,std::size(lowProgram_)),
+    makeProgram(lowNormalProgram_,std::size(lowNormalProgram_)),
+    makeProgram(zeroSetupProgram_,std::size(zeroSetupProgram_)),
+    makeProgram(zeroLoopProgram_,std::size(zeroLoopProgram_)),
+    makeProgram(highTailProgram_,std::size(highTailProgram_)),
+    makeProgram(finishByteProgram_,std::size(finishByteProgram_)),
+    makeProgram(endProgram_,std::size(endProgram_)),
 };
 
 int NativeDacDriver::advance(int clocks){
@@ -94,7 +95,7 @@ int NativeDacDriver::advance(int clocks){
             continue;
         }
         switch(s.action){
-        case None:break;
+        case None:break; // unreachable (grouped above); keeps the switch exhaustive for -Wswitch
         case ReadHigh:low_=false;if(pointer_>=0x8000)cost+=busRead(elapsed);nibble_=read_(context_,pointer_)>>4;break;
         case ReadLow:low_=true;if(pointer_>=0x8000)cost+=busRead(elapsed);nibble_=read_(context_,pointer_)&15;phase(Low);break;
         case Choose:phase(nibble_?(low_?LowNormal:HighNormal):ZeroSetup);break;

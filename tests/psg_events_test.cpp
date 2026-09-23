@@ -51,7 +51,7 @@ int main(){
         for(unsigned c=0;c<4;c++)write(0x90|(c<<5)|(frame%32<16?15:random()%16));
         // Exercise continued data writes and noise resets while muted.
         if(frame%7==0)write(random()&127);
-        int16_t actual[1780],base[1780];unsigned n=chip.renderFrame(actual);
+        int16_t actual[NativeAudio::maxFrameSamples*2],base[NativeAudio::maxFrameSamples*2];unsigned n=chip.renderFrame(actual);
         assert(silent.renderFrame(base)==n);
         for(unsigned i=0;i<n;i++){
             int psg=oracle.sample();

@@ -1,6 +1,6 @@
 {
  "name": "Round 1 combat progress (Adam)",
- "status": "Dense first-section coverage: walking/scrolling, combos, jump kicks, back attacks, grabs, knees and throws against the first waves. Phase-anchored at the same gate as phase-aligned-actions; compare with compare-phase.py --segment 9.",
+ "description": "Round 1, Adam: walking and scrolling, combos, jump kicks, back attacks, grabs, knees and throws against the first waves. Same gate as phase-aligned-actions; compare with compare-phase.py --segment 9.",
  "segments": [
   {
    "frames": 360,

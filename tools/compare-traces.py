@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare observed game state on common frames, without hiding frame offsets."""
+"""Compare the observations of two runs frame number by frame number."""
 import argparse
 import json
 from pathlib import Path

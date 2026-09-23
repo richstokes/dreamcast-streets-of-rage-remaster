@@ -1,0 +1,19 @@
+[
+ {"name": "actions", "run": "build/genesis-phase-actions", "gate": 1384, "frames": 1481},
+ {"name": "two-player", "run": "build/genesis-phase-two", "gate": 1398, "frames": 761},
+ {"name": "round1-combat", "run": "build/genesis-round1", "gate": 1384, "frames": 3115},
+ {"name": "round1-full", "run": "build/genesis-round1-full", "gate": 1384, "frames": 9976},
+ {"name": "sync-17300", "run": "build/genesis-round1-full", "sync": "build/sync-17300"},
+ {"name": "sync-19200", "run": "build/genesis-round1-full", "sync": "build/sync-19200"},
+ {"name": "sync-22100", "run": "build/genesis-round1-full", "sync": "build/sync-22100"},
+ {"name": "sync-boss", "run": "build/bot-round1", "sync": "build/sync-boss"},
+ {"name": "sync-clear", "run": "build/bot-clear", "sync": "build/sync-clear"},
+ {"name": "sync-continue", "run": "build/bot-round1", "sync": "build/sync-continue"},
+ {"name": "sync-gameover", "run": "build/bot-gameover", "sync": "build/sync-gameover"},
+ {"name": "sync-throws", "run": "build/bot-throws", "sync": "build/sync-throws"},
+ {"name": "sync-items", "run": "build/bot-items", "sync": "build/sync-items"},
+ {"name": "sync-2p", "run": "build/bot-2p", "sync": "build/sync-2p"},
+ {"name": "sync-bat", "run": "build/bot-bat", "sync": "build/sync-bat"},
+ {"name": "sync-2p-continue", "run": "build/bot-2p-continue", "sync": "build/sync-2p-continue"},
+ {"name": "sync-join", "run": "build/bot-join", "sync": "build/sync-join"}
+]

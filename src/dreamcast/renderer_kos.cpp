@@ -38,7 +38,8 @@ bool packetsValid=false,packetsEnhanced=false;
 uint32_t packetsFogKey=0;   // the haze the tile packets carry: none, or the round and the wall line
 // Enhanced graphics: hardware sprite cells and replacement-art frames, one
 // quad each, rebuilt when the scene changes (docs/REMASTER.md).
-constexpr size_t maxSpritePackets=sor::VdpScene::MAX_SPRITE_TILES+80;
+constexpr size_t maxObjects=sor::SpriteBuild::MAX_OBJECTS;   // the VDP's sprite count: one art frame each at most
+constexpr size_t maxSpritePackets=sor::VdpScene::MAX_SPRITE_TILES+maxObjects;
 Packet spritePackets[maxSpritePackets];
 size_t spritePacketCount=0;
 sor::ArtCatalog art;
@@ -52,7 +53,7 @@ std::vector<pvr_poly_hdr_t> shadowHeaders,rimHeaders;
 // that the art is shaded as a rounded form across its width.
 struct alignas(32) LitPacket {pvr_poly_hdr_t header;pvr_vertex_t vertices[sor::CornerLight::COLUMNS*2];};
 static_assert(sizeof(LitPacket)%32==0);
-LitPacket litPackets[80];
+LitPacket litPackets[maxObjects];
 size_t litPacketCount=0;
 pvr_ptr_t glowTexture=nullptr;
 pvr_poly_hdr_t glowHeader,blobHeader,spillHeader;   // light added; matter (contact shadows, smoke); light spilt on the ground
@@ -60,7 +61,7 @@ pvr_poly_hdr_t glowHeader,blobHeader,spillHeader;   // light added; matter (cont
 // alpha textures that wrap; the rain is added, the mist covers.
 pvr_ptr_t weatherTextures[2]{};
 pvr_poly_hdr_t streakHeader,noiseHeader;
-constexpr size_t maxLightPackets=sor::VdpScene::MAX_GLOWS+2*sor::SceneLight::COLS+80*(1+3+2+1)+sor::Particles::MAX+sor::MAX_WEATHER_QUADS;   // glows, spill, per object: contact, shadows, rims, reflection; particles; weather
+constexpr size_t maxLightPackets=sor::VdpScene::MAX_GLOWS+2*sor::SceneLight::COLS+maxObjects*(1+3+2+1)+sor::Particles::MAX+sor::MAX_WEATHER_QUADS;   // glows, spill, per object: contact, shadows, rims, reflection; particles; weather
 Packet lightPackets[maxLightPackets];
 size_t lightPacketCount=0,staticLightPackets=0;
 int uploadedTop[2]{256,256},uploadedBottom[2]{};
@@ -108,7 +109,6 @@ void quad(Packet &packet,const pvr_poly_hdr_t &h,float x,float y,float w,float h
 }
 namespace {
 void load_art(){
-    const auto start=timer_us_gettime64();
     size_t embedded=0;const uint8_t *built_in=platform_embedded_art(embedded);
     if(FILE *f=fopen("/cd/SORART.PAK","rb")){
         fseek(f,0,SEEK_END);const long size=ftell(f);fseek(f,0,SEEK_SET);
@@ -180,7 +180,8 @@ void load_selection(unsigned round,unsigned characters,bool enhanced,bool smooth
 unsigned gameRound=1,gameCharacters=0;bool gamePlaying=false;
 }
 // Followed outside play too: the round intro is when a round's art should load.
-// `playing`: in a round (not the title, menus, cutscenes or the ending): the weather's.
+// `playing` (in a round: not the title, menus, cutscenes or the ending) gates
+// the lighting and the weather.
 void dc_renderer_game_state(unsigned round,unsigned characters,bool playing){gameRound=round;gameCharacters=characters;gamePlaying=playing;}
 void dc_renderer_init(){
     scene=std::make_unique<sor::VdpScene>();
@@ -190,14 +191,15 @@ void dc_renderer_init(){
     if(!tiles||!spriteTexture[0]||!spriteTexture[1])throw std::runtime_error("PowerVR texture budget exhausted");
     for(int i=0;i<8192;i++)header(tileHeaders[i],static_cast<uint8_t*>(tiles)+(i%2048)*32,8,8,false,i/2048);
     for(int p=0;p<2;p++)header(spriteHeaders[p],spriteTexture[p],512,256,true);
-    cheatHintTexture=pvr_mem_malloc(256*16*2);
+    using namespace sor::cheats;
+    cheatHintTexture=pvr_mem_malloc(hintWidth*hintHeight*2);
     if(!cheatHintTexture)throw std::runtime_error("Cheats hint texture allocation failed");
-    alignas(32) uint16_t hintPixels[256*16]{};
-    sor::cheats::drawHint(hintPixels,[](void *context,int x,int y,unsigned r,unsigned g,unsigned b){
-        static_cast<uint16_t*>(context)[(y-196)*256+x-32]=sor::VdpScene::rgb1555(r,g,b);
+    alignas(32) uint16_t hintPixels[hintWidth*hintHeight]{};
+    drawHint(hintPixels,[](void *context,int x,int y,unsigned r,unsigned g,unsigned b){
+        static_cast<uint16_t*>(context)[(y-hintY)*hintWidth+x-hintX]=sor::VdpScene::rgb1555(r,g,b);
     });
     pvr_txr_load(hintPixels,cheatHintTexture,sizeof(hintPixels));
-    header(cheatHintHeader,cheatHintTexture,256,16,true);
+    header(cheatHintHeader,cheatHintTexture,hintWidth,hintHeight,true);
     for(size_t i=0;i<sor::TitleCaption::regions.size();i++){
         const auto &r=sor::TitleCaption::regions[i];
         titleTextures[i]=pvr_mem_malloc(r.textureWidth*r.textureHeight*2);
@@ -266,7 +268,7 @@ void dc_renderer_shutdown(){
     artTextures.clear();artHeaders.clear();shadowHeaders.clear();rimHeaders.clear();art=sor::ArtCatalog();
     scene.reset();
 }
-bool dc_render_vdp(VDPState &state,VDPRenderer &renderer,const sor::TitleCaption &title){
+bool dc_render_vdp(VDPState &state,const sor::TitleCaption &title){
     const auto begin=timer_us_gettime64();
     const auto &settings=sor::cheats::menu.settings();
     load_selection(gameRound,gameCharacters,settings.enhancedGraphics,settings.smoothAnimation);
@@ -274,7 +276,7 @@ bool dc_render_vdp(VDPState &state,VDPRenderer &renderer,const sor::TitleCaption
     // Light and weather only in a round: the title, menus and cutscenes are drawn as they are.
     scene->lighting=settings.enhancedGraphics&&settings.dynamicLighting&&gamePlaying;scene->round=gameRound;
     scene->weather=scene->lighting&&settings.weather&&gamePlaying;
-    if(!scene->buildCached(state,renderer)||scene->count>maxTileQuads)return false;
+    if(!scene->buildCached(state)||scene->count>maxTileQuads)return false;
     const bool enhanced=scene->enhanced;
     const bool same=scene->reused;
     const auto compiled=timer_us_gettime64();
@@ -330,7 +332,7 @@ bool dc_render_vdp(VDPState &state,VDPRenderer &renderer,const sor::TitleCaption
     const auto uploaded=timer_us_gettime64();
     // Weather: haze. The backdrop's tiles take the fog's colour by their height
     // (vertex colour and offset colour), the far plane more: no extra quads.
-    const uint32_t fogKey=scene->weatherOn()&&scene->weatherProfile().fog?0x80000000u|uint32_t(scene->round)<<16|uint32_t(scene->sceneLight().horizon()&0xFFFF):0;
+    const uint32_t fogKey=scene->weatherOn()&&scene->weatherProfile().fog?0x80000000u|uint32_t(scene->round)<<16|uint32_t(scene->sceneLight().wallLine()&0xFFFF):0;
     if(!packetsValid || !scene->planesReused || opacityChanged || packetsEnhanced!=enhanced || packetsFogKey!=fogKey){
         packetCount=0;
         std::fill_n(planeTiles,2048,false);
@@ -379,7 +381,7 @@ bool dc_render_vdp(VDPState &state,VDPRenderer &renderer,const sor::TitleCaption
             // Light spilt on the ground by the backdrop's lights: per column, rising
             // to full at the horizon line, then fading (raster_enhanced does the same).
             const auto &light=scene->sceneLight();
-            const float top=light.horizon()-sor::SceneLight::SPILL_RISE,middle=light.horizon(),bottom=light.horizon()+sor::SceneLight::SPILL_DEPTH;
+            const float top=light.wallLine()-sor::SceneLight::SPILL_RISE,middle=light.wallLine(),bottom=light.wallLine()+sor::SceneLight::SPILL_DEPTH;
             for(int column=0;column<sor::SceneLight::COLS;column++){
                 const auto &a=light.spill(column),&b=light.spill(column+1);
                 if(!a.strength&&!b.strength)continue;
@@ -398,7 +400,7 @@ bool dc_render_vdp(VDPState &state,VDPRenderer &renderer,const sor::TitleCaption
         for(size_t i=0;i<scene->spriteTileCount;i++){
             const auto &t=scene->spriteTiles[i];
             quad(spritePackets[spritePacketCount++],tileHeaders[t.palette*2048+t.tile],t.x*sx,t.y*sy,8*sx,8*sy,
-                 (t.layer?6:3)+(79-t.order)*0.01f,t.hflip?1:0,t.vflip?1:0,t.hflip?0:1,t.vflip?0:1);
+                 (t.layer?6:3)+(maxObjects-1-t.order)*0.01f,t.hflip?1:0,t.vflip?1:0,t.hflip?0:1,t.vflip?0:1);
             if(t.shade[0]!=255||t.shade[1]!=255||t.shade[2]!=255||t.glow[0]||t.glow[1]||t.glow[2]){
                 // A lit object drawn from its pieces: one light for them all. The added
                 // light needs the offset colour, which the shared tile headers do not enable.
@@ -415,7 +417,7 @@ bool dc_render_vdp(VDPState &state,VDPRenderer &renderer,const sor::TitleCaption
             const int top=d.y*2-f.anchorY;
             const int v0=std::max(0,d.lineFrom*2-top),v1=std::min<int>(f.h,d.lineTo*2-top);
             if(v1<=v0)continue;
-            const float depth=(d.layer?6:3)+(79-d.order)*0.01f;
+            const float depth=(d.layer?6:3)+(maxObjects-1-d.order)*0.01f;
             const float left=(d.x*2-ax)*sx/2,y0=(top+v0)*sy/2,y1=(top+v1)*sy/2,tv0=(f.v+v0)/float(page.height),tv1=(f.v+v1)/float(page.height);
             if(d.lit){
                 // Lighting: a tint per column of vertices, top and bottom (the game's fade
@@ -515,7 +517,7 @@ bool dc_render_vdp(VDPState &state,VDPRenderer &renderer,const sor::TitleCaption
     if(sor::cheats::hintVisible()){
         alignas(32) Packet hint;
         const float sx=640.f/scene->width,sy=480.f/scene->height;
-        quad(hint,cheatHintHeader,32*sx,196*sy,256*sx,16*sy,7,0,0,1,1);
+        quad(hint,cheatHintHeader,sor::cheats::hintX*sx,sor::cheats::hintY*sy,sor::cheats::hintWidth*sx,sor::cheats::hintHeight*sy,7,0,0,1,1);
         pvr_prim(&hint,sizeof(hint));
     }
     if(title.brightness){

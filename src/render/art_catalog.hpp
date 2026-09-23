@@ -10,7 +10,7 @@ namespace sor {
 // the frame's mapping record and the colours it was made for: colour_key() of
 // the sprite's CRAM line, over the entries the object's art uses (mask). The
 // palette line alone is not enough: enemy families share frames and a line
-// while the game loads different colours into it (green and blue Garcias), and
+// while the game loads different colours into it (green, purple and yellow Signals), and
 // replacement art has its colours baked in. The whole line is too much: lines
 // also hold colours the object never uses, which stages cycle. A line whose
 // used colours match no art (hit flashes, fades) finds nothing, and the object

@@ -4,9 +4,8 @@ import argparse
 import json
 from pathlib import Path
 import re
-import subprocess
 import sys
-from rom import inspect
+from rom import inspect, LOCKED_SHA256
 ROOT=Path(__file__).resolve().parents[1]
 P=ROOT/'research/StreetsOfRageProject'
 
@@ -48,8 +47,8 @@ def verify_sprite_entry(directory):
 def main():
     ap=argparse.ArgumentParser(description=__doc__); ap.add_argument('rom',type=Path)
     a=ap.parse_args(); identity=inspect(a.rom.read_bytes())
-    if identity['sha256']!='dd44f120446654bb91c448762f3e0cd0d9b034f35d0e3266a4dc34402ada95c0':
-        ap.error('This address repair was validated only against the locked ROM SHA-256')
+    if not identity['known']:
+        ap.error(f'The seed repairs are validated only against the locked ROM {LOCKED_SHA256}')
     sys.path.insert(0,str(P/'RageDecompiler'))
     from tools.disassembler.rom import ROM
     from tools.recompiler.main import _disassemble_to_fixpoint,_load_aux,main as recompile

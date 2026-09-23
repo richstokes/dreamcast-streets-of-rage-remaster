@@ -1,10 +1,7 @@
 """Small, checked timing corrections to the pinned MegaDriveEnvironment VDP."""
 
 
-def replace_once(text, old, new):
-    if text.count(old) != 1:
-        raise RuntimeError('Pinned VDP source changed; review timing patch')
-    return text.replace(old, new)
+from patching import replace_once
 
 
 def patch(name, text):

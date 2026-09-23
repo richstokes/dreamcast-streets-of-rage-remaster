@@ -24,16 +24,14 @@ them).
 
   tools/state-sync.py ROM SCENARIO ORIGINAL_DIR FRAME OUTPUT_DIR [--frames N]
 """
-import argparse, json, mmap, os, re, subprocess, sys
+import argparse, json, mmap, os, platform, re, subprocess, sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'tools'))
-from genesis_reference import BUTTONS  # noqa: E402
+from genesis_reference import BUTTONS, segment_masks
+from sor_ram import OBJECT_SLOTS, OBJECT_REGIONS, MODE, WAVE, CAMERA, P1_LIVES
 
-REGIONS = {'collision_ids': (2, 4), 'animation': (4, 14), 'positions_and_velocity': (16, 40),
-           'state_health_damage': (48, 53), 'grab_target': (76, 78), 'input': (84, 86), 'attack_flags': (88, 89),
-           'weapon': (94, 96), 'grab_mode_target': (125, 128), 'spawn_flags_and_timer': (73, 76), 'full_object': (0, 128)}
+ROOT = Path(__file__).resolve().parents[1]
+CORE = ROOT / 'build/gpgx-profile' / ('genesis_plus_gx_libretro.dylib' if platform.system() == 'Darwin' else 'genesis_plus_gx_libretro.so')
 # Work RAM the port represents differently (host-owned), left out of the whole-RAM
 # comparison: the incremental Nemesis queue's stream cursor and saved decoder
 # registers, the Nemesis code table, and stack below the main loop's frame.
@@ -52,7 +50,7 @@ def run_inputs(scenario, events):
     gates = {e['segment']: e['idle_frames'] for e in events}
     out = []
     for index, segment in enumerate(scenario['segments']):
-        mask = tuple(sum(1 << BUTTONS[b] for b in segment.get(k, [])) for k in ('p1', 'p2'))
+        mask = tuple(segment_masks(segment))
         count = gates.get(index, 0) if 'wait' in segment else segment['frames']
         out += [mask] * count
     return out
@@ -69,7 +67,6 @@ def write_replay(inputs, path):
     scenario = {'segments': [dict(frames=n, p1=buttons(m[0]), p2=buttons(m[1])) for m, n in segments]}
     json_path = path.with_suffix('.json'); json_path.write_text(json.dumps(scenario))
     subprocess.run([sys.executable, str(ROOT / 'tools/replay.py'), str(json_path), str(path)], check=True)
-    return sum(n for _, n in segments)
 
 
 def main():
@@ -78,13 +75,13 @@ def main():
     ap.add_argument('frame', type=int); ap.add_argument('output', type=Path)
     ap.add_argument('--frames', type=int, default=3000, help='frames to compare after the sync')
     ap.add_argument('--reuse', action='store_true', help='compare an existing native run again')
-    ap.add_argument('--core', type=Path, default=ROOT / 'build/gpgx-profile/genesis_plus_gx_libretro.dylib')
+    ap.add_argument('--core', type=Path, default=CORE, help='profiling core (tools/build-profile-core.sh)')
     a = ap.parse_args()
     a.output.mkdir(parents=True, exist_ok=True)
     rom = str(a.rom.resolve()); scenario = json.loads(a.scenario.read_text())
     state = a.output / 'state.bin'
     if not state.exists():   # the export replays the scenario in the reference; reuse it
-        run = subprocess.run([str(ROOT / 'build/tools-venv/bin/python3'), str(ROOT / 'tools/genesis_reference.py'), str(a.core),
+        run = subprocess.run([sys.executable, str(ROOT / 'tools/genesis_reference.py'), str(a.core),
                               rom, str(a.scenario), str(a.output / 'reference-run'),
                               '--export-state', '%d:%s' % (a.frame, state.resolve())],
                              check=True, capture_output=True, text=True)
@@ -101,9 +98,9 @@ def main():
     raw = a.output / 'ram.bin'
     if not (a.reuse and raw.exists()):
         env = dict(os.environ, SOR_STATE_SYNC='%s:%s' % (state.resolve(), after.resolve()), SOR_AUDIO='1')
-        log = subprocess.run([str(ROOT / 'build/headless/sor-headless'), rom, str(before), str(raw)],
-                             capture_output=True, text=True, env=env, timeout=900)
-        (a.output / 'run.log').write_text(log.stdout + log.stderr)
+        with (a.output / 'run.log').open('w') as log:
+            subprocess.run([str(ROOT / 'build/headless/sor-headless'), rom, str(before), str(raw)],
+                           stdout=log, stderr=subprocess.STDOUT, env=env, timeout=900)
     found = re.search(r'STATE_SYNC frame=(\d+)', (a.output / 'run.log').read_text())
     if not found: raise SystemExit('native run did not sync; see run.log')
     k = int(found.group(1))
@@ -127,11 +124,11 @@ def main():
             # in behaviour persists into the next settled frame.
             unsettled.append(j); continue
         first.setdefault('game_ram', j)
-        for slot in [0xB800, 0xB880] + list(range(0xB900, 0xDA00, 0x80)):
+        for slot in OBJECT_SLOTS:
             if not g[slot] and not n[slot]: continue
-            for name, (s, e) in REGIONS.items():
+            for name, (s, e) in OBJECT_REGIONS.items():
                 if name not in first and g[slot + s:slot + e] != n[slot + s:slot + e]: first[name] = j
-        for name, (addr, width) in dict(mode=(0xFF00, 2), wave=(0xFF04, 2), camera=(0xE002, 2), p1_lives=(0xFF20, 1)).items():
+        for name, (addr, width) in dict(mode=(MODE, 2), wave=(WAVE, 2), camera=(CAMERA, 2), p1_lives=(P1_LIVES, 1)).items():
             if name not in first and g[addr:addr + width] != n[addr:addr + width]: first[name] = j
     result = dict(scenario=str(a.scenario), sync_frame=a.frame, native_sync_frame=k, compared_frames=count,
                   identical_ram_frames=equal_ram, identical_game_ram_frames=equal_game_ram,

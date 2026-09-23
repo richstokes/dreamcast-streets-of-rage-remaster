@@ -9,9 +9,8 @@
 #include "dac_driver.hpp"
 #include <algorithm>
 #include <array>
-#include <stdexcept>
-#ifndef __DREAMCAST__
 #include <cstdio>
+#ifndef __DREAMCAST__
 #include <cstdlib>
 #endif
 
@@ -26,19 +25,19 @@ struct NativeAudio::Impl:ymfm::ymfm_interface {
     unsigned zFraction=0;
     struct WriteEvent {uint16_t sample;uint8_t port,value;};
     std::array<WriteEvent,2048> events{};
-    std::array<ymfm::ym2612::output_data,890> block{};
+    std::array<ymfm::ym2612::output_data,NativeAudio::maxFrameSamples> block{};
     unsigned eventCount=0,eventSample=0,eventSamples=0;bool collecting=false,burst=false,driving=false;
     // 68000 writes for the next block (sample offsets), and the merge scratch.
     std::array<WriteEvent,1024> cpuEvents{};std::array<WriteEvent,512> cpuPsg{};
     std::array<WriteEvent,3072> merged{};
-    unsigned cpuEventCount=0,cpuPsgCount=0,cpuOverflows=0;bool z80AddressOpen=false;
-    uint64_t instructionClock=0;std::array<uint64_t,890> sampleTargets{};
+    unsigned cpuEventCount=0,cpuPsgCount=0,cpuOverflows=0,z80Overflows=0;bool z80AddressOpen=false;
+    uint64_t instructionClock=0;std::array<uint64_t,NativeAudio::maxFrameSamples> sampleTargets{};
     // Catch-up frame: the next block's Z80 events are collected while the
     // 68000 runs, the Z80 advancing to the 68000's time whenever it touches
     // the Z80 bus, so bus requests stall it and commands arrive on time.
     uint64_t busStall=0;   // 68000 master clocks lost to Z80 bus reads, not yet charged
     bool catchUp=false,open=false;unsigned openSamples=0;uint64_t frameZ=0;   // catch-up starts with the first sync
-    unsigned nextSamples(){remainder+=896040;const unsigned n=remainder/1008;remainder%=1008;return n;}
+    unsigned nextSamples(){remainder+=NativeAudio::frameClocks;const unsigned n=remainder/NativeAudio::sampleClocks;remainder%=NativeAudio::sampleClocks;return n;}
     bool batchable()const{return owner.nativeDac && driverKnown && !(ymMode&0x80);}
     void beginBlock(unsigned n){
         eventCount=0;collecting=true;eventSample=0;eventSamples=n;blockStart=samples;frameZ=zTarget;
@@ -345,29 +344,38 @@ void NativeAudio::writeYM(unsigned p,uint8_t v){
     if(!(p&1)){impl->ymAddress[p>>1]=v;impl->ymBusAddress=((p&2)?0x100:0)|v;}
     else if(p==1&&impl->ymAddress[0]==0x2a)dacWrites++;
     if(p==1 && impl->ymBusAddress==0x27)impl->ymMode=v;
-    if(impl->collecting){
-        if(impl->eventCount==impl->events.size())throw std::runtime_error("Native sound event bound exceeded");
-        impl->events[impl->eventCount++]={uint16_t(impl->eventSample),uint8_t(p),v};
-    }else{impl->z80AddressOpen=!(p&1);impl->fm.write(p,v);}
+    if(impl->collecting&&impl->eventCount==impl->events.size()){impl->z80Overflows++;impl->fm.write(p,v);return;} // applied now, ahead of its sample
+    if(impl->collecting)impl->events[impl->eventCount++]={uint16_t(impl->eventSample),uint8_t(p),v};
+    else{impl->z80AddressOpen=!(p&1);impl->fm.write(p,v);}
 }
 void NativeAudio::writeYM68k(unsigned p,uint8_t v,uint32_t clocks){
     if(!impl)return;
     auto &s=*impl;
     if(s.cpuEventCount==s.cpuEvents.size()){s.cpuOverflows++;writeYM(p,v);return;}
-    ymWrites++;s.logWrite(p,v,int(std::min<uint32_t>(clocks/1008,888)));
+    ymWrites++;s.logWrite(p,v,int(std::min<uint32_t>(clocks/sampleClocks,maxFrameSamples-1)));
     if(!(p&1)){s.ymAddress[p>>1]=v;s.ymBusAddress=((p&2)?0x100:0)|v;}
     else if(p==1&&s.ymAddress[0]==0x2a)dacWrites++;
     if(p==1 && s.ymBusAddress==0x27)s.ymMode=v;
-    s.cpuEvents[s.cpuEventCount++]={uint16_t(std::min<uint32_t>(clocks/1008,888)),uint8_t(p),v};
+    s.cpuEvents[s.cpuEventCount++]={uint16_t(std::min<uint32_t>(clocks/sampleClocks,maxFrameSamples-1)),uint8_t(p),v};
 }
 void NativeAudio::writePSG68k(uint8_t v,uint32_t clocks){
     if(!impl)return;
     auto &s=*impl;
     if(s.cpuPsgCount==s.cpuPsg.size()){s.cpuOverflows++;writePSG(v);return;}
-    psgWrites++;s.logWrite(4,v,int(std::min<uint32_t>(clocks/1008,888)));
-    s.cpuPsg[s.cpuPsgCount++]={uint16_t(std::min<uint32_t>(clocks/1008,888)),0,v};
+    psgWrites++;s.logWrite(4,v,int(std::min<uint32_t>(clocks/sampleClocks,maxFrameSamples-1)));
+    s.cpuPsg[s.cpuPsgCount++]={uint16_t(std::min<uint32_t>(clocks/sampleClocks,maxFrameSamples-1)),0,v};
 }
 uint8_t NativeAudio::readYM(unsigned p){return impl?impl->fm.read(p):0;}
+// One channel of one output sample: the mixed FM+PSG value, split into the FM
+// stem `out` and the DAC stem `*dacOut` (when requested) whose integer sum is
+// exact and both in PCM16 range, even when the reference mixer clips. AICA
+// performs the final addition.
+static inline void mixSample(int16_t &out,int16_t *dacOut,int32_t fm,int psg,int dac){
+    int combined=std::clamp<int32_t>(fm+psg,-32768,32767);
+    int component=dacOut?dac:0;
+    if(combined-component < -32768 || combined-component > 32767)component=0;
+    out=combined-component;if(dacOut)*dacOut=component;
+}
 void NativeAudio::writePSG(uint8_t v){if(impl){psgWrites++;impl->logWrite(4,v);impl->psgWrite(v);}}
 unsigned NativeAudio::renderFrame(int16_t *out,uint64_t (*clock)(),int16_t *dacStereo){
     const unsigned n=renderBlock(out,clock,dacStereo);
@@ -422,12 +430,7 @@ unsigned NativeAudio::renderBlock(int16_t *out,uint64_t (*clock)(),int16_t *dacS
         auto mixed=clock?clock():0;
         unsigned psgEvent=0;
         const auto mix=[&](unsigned i,int psg){
-            for(unsigned c=0;c<2;c++){
-                int combined=std::clamp<int32_t>(impl->block[i].data[c]+psg,-32768,32767);
-                int component=dacStereo?dacStereo[i*2+c]:0;
-                if(combined-component < -32768 || combined-component > 32767)component=0;
-                out[i*2+c]=combined-component;if(dacStereo)dacStereo[i*2+c]=component;
-            }
+            for(unsigned c=0;c<2;c++)mixSample(out[i*2+c],dacStereo?dacStereo+i*2+c:nullptr,impl->block[i].data[c],psg,dacStereo?dacStereo[i*2+c]:0);
         };
         for(unsigned i=0;i<n;){
             while(psgEvent<impl->cpuPsgCount && std::min<unsigned>(impl->cpuPsg[psgEvent].sample,n-1)<=i)impl->psgWrite(impl->cpuPsg[psgEvent++].value);
@@ -469,15 +472,7 @@ unsigned NativeAudio::renderBlock(int16_t *out,uint64_t (*clock)(),int16_t *dacS
         if(clock){profile[0]+=afterZ80-before;profile[1]+=afterFM-afterZ80;profile[2]+=clock()-afterFM;}
         ymfm::ym2612::output_data dac;
         if(dacStereo)impl->fm.dac_component(dac);
-        for(int c=0;c<2;c++){
-            int combined=std::clamp<int32_t>(fm.data[c]+psg,-32768,32767);
-            int component=dacStereo?dac.data[c]:0;
-            // Keep both PCM16 stems in range and their integer sum exact, even
-            // when the reference mixer clips. AICA performs the final addition.
-            if(combined-component < -32768 || combined-component > 32767)component=0;
-            out[i*2+c]=combined-component;
-            if(dacStereo)dacStereo[i*2+c]=component;
-        }
+        for(unsigned c=0;c<2;c++)mixSample(out[i*2+c],dacStereo?dacStereo+i*2+c:nullptr,fm.data[c],psg,dac.data[c]);
     }
     impl->z80AddressOpen=false;applyCpu(n);impl->cpuEventCount=0;
     while(psgEvent<impl->cpuPsgCount)impl->psgWrite(impl->cpuPsg[psgEvent++].value);

@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Summarize guest timing and displayed-frame counters from a Flycast serial log."""
+"""Summarize guest timing and displayed-frame counters from a Flycast serial log.
+
+FRAME_STATS lines are CPU-loop intervals over 600-frame gameplay windows, with
+the KOS VBlank and page-flip counters over the same window (later windows can
+include idle time after a replay ends). GPU_STATS lines are renderer phase
+times per 600 present calls, menus included.
+"""
 import argparse
 import json
 import re
@@ -25,16 +31,7 @@ def summarize(text):
                     record[key + '_mean_us'], record[key + '_max_us'] = map(int, match.groups())
             record['ending_present_call'] = (len(phases) + 1) * 600
             phases.append(record)
-    return {'gameplay_windows': frames, 'renderer_blocks': phases,
-            'notes': [
-                'Guest timings in Flycast; retail hardware unverified.',
-                'FRAME_STATS measures CPU-loop intervals, not individual page-flip durations.',
-                'VBlanks and flips are KOS presentation counters over the same gameplay window.',
-                'Renderer blocks include menus and are separate from gameplay windows.',
-                'Later gameplay windows can include idle time after replay completion.',
-                'Serial diagnostics are enabled; experimental audio is ' +
-                ('active.' if 'AUDIO frame=' in text else 'disabled.')
-            ]}
+    return {'gameplay_windows': frames, 'renderer_blocks': phases, 'audio': 'AUDIO frame=' in text}
 
 
 def main():

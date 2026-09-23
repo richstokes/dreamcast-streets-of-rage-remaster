@@ -1,8 +1,5 @@
 #include "vdp_scene.hpp"
 #include "equal_bytes.hpp"
-#include "art_catalog.hpp"
-#include "sprite_probe.hpp"
-#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <stdexcept>
@@ -39,7 +36,7 @@ bool same_render_regs(const VDPState &a,const VDPState &b){
 uint16_t VdpScene::rgb1555(unsigned r,unsigned g,unsigned b){
     return 0x8000|((r*255/7>>3)<<10)|((g*255/7>>3)<<5)|(b*255/7>>3);
 }
-bool VdpScene::buildCached(VDPState &s,VDPRenderer &){
+bool VdpScene::buildCached(VDPState &s){
     // VRAM: no write since the cached frame (a write of equal bytes rebuilds).
     reused=cacheValid && enhanced==builtEnhanced_ && lighting==builtLighting_ && weather==builtWeather_ && round==builtRound_ && !inbetween_ && same_render_regs(s,previous)
         && s.vramGeneration_==previous.vramGeneration_
@@ -71,7 +68,7 @@ bool VdpScene::buildCached(VDPState &s,VDPRenderer &){
     if(cacheValid)previous=s;
     return cacheValid;
 }
-bool VdpScene::build(VDPState &s,VDPRenderer &){
+bool VdpScene::build(VDPState &s){
     cacheValid=false;
     return buildImpl(s,false);
 }
@@ -244,17 +241,17 @@ void VdpScene::enhancedSprites(const VDPState &s){
             loneBuilds_=best==loneLevel_?loneBuilds_+elapsed:0;loneLevel_=best;
             if(loneBuilds_>=8||!groundKnown_){groundLevel_=best;groundKnown_=true;}
         }
-        if(!knownWas||levelWas!=groundLevel_)horizon_=32767;        // another round, another ground
+        if(!knownWas||levelWas!=groundLevel_)farthestGround_=32767;        // another round, another ground
         for(unsigned o=0;o<build->count;o++){
             const auto &obj=build->objects[o];
             if(!inWorld(obj)||obj.level!=groundLevel_)continue;
             const int line=obj.y-128;
-            if(line>64&&line<height)horizon_=int16_t(std::min<int>(horizon_,horizon_==32767?line-24:line));
+            if(line>64&&line<height)farthestGround_=int16_t(std::min<int>(farthestGround_,farthestGround_==32767?line-24:line));
         }
         // The ground meets the wall some lines above the farthest anyone walks.
         // Collecting the lights divides a lot: only when the grid, the wall line or the round is another.
-        const int wall=horizon_==32767?height*5/8:horizon_-WALL_ABOVE_LANES;
-        if(!lightCollected_||wall!=light_.horizon()||round!=collectedRound_){light_.collect(wall);lightCollected_=true;collectedRound_=round;}
+        const int wall=farthestGround_==32767?height*5/8:farthestGround_-WALL_ABOVE_LANES;
+        if(!lightCollected_||wall!=light_.wallLine()||round!=collectedRound_){light_.collect(wall);lightCollected_=true;collectedRound_=round;}
         // Weather: the wall's lights glow through the fog.
         if(weatherOn()&&weatherProfile().shafts&&weatherProfile().fog)
             for(unsigned i=0;i<light_.lightCount()&&glowCount<MAX_GLOWS;i++){
@@ -271,7 +268,7 @@ void VdpScene::enhancedSprites(const VDPState &s){
         for(unsigned o=0;o<build->count&&emitterCount<MAX_EMITTERS;o++){
             const auto &obj=build->objects[o];
             if(obj.screen||!emits_light(obj.type,obj.mapping)||obj.first+obj.count>VDPState::SAT_MAX_SPRITES)continue;
-            // Fire (the police's napalm) reaches far and lights the ground; fireballs less; sparks are small.
+            // Fire (the police's napalm) reaches far and lights the ground; the bazooka's flame less; sparks are small.
             const bool fire=obj.type==0x0E,ball=!fire&&obj.type!=0x49;
             LightEmitter e{int16_t(obj.x-128),int16_t(obj.y-128-(fire?24:8)),int16_t(fire?112:ball?80:48),{},uint8_t(fire?120:ball?110:80)};
             const bool hasArt=owner[obj.first]==int16_t(o);
@@ -374,9 +371,7 @@ void VdpScene::enhancedSprites(const VDPState &s){
 void VdpScene::weatherStep(){
     weatherQuadCount=0;
     if(!weatherOn()||!weatherProfile().any())return;
-    WeatherLight lights[SceneLight::MAX_LIGHTS];
-    for(unsigned i=0;i<light_.lightCount();i++){const auto &l=light_.lights()[i];lights[i]={l.x,l.y,l.power,{l.colour[0],l.colour[1],l.colour[2]},l.low};}
-    weatherQuadCount=weather_quads(weatherProfile(),weather_,camera_,width,height,light_.horizon(),lights,light_.lightCount(),weatherQuads);
+    weatherQuadCount=weather_quads(weatherProfile(),weather_,camera_,width,height,light_.wallLine(),light_.lights(),light_.lightCount(),weatherQuads);
 }
 void VdpScene::particlesStep(const VDPState &s,const SpriteBuild *build){
     // A tick of theirs per sprite-table build of the game's; emitters feed them.
@@ -388,7 +383,7 @@ void VdpScene::particlesStep(const VDPState &s,const SpriteBuild *build){
     if(!build||elapsed>30){particles_.clear();particleCount=0;trackedCount_=0;if(build)particleSerial_=build->serial;else weather_.clear();return;}
     particleSerial_=build->serial;
     const unsigned ticks=std::min<uint32_t>(elapsed,3);
-    const int camera=-scroll(s,0,std::min(height-1,std::max(0,int(light_.horizon())+8)));
+    const int camera=-scroll(s,0,std::min(height-1,std::max(0,int(light_.wallLine())+8)));
     camera_=camera;
     particles_.advance(ticks);
     if(weatherOn())weather_.advance(ticks,weatherProfile());else weather_.clear();
@@ -433,8 +428,8 @@ void VdpScene::particlesStep(const VDPState &s,const SpriteBuild *build){
         // The game's rain and the weather's land on the ground.
         const unsigned drops=(rain?2u:0u)+(weatherOn()?weatherProfile().rain*3u/255u:0u);
         if(drops)for(unsigned t=0;t<ticks*drops;t++){
-            const int top=std::min(height-8,light_.horizon()+20);
-            particles_.splash(int(particleRandom()%unsigned(width)),top+int(particleRandom()%unsigned(height-4-top)),camera);
+            const int top=std::min(height-8,light_.wallLine()+20);
+            particles_.splash(int(particles_.random()%unsigned(width)),top+int(particles_.random()%unsigned(height-4-top)),camera);
         }
         trackedCount_=0;
         for(unsigned o=0;o<build->count;o++){const auto &obj=build->objects[o];tracked_[trackedCount_++]={obj.slot,int16_t(obj.x-128),int16_t(obj.y-128),obj.level,obj.type};}
@@ -544,13 +539,13 @@ void raster_enhanced(const VdpScene &scene,const VDPState &s,uint16_t *out,int p
                     blend(g.x*2+x,g.y*2+y,add,255);
                 }
             }
-            // Light spilt by the backdrop's lights onto the ground below the horizon,
+            // Light spilt by the backdrop's lights onto the ground below the wall line,
             // fading over SPILL_DEPTH lines.
             if(scene.lighting){
                 const auto &light=scene.sceneLight();
-                // From nothing SPILL_RISE lines above the horizon (where the ground meets
-                // the wall is not known to a line) to full at the horizon, then fading.
-                const int rise=SceneLight::SPILL_RISE*2,top=light.horizon()*2-rise,depthLines=SceneLight::SPILL_DEPTH*2+rise;
+                // From nothing SPILL_RISE lines above the wall line (where the ground meets
+                // the wall is not known to a line) to full at the wall line, then fading.
+                const int rise=SceneLight::SPILL_RISE*2,top=light.wallLine()*2-rise,depthLines=SceneLight::SPILL_DEPTH*2+rise;
                 for(int y=0;y<depthLines;y++)for(int x=0;x<w;x++){
                     const int column=x/(SceneLight::CELL*2),fx=x%(SceneLight::CELL*2)*256/(SceneLight::CELL*2);
                     if(column>=SceneLight::COLS)break;

@@ -1,6 +1,6 @@
 {
   "name": "NTSC-U first enemy encounter, one player",
-  "status": "Initial P2 Start probe did not join in one-player mode; not two-player coverage",
+  "description": "The first enemy encounter with one player.",
   "segments": [
     {
       "frames": 360,

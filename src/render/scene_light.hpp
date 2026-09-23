@@ -5,14 +5,14 @@
 class VDPState;
 namespace sor {
 struct TileQuad;
-// Dynamic lighting (enhanced graphics; docs/REMASTER.md, "Lighting"). The game
+// Dynamic lighting (enhanced graphics; docs/REMASTER.md, "Dynamic lighting"). The game
 // has no light: every sprite is drawn in its own colours wherever it stands,
 // and nothing casts a shadow. Here the light comes from the picture itself:
 //
 // - The backdrop on screen (planes B and A, not the HUD's window) is reduced
-//   to a grid of cells. Every cell above the horizon that outshines the screen
-//   (shop windows, lamps, neon) is a light, standing in the wall behind the
-//   playfield at its place and height, with its colour and power.
+//   to a grid of cells. Every cell above the wall line that outshines the
+//   screen (shop windows, lamps, neon) is a light, standing in the wall behind
+//   the playfield at its place and height, with its colour and power.
 // - An object is lit by all of them at once, each by its distance over the
 //   ground: the lights to its left and to its right tint that side's corners
 //   of its art (brighter and in their colour), its feet take the ground's colour.
@@ -20,7 +20,7 @@ struct TileQuad;
 //   centre of power: longer the farther from the wall and the lower the
 //   lights, swinging round as it walks past a shop window; and a contact
 //   shadow under its feet. The windows' light spills onto the ground.
-// - Objects that are light (fire, fireballs, hit sparks) add their colour to
+// - Objects that are light (the napalm, the bazooka's flame, hit sparks) add their colour to
 //   what is near them, and to the ground.
 //
 // The PowerVR has no programmable shading. All of this is vertex colour
@@ -73,6 +73,8 @@ struct LightProfile {
     uint8_t skyLength,skyShare;      // skyShare of 255: how much of shadowAlpha is the sky's
 };
 const LightProfile &light_profile(unsigned round);
+// A light the backdrop holds: in the wall or, `low`, on the ground (a lamp on the deck).
+struct Light {int16_t x,y;uint16_t power;uint8_t colour[3];bool low;};
 struct LightEmitter {
     int16_t x,y;            // centre on screen
     int16_t radius;
@@ -86,15 +88,14 @@ public:
     // quads [0, endB) are plane B's, [endB, endA) plane A's.
     void build(const TileQuad *quads,size_t endB,size_t endA,const uint16_t *colors,uint16_t background,const VDPState &);
     LightSample gather(int x0,int y0,int x1,int y1) const;
-    // The lights: cells above the horizon line that outshine the screen. Call after build().
-    void collect(int horizon);
-    struct Light {int16_t x,y;uint16_t power;uint8_t colour[3];bool low;};   // low: on the ground (a lamp on the deck), not in the wall
+    // The lights: cells above the wall line that outshine the screen. Call after build().
+    void collect(int wallLine);
     const Light *lights() const {return lights_;}
     unsigned lightCount() const {return lightCount_;}
-    // Light spilt on the ground below the horizon, at each column boundary (strength 0-255).
+    // Light spilt on the ground below the wall line, at each column boundary (strength 0-255).
     struct Spill {uint8_t colour[3],strength;};
     const Spill &spill(int boundary) const {return spill_[boundary];}
-    int horizon() const {return horizon_;}
+    int wallLine() const {return wallLine_;}
     int level() const {return ambientLuminance_;}   // the screen's mean RMS brightness: what a light must outshine
     // The light on an object whose art (or pieces) covers [x0,x1) x [y0,y1), standing on line `ground`.
     void shade(int x0,int y0,int x1,int y1,int ground,CornerLight &) const;
@@ -119,7 +120,7 @@ private:
     Light lights_[MAX_LIGHTS];
     unsigned lightCount_=0;
     Spill spill_[COLS+1]{};
-    int horizon_=0;
+    int wallLine_=0;
     const LightProfile *profile_=&light_profile(1);
     int ambientLuminance_=0;
 };

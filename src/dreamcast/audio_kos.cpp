@@ -3,6 +3,7 @@
 #include "sor_audio_config.hpp"
 #include "dac_aica.hpp"
 #include "platform.hpp"
+#include "audio_core.hpp"
 #include <dc/sound/stream.h>
 #include <dc/sound/sound.h>
 #include <algorithm>
@@ -83,11 +84,11 @@ void *feed(void*){
 bool platform_audio_split_dac(){return SOR_ENABLE_AICA_DAC!=0;}
 bool platform_audio_native_dac(){return SOR_ENABLE_NATIVE_DAC!=0;}
 bool platform_audio_profile(){return SOR_ENABLE_AUDIO_PROFILE!=0;}
-bool platform_audio_enabled(){return SOR_ENABLE_EXPERIMENTAL_AUDIO!=0;}
+bool platform_audio_enabled(){return SOR_ENABLE_AUDIO!=0;}
 void platform_audio_init(unsigned rate){
     if(!platform_audio_enabled())return;
     if(platform_audio_split_dac()){dac_aica_init(rate);return;}
-    if(rate!=53267)throw std::runtime_error("AICA playback rate assumes 53267 Hz synthesis");
+    if(rate!=NativeAudio::sampleRate)throw std::runtime_error("AICA playback rate assumes 53267 Hz synthesis");
     if(snd_stream_init_ex(2,streamFrames*2)<0)throw std::runtime_error("AICA stream init failed");
     stream=snd_stream_alloc(callback,streamFrames*2);
     if(stream==SND_STREAM_INVALID)throw std::runtime_error("AICA stream allocation failed");

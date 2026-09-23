@@ -6,6 +6,8 @@ class SystemMemory;
 class Framebuffer;
 
 namespace sor::cheats {
+// Game mode word ($FFFF00) while a round is played; the attract demo uses it too ($FFFF34 set).
+constexpr uint16_t playingMode = 0x16;
 struct Settings {
     unsigned round = 1, lives = 3;
     bool infiniteLives = false, infiniteHealth = false, infiniteSpecials = false;
@@ -53,6 +55,8 @@ extern Menu menu;
 void poll(PlayersControlState &, const uint8_t *ram);
 void draw(const Menu &, Framebuffer &);
 bool hintVisible();
+// The strip of the screen the hint ("L + R : CHEATS") is drawn in.
+constexpr int hintX = 32, hintY = 196, hintWidth = 256, hintHeight = 16;
 // RGB components are in the game's 0..7 range. Shared by both renderers.
 using PutPixel = void (*)(void *, int, int, unsigned, unsigned, unsigned);
 void drawHint(void *context, PutPixel);

@@ -28,9 +28,7 @@ Header/checksum matching alone is insufficient.
   measure retained YM/PSG cost. KOS AICA output/streaming replaces SDL. A low-cost
   offline-rendered original-music stream is a candidate, not an implemented substitute
   for validating dynamic sound effects or synchronization.
-- Storage: versioned explicit-byte saves in KOS VMU packages. Alternate two files
-  so a failed overwrite leaves a previous valid copy. Missing/full/corrupt VMU
-  leaves defaults or the last valid record. Never write during active combat.
+- Storage: none. Settings (the cheat menu) are session-only; nothing is written to a VMU.
 - Assets: `/cd` stage packages, bounded staging buffers, stage-specific texture
   residency. Host paths exist only in tools. No dependency on `/sd`.
 

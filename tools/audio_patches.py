@@ -1,9 +1,7 @@
 """Small, checked adaptations of the pinned BSD-licensed ymfm source."""
 from pathlib import Path
-def replace_once(text, old, new):
-    if text.count(old) != 1:
-        raise RuntimeError('Pinned ymfm source changed; review single-channel patch')
-    return text.replace(old, new)
+import re
+from patching import replace_once
 
 
 SPAN=Path(__file__).resolve().parents[1]/'src/audio/ymfm_sor_span.ipp'
@@ -231,7 +229,6 @@ void fm_operator<RegisterType>::sor_advance_quiet(uint32_t n, uint32_t first_env
         # 32 KiB replaces the rejected multi-megabyte phase/attenuation table.
         start=text.index('inline uint32_t attenuation_to_volume(')
         stop=text.index('\n}',start)+2
-        import re
         mant=[(int(v,16)|0x400)<<2 for v in re.findall(r'X\(0x([0-9a-f]+)\)',text[start:stop])]
         assert len(mant)==256
         values=[(mant[i&255]>>(i>>8) if i<3328 else 0) for i in range(8192)]

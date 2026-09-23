@@ -17,24 +17,19 @@ backends can be compared on content no replay reaches from power-on.
 
   tools/bot-play.py CORE ROM PROLOGUE FRAMES OUT_SCENARIO [--weaken] [--output DIR]
 """
-import argparse, ctypes, hashlib, json, sys
+import argparse, ctypes, hashlib, json
 from pathlib import Path
 
+from genesis_reference import BUTTONS, Genesis, decoder_idle, gate_open, segment_masks
+from sor_ram import PLAYER1 as PLAYER, PLAYER2, CAMERA, P1_LIVES as LIVES, P2_LIVES as LIVES2, OBJECT_SLOTS, word, is_enemy
+
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'tools'))
-from genesis_reference import Genesis, BUTTONS, decoder_idle  # noqa: E402
-
-PLAYER, PLAYER2, HEALTH, CAMERA, LIVES = 0xB800, 0xB880, 0xB832, 0xE002, 0xFF20
-LIVES2 = 0xFF23
-SLOTS = [0xB880] + list(range(0xB900, 0xDA00, 0x80))
-
-
-def word(ram, a): return (ram[a] << 8) | ram[a + 1]
+HEALTH = PLAYER + 50
+SLOTS = OBJECT_SLOTS[1:]           # everything but player 1
 
 
 def enemy(ram, s):
-    """Ordinary enemy ($20-$2F) or boss ($55-$58, Antonio at the end of Round 1)."""
-    return 0x20 <= ram[s] <= 0x2F or 0x55 <= ram[s] <= 0x58
+    return is_enemy(ram[s])
 
 
 def live(ram, s):
@@ -139,11 +134,6 @@ class Bot:
         return buttons or (['B'] if frame % 15 < 2 else [])
 
 
-def policy(ram, frame, lure=False, answer='yes'):
-    """The default single-player policy (Bot with no options)."""
-    return Bot(PLAYER, answer).buttons(ram, frame, lure)
-
-
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('core'); ap.add_argument('rom'); ap.add_argument('prologue', type=Path)
@@ -179,10 +169,10 @@ def main():
     segments = []
     ram = g.ram()
     for index, segment in enumerate(json.loads(a.prologue.read_text())['segments']):
-        masks = [sum(1 << BUTTONS[b] for b in segment.get(k, [])) for k in ('p1', 'p2')]
+        masks = segment_masks(segment)
         gate = segment.get('wait')
         for elapsed in range(segment['frames'] + int(bool(gate))):
-            if gate and ram[gate['address']] & gate.get('mask', 255) == gate['value']:
+            if gate and gate_open(gate, ram):
                 events.append(dict(segment=index, frame=g.frame, idle_frames=elapsed)); break
             if gate and elapsed == segment['frames']: raise SystemExit('state gate timed out')
             ram = g.step(*masks)

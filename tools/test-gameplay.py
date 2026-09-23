@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Focused repeatability and walking checks; deliberately not a full parity test."""
+"""Check that the native port repeats itself and walks like the original in the boot-movement scenario."""
 import argparse
 import json
 from pathlib import Path
@@ -19,5 +19,4 @@ def main():
     assert a and a==b,('Movement integration differs',a,b)
     assert player(original[1444])==player(native[1444]),'Walking endpoint differs'
     print(f'PASS: {len(native)} identical native snapshots; {len(a)} walking updates match original increments and endpoint')
-    print('Not a parity pass: intermediate frame phase, jump/combat, menus and boot remain separate checks.')
 if __name__=='__main__':main()

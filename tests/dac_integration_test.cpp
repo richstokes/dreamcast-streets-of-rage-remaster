@@ -10,7 +10,7 @@ int main(int argc,char **argv){
  std::array<uint8_t,8192> initial;std::ifstream(argv[2],std::ios::binary).read((char*)initial.data(),initial.size());
  NativeAudio reference(true,false),native,split;NativeAudio *cores[]={&reference,&native,&split};
  for(auto core:cores){core->setROM(rom.data(),rom.size());std::memcpy(core->ram,initial.data(),8192);core->setReset(true);core->setReset(false);}
- uint32_t random=0x736f7231;int16_t a[1780],b[1780],fm[1780],dac[1780];
+ uint32_t random=0x736f7231;int16_t a[NativeAudio::maxFrameSamples*2],b[NativeAudio::maxFrameSamples*2],fm[NativeAudio::maxFrameSamples*2],dac[NativeAudio::maxFrameSamples*2];
  for(unsigned frame=0;frame<1000;frame++){
   random^=random<<13;random^=random>>17;random^=random<<5;
   for(auto core:cores){

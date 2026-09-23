@@ -24,7 +24,7 @@ import os,signal,subprocess,sys,time
 from pathlib import Path
 binary,image,root=sys.argv[1:]
 root=Path(root)
-images={image,str(root/'build/benchmark-running.cdi')}
+images={image}
 images.update(str(root/'dist'/name) for name in ('sor.cdi','sor-test.elf'))
 snapshot=root/'build/flycast-run'
 images.update(str(p) for p in snapshot.glob('*') if p.suffix in ('.cdi','.elf'))

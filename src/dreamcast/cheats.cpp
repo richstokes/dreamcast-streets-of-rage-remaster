@@ -14,7 +14,7 @@ unsigned step(unsigned value, unsigned maximum, bool increment) {
 }
 bool playing(SystemMemory &memory) {
     // $FF34 marks the attract-mode demo, which also uses gameplay state $16.
-    return memory.readWord(gameState) == 0x16 && memory.readByte(0xffff34) == 0;
+    return memory.readWord(gameState) == playingMode && memory.readByte(0xffff34) == 0;
 }
 bool activePlayer(SystemMemory &memory, unsigned player) {
     return (memory.readByte(playerMode) & (1u << player)) &&
@@ -86,8 +86,8 @@ void Menu::apply(SystemMemory &memory) const {
             if (type < 0x20 || type >= 0x60) continue;
             if (health > 1 && health < 0x8000) memory.writeWord(object + 0x32, 1);
             // An open-loop script cannot line up with enemies: bring awake,
-            // grounded ones into player 1's lane, where its punches land.
-            // and within reach, on the side they are already on.
+            // grounded ones into player 1's lane, where its punches land, and
+            // within reach, on the side they are already on.
             if (memory.readByte(object + 0x30) && memory.readWord(object + 0x18) == memory.readWord(0xffb818)) {   // both on the ground
                 const int player = int16_t(memory.readWord(0xffb810)), x = int16_t(memory.readWord(object + 0x10));
                 memory.writeWord(object + 0x14, memory.readWord(0xffb814));

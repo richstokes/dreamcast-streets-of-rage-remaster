@@ -11,6 +11,8 @@ envelopes, pitch and effect priority on every compared frame.
 import argparse, collections, json, mmap
 from pathlib import Path
 
+from sor_ram import gate_frame
+
 MUSIC = [('music FM%d' % i, 0xF040 + i * 0x30) for i in range(5)] + [('music DAC', 0xF130)] + \
         [('music PSG%d' % i, 0xF160 + i * 0x30) for i in range(3)]
 EFFECTS = [('effect FM%d' % i, 0xF1F0 + i * 0x30) for i in range(2)] + [('effect PSG%d' % i, 0xF2B0 + i * 0x30) for i in range(2)]
@@ -22,7 +24,7 @@ def main():
     ap.add_argument('--segment', type=int, required=True)
     ap.add_argument('--frames', type=int, default=1300)
     a = ap.parse_args()
-    gate = lambda d: [e['frame'] for e in json.load(open(d / 'events.json')) if e['segment'] == a.segment][0]
+    gate = lambda d: gate_frame(d, a.segment)
     first = lambda d: json.load(open(d / 'metadata.json'))['ram_first_frame']
     maps = []
     for d in (a.original, a.native):
@@ -32,6 +34,8 @@ def main():
         return m[o:o + 0x30] if 0 <= o and o + 0x30 <= len(m) else None
     og, ng = gate(a.original), gate(a.native)
     frames = range(og, og + a.frames)
+    if block(0, frames[-1], 0) is None:
+        raise SystemExit('the original run has fewer than %d frames after its gate' % a.frames)
     # Music offset: native frame = original frame + k, chosen by exact equality.
     def music_equal(k):
         return sum(all(block(0, f, s) == block(1, f + k, s) for _, s in MUSIC) for f in frames)
@@ -44,6 +48,7 @@ def main():
             x, y = block(0, f, s), block(1, f + offset, s)
             active += bool(x[0] & 0x80)
             if x == y: equal += 1
+            elif y is None: bad[-1] += 1                      # past the end of the native run
             else: bad.update(j for j in range(0x30) if x[j] != y[j])
         result['blocks'][name] = dict(equal=equal, active_frames=active, differing_bytes=dict(sorted(bad.items())))
     print(json.dumps(result, indent=1))

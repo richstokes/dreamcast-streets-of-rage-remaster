@@ -6,7 +6,7 @@
 #include <cstdint>
 #include "audio_core.hpp"
 #include <string>
-/* Transitional SoR-specific device facade. No 68000 interpreter. Experimental sound-only compatibility is isolated in NativeAudio. */
+// Host of the translated game: 68000 bus decode and timing, VDP port, controllers and the sound core (NativeAudio). No 68000 interpreter.
 class VDP: public VDPPort {public:
     enum Synchronization {VSync}; enum Scaling {Integer}; enum SpriteLimit {HardwareSpriteLimit};
     explicit VDP(VDPState &s):VDPPort(s){}
@@ -21,7 +21,7 @@ public:
     SystemMemory &memory(){return mem_;} VDP &vdp(){return port_;}
     Controllers &controllers(){return pads_;} NativeAudio &z80(){return audio_;}
     NativeAudio &sound(){return audio_;}
-    bool shouldQuit()const{return quit_;}
+    bool shouldQuit()const{return quit_;} // Called by generated loops; never set on the console (only errors stop the game).
     // VINT stays pending from VBlank until acknowledged and interrupts the
     // 68000 (level 6) only while VDP register 1 enables it (IE0), as in
     // Genesis Plus GX; the game disables it during some loads.
@@ -87,7 +87,7 @@ public:
 #else
     void pcHistogram(unsigned,unsigned){}
 #endif
-    void waitForInterrupt(); void debugState();
+    void waitForInterrupt();
     // Enhanced rendering: record which SAT records each object emits
     // (src/render/sprite_probe.hpp). Host bookkeeping only; no emulated time.
     void spriteProbeBuild();
@@ -108,7 +108,6 @@ public:
 #endif
     m_long lastFunction()const{return last_;}
     void reportUnhandledDispatch(m_long);
-    void confirmSpeculative(m_long){}
     uint64_t current68KMasterCycles()const{return cycles_;} bool isPal50Hz()const{return false;}
 protected:
     virtual void run()=0; virtual int cpuInterruptMask()const=0;
@@ -129,6 +128,7 @@ private:
     // on the 68000 starts at line 191, 111,856 clocks before the first VBlank
     // (Genesis Plus GX, from the VDP's fixed power-on position).
     static constexpr uint64_t frameClocks=896040,vblankStart=224*3420,powerOn=vblankStart-111856;
+    static constexpr uint64_t dacSyncClocks=1500*7;   // the syncAudio() repeat interval while a sample plays, in master clocks
     uint64_t vintDelay()const{return (state_.regs_[12]&1)?788:770;}
     uint64_t cycles_=powerOn,frameCycles_=0,vblankFlag_=vblankStart,nextVblank_=vblankStart+788,
              refreshAt_=(powerOn/896+1)*896,ymBusyUntil_=0,audioSyncAt_=~uint64_t(0); uint32_t last_=0,frames_=0,pending_=0;

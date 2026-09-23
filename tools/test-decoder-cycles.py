@@ -21,7 +21,7 @@ def native_decodes(rom, replay):
     calls = [(int(e, 16), int(s, 16), int(c)) for e, s, c in
              re.findall(r'DECODE entry=(\w+) src=(\w+) cycles=(\d+)', run.stderr)]
     if not calls:
-        raise SystemExit('no DECODE lines; is build/headless/sor-headless the SOR_PC_HISTOGRAM build?\n' + run.stderr[-2000:])
+        raise SystemExit('no DECODE lines from build/headless/sor-headless (tools/build-headless.sh)\n' + run.stderr[-2000:])
     expected = {}
     stream = None
     for entry, src, cycles in calls:

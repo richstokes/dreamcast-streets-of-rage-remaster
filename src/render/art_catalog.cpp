@@ -43,12 +43,11 @@ bool ArtCatalog::load(const uint8_t *data,size_t size,bool inflatePages){
     palette_.resize(palettes*256);
     for(auto &c:palette_)c=r.u16();
     for(uint32_t i=0;i<palettes;i++)palette_[i*256]=0;
-    inflated_.reserve(pages);
     for(uint32_t i=0;i<pages;i++){
         if(!r.has(12))return false;
         ArtPage page{r.u16(),r.u16(),r.u16(),0,0,nullptr,nullptr,0};
         page.palette=*r.p++;page.character=*r.p++;page.packedSize=r.u32();
-        if(page.palette>=palettes)return false;
+        if(page.palette>=palettes||page.width>512||page.height>512)return false;
         if(!r.has(page.packedSize))return false;
         page.packed=r.p;r.p+=page.packedSize;
         if(inflatePages){

@@ -7,22 +7,15 @@ sequences are aligned in order; the report lists where the native time drifts
 from the original (native minus original, in 68000 cycles) between consecutive
 matched calls, and where the sequences diverge.
 
-  tools/compare-calls.py original.txt native.txt [--step 300] [--labels]
+  tools/compare-calls.py original.txt native.txt [--step 300] [--window 200] [--frames]
 """
-import argparse, bisect
-from pathlib import Path
+import argparse
 
-ROOT = Path(__file__).resolve().parents[1]
+from sor_ram import routine_labels
 
-
-def labels():
-    rows = []
-    for line in open(ROOT / 'research/StreetsOfRageProject/StreetsOfRageRecompilation/code-analysis/labels.csv'):
-        if line.startswith('#') or ',' not in line: continue
-        address, name = line.split(',', 2)[:2]
-        try: rows.append((int(address, 16), name.strip()))
-        except ValueError: pass
-    return dict(rows)
+CLOCKS_PER_FRAME = 896040       # master clocks per NTSC frame
+CYCLES_PER_FRAME = CLOCKS_PER_FRAME / 7
+FIRST_VINT = 112644             # master clocks from power-on to the first VBlank interrupt
 
 
 def read(path):
@@ -36,7 +29,7 @@ def main():
     ap.add_argument('--window', type=int, default=200, help='calls searched ahead to resynchronise')
     ap.add_argument('--frames', action='store_true', help='report only calls made in a different VBlank period')
     a = ap.parse_args()
-    names = labels()
+    names = dict(routine_labels())
     name = lambda pc: names.get(pc, '%06x' % pc)
     g, n = read(a.original), read(a.native)
     i = j = 0; last = None; lastCall = None
@@ -44,18 +37,17 @@ def main():
         if g[i][0] == n[j][0]:
             drift = (n[j][1] - g[i][1]) // 7
             if a.frames:
-                # VBlank periods since power-on (the first VINT is 112,644 clocks in).
-                shift = (n[j][1] - 112644) // 896040 - (g[i][1] - 112644) // 896040
+                shift = (n[j][1] - FIRST_VINT) // CLOCKS_PER_FRAME - (g[i][1] - FIRST_VINT) // CLOCKS_PER_FRAME
                 if shift != last:
                     print('frame %5d  %-40s VBlank period %+d (drift %+d cycles)  since %s' % (
-                        (g[i][1] - 112644) // 896040, name(g[i][0]), shift, drift, lastCall or 'start'))
+                        (g[i][1] - FIRST_VINT) // CLOCKS_PER_FRAME, name(g[i][0]), shift, drift, lastCall or 'start'))
                     last = shift
                 lastCall = name(g[i][0]); i += 1; j += 1
                 continue
             if last is None or abs(drift - last) >= a.step:
-                frame = g[i][1] // 896040
+                frame = g[i][1] // CLOCKS_PER_FRAME
                 print('frame %5d  %-40s drift %+9d cycles (%+.2f frames)  since %s' % (
-                    frame, name(g[i][0]), drift, drift / 128005.7, lastCall or 'start'))
+                    frame, name(g[i][0]), drift, drift / CYCLES_PER_FRAME, lastCall or 'start'))
                 last = drift
             lastCall = name(g[i][0]); i += 1; j += 1
             continue

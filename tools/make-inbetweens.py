@@ -197,7 +197,7 @@ def inbetween(a, b, reach, prior):
 def similar(a, b):
     """Poses close enough to interpolate: their silhouettes mostly overlap and
     differ only by slivers. A part three pixels thick in one pose and absent
-    from the other (an arm thrown out, a whip, other words) has no counterpart
+    from the other (an arm thrown out, a whip, in other words) has no counterpart
     to move to, and correspondence invents one."""
     sa, sb = a[..., 3] > 0, b[..., 3] > 0
     union = (sa | sb).sum()

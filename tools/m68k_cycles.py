@@ -5,8 +5,9 @@ base time (including effective-address calculation) from the Musashi cycle table
 in the Genesis Plus GX research checkout (tools/m68k-cycle-table.c), adding the
 statically known extras: MOVEM register counts and immediate shift counts.
 Conditional branches are charged as taken and DBcc as looping; register shift
-counts, MULU/MULS and DIVU/DIVS use typical values. `cycles` estimates the same
-from the recompiler's comment text alone and serves as the fallback. The result
+counts, MULU/MULS and DIVU/DIVS use typical values. `cycles` estimates a time
+from the recompiler's comment text alone; it supplies the data-dependent DIVU/DIVS
+figure and is the fallback for an opcode the table has no time for. The result
 drives emulated 68000 time (VBlank cadence), not cycle-exact execution.
 """
 import re

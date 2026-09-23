@@ -11,10 +11,7 @@ tools/m68k-time running the ROM's own routine. DRAM refresh (2 cycles per
 """
 
 
-def replace_once(text, old, new):
-    if text.count(old) != 1:
-        raise RuntimeError('Pinned decoder source changed; review decoder_patches.py: ' + old[:60])
-    return text.replace(old, new)
+from patching import replace_once
 
 
 PRELUDE = r'''

@@ -1,7 +1,9 @@
 #pragma once
+#include "scene_particles.hpp"
 #include <cstddef>
 #include <cstdint>
 namespace sor {
+struct Light;
 // Weather (enhanced graphics with dynamic lighting; docs/REMASTER.md, "Weather"):
 // rain, wet ground, haze, mist, light shafts and lightning, per round, all
 // drawing only. The game has none of it: the atmosphere of a round is what its
@@ -56,7 +58,7 @@ private:
     uint16_t countdown_=0;
     int8_t lean_=0;
     uint32_t random_=0x9E3779B9u;
-    uint32_t random(){random_^=random_<<13;random_^=random_>>17;random_^=random_<<5;return random_;}
+    uint32_t random(){return xorshift32(random_);}
     void strike(int strength);
 };
 // A quad of weather to draw: corners top left, top right, bottom left, bottom
@@ -74,14 +76,13 @@ struct WeatherQuad {
 };
 constexpr size_t MAX_WEATHER_QUADS=56;
 // What the weather draws this frame, for a camera and a wall line: rain and
-// mist sheets, the flash of lightning; with the lights (x, y, power, colour,
-// low; count) the wet ground's smears and the fog's shafts.
-struct WeatherLight {int16_t x,y;uint16_t power;uint8_t colour[3];bool low;};
-size_t weather_quads(const WeatherProfile &,const Weather &,int camera,int width,int height,int horizon,
-                     const WeatherLight *lights,unsigned lightCount,WeatherQuad *out);
+// mist sheets, the flash of lightning; with the lights (scene_light.hpp) the
+// wet ground's smears and the fog's shafts.
+size_t weather_quads(const WeatherProfile &,const Weather &,int camera,int width,int height,int wallLine,
+                     const Light *lights,unsigned lightCount,WeatherQuad *out);
 // Haze: how much of the fog's colour a backdrop line takes, 0-255, for the far
 // plane (B) or the near one (A), given the wall line.
-int weather_fog(const WeatherProfile &,int y,int horizon,bool farPlane);
+int weather_fog(const WeatherProfile &,int y,int wallLine,bool farPlane);
 // The wet ground's reflection of art standing on it: its length in 1/64 of
 // the art's height, and its alpha at the feet (of 255) for a profile.
 constexpr int REFLECT_LENGTH=30;

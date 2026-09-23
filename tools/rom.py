@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
-"""Inspect a user-supplied ROM. Header checks are NOT a trusted hash identity."""
+"""Inspect a user-supplied ROM: header, checksum and whether it is the supported dump."""
 import argparse
 import hashlib
 import json
 from pathlib import Path
 import struct
+
+# Streets of Rage / Bare Knuckle (World), revision 00: the only dump the generated
+# code and the reference comparisons are validated against.
+LOCKED_SHA256 = 'dd44f120446654bb91c448762f3e0cd0d9b034f35d0e3266a4dc34402ada95c0'
 
 def inspect(data):
     if len(data) != 0x80000:
@@ -19,9 +23,10 @@ def inspect(data):
     calculated = sum(struct.unpack('>' + 'H' * ((len(data)-512)//2), data[512:])) & 0xffff
     if stored != 0x9409 or calculated != stored:
         raise ValueError(f'Expected checksum 9409; header={stored:04x}, calculated={calculated:04x}')
-    return dict(size=len(data), sha256=hashlib.sha256(data).hexdigest(),
+    sha256 = hashlib.sha256(data).hexdigest()
+    return dict(size=len(data), sha256=sha256, known=sha256 == LOCKED_SHA256,
                 product='MK 00001019-00', region='JUE', execution_region='overseas NTSC',
-                checksum=f'{stored:04x}', identity='header/checksum candidate; hash needs reference validation')
+                checksum=f'{stored:04x}')
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
@@ -31,8 +36,8 @@ def main():
     a = p.parse_args()
     try:
         result = inspect(a.rom.read_bytes())
-        if a.require_known and result['sha256'] != 'dd44f120446654bb91c448762f3e0cd0d9b034f35d0e3266a4dc34402ada95c0':
-            raise ValueError('ROM SHA-256 differs from the generated-code target; refusing mixed revisions')
+        if a.require_known and not result['known']:
+            raise ValueError(f'ROM SHA-256 {result["sha256"]} is not the supported dump {LOCKED_SHA256}')
     except (OSError, ValueError) as e:
         p.exit(1, f'{e}\n')
     text = json.dumps(result, indent=2) + '\n'

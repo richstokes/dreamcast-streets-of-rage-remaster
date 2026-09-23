@@ -1,6 +1,6 @@
 {
   "name": "NTSC-U Adam movement/attack/jump, aligned at graphics-free VBlank wait",
-  "status": "Diagnostic state gate; inputs begin at the same simulation half-cycle without changing game memory. Boot timing is compared separately.",
+  "description": "Adam: movement, attack and jump, with input starting at a state gate (a VBlank wait with no graphics work pending).",
   "segments": [
     {
       "frames": 360,

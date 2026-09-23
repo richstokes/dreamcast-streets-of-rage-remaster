@@ -15,10 +15,9 @@ void hue(const uint8_t *c,int out[3]){
 }
 // White pulled towards a hue: strength 0-256.
 int towards(int hueChannel,int strength){return 255-(255-hueChannel)*strength/256;}
-// How strongly the light's colour shows, the unlit side's brightness, the
-// feet's, and the most the lit side adds (of 255).
+// The feet's brightness (of 255), how much of the ground's colour they take
+// (of 256), and the most the lit side adds (of 255).
 constexpr int FEET=238,GROUND_TINT=32,ADDED=46;
-// The backdrop beside an object that counts as lighting it.
 }
 const LightProfile &light_profile(unsigned round){
     //                       exposure shadow spill ambient light unlit rim   sky              tint lean length share
@@ -36,9 +35,9 @@ const LightProfile &light_profile(unsigned round){
     return profiles[round<=8?round:0];
 }
 LightKind light_kind(unsigned type,uint32_t mapping){
-    // The police's napalm; hit sparks. Type $05 is the police car ($070B20-), the
-    // rocket it fires ($070C47-$070C5B, grey: no light, but smoke) and the
-    // fireballs that come down ($070C1F- otherwise).
+    // The police's napalm; hit sparks. Type $05 is the police car ($070B20-), its
+    // bazooka's grey smoke ($070C47-$070C5B: no light, smoke particles only) and
+    // the bazooka's flame ($070C1F- otherwise).
     if(type==0x0E)return LightKind::FIRE;
     if(type==0x49)return LightKind::HIT_SPARK;
     if(type==0x05&&mapping>=0x070C1F&&mapping<0x070D00)return mapping>=0x070C47&&mapping<=0x070C5B?LightKind::ROCKET:LightKind::FIREBALL;
@@ -52,16 +51,16 @@ bool in_playfield(unsigned type){
     if(type==0x01||(type>=0x20&&type<=0x3F)||(type>=0x55&&type<=0x58)||type==0x97)return true;
     switch(type){
     case 0x08:case 0x09:case 0x0A:case 0x0B:case 0x11:case 0x15:case 0x18:case 0x19:case 0x1B:case 0x1F:
-    case 0x3F:case 0x40:case 0x41:case 0x44:case 0x45:case 0x47:case 0x4B:case 0x4C:return true;
+    case 0x40:case 0x41:case 0x44:case 0x45:case 0x47:case 0x4B:case 0x4C:return true;
     }
     return false;
 }
 void emitter_colour(const uint16_t *line,uint16_t mask,uint8_t rgb[3]){
-    long sum[3]{},weight=0;
+    uint32_t sum[3]{},weight=0;   // w <= 255^2; sum <= 15*255*w
     for(int i=1;i<16;i++){
         if(!(mask>>i&1))continue;
         const uint8_t c[3]={uint8_t((line[i]>>1&7)*255/7),uint8_t((line[i]>>5&7)*255/7),uint8_t((line[i]>>9&7)*255/7)};
-        const long w=long(luminance(c))*luminance(c);
+        const uint32_t w=uint32_t(luminance(c))*luminance(c);
         for(int k=0;k<3;k++)sum[k]+=c[k]*w;
         weight+=w;
     }
@@ -144,14 +143,14 @@ void SceneLight::build(const TileQuad *quads,size_t endB,size_t endA,const uint1
         over_[y][x]=uint16_t(over*over);
     }
 }
-void SceneLight::collect(int horizon){
-    horizon_=horizon;lightCount_=0;
+void SceneLight::collect(int wallLine){
+    wallLine_=wallLine;lightCount_=0;
     uint32_t columns[COLS][4]{};
-    for(int y=0;y<ROWS&&y*CELL+CELL/2<horizon;y++)for(int x=0;x<COLS;x++){
+    for(int y=0;y<ROWS&&y*CELL+CELL/2<wallLine;y++)for(int x=0;x<COLS;x++){
         const unsigned power=over_[y][x];
         if(power<24*24)continue;
         // Light near the ground spills onto it; a sign high on the wall hardly does.
-        const unsigned reach=unsigned(std::max(0,160-(horizon-(y*CELL+CELL/2)))),w=(power>>4)*reach>>4;
+        const unsigned reach=unsigned(std::max(0,160-(wallLine-(y*CELL+CELL/2)))),w=(power>>4)*reach>>4;
         for(int k=0;k<3;k++)columns[x][k]+=bright_[y][x][k]*w>>8;
         columns[x][3]+=w;
     }
@@ -160,7 +159,7 @@ void SceneLight::collect(int horizon){
     // concrete deck) is neither. They are not part of the wall.
     bool lamp[ROWS][COLS]{};
     for(int y=0;y<ROWS;y++)for(int x=0;x<COLS;x++){
-        if(y*CELL+CELL/2<horizon-CELL||lightCount_==MAX_LIGHTS)continue;
+        if(y*CELL+CELL/2<wallLine-CELL||lightCount_==MAX_LIGHTS)continue;
         const uint8_t *c=cell_[y][x];
         const int bright=brightness(c),chroma=bright-std::min({c[0],c[1],c[2]});
         if(!(bright>=ambientLuminance_+40&&(chroma>=64||bright>=200)))continue;
@@ -171,7 +170,7 @@ void SceneLight::collect(int horizon){
     // The wall's lights: bright cells, merged two by two (every object sums over all of them).
     for(int y=0;y<ROWS;y+=2)for(int x=0;x<COLS;x+=2){
         uint32_t power=0,px=0,py=0,colour[3]{};
-        for(int j=y;j<y+2&&j<ROWS&&j*CELL+CELL/2<horizon;j++)for(int i=x;i<x+2&&i<COLS;i++){
+        for(int j=y;j<y+2&&j<ROWS&&j*CELL+CELL/2<wallLine;j++)for(int i=x;i<x+2&&i<COLS;i++){
             const uint32_t w=over_[j][i];
             if(w<24*24||lamp[j][i])continue;
             power+=w;px+=w*unsigned(i*CELL+CELL/2)>>4;py+=w*unsigned(j*CELL+CELL/2)>>4;
@@ -202,7 +201,8 @@ LightSample SceneLight::gather(int x0,int y0,int x1,int y1) const{
     if(x1<=0){x0=0;x1=CELL;}else if(x0>=width){x0=width-CELL;x1=width;}
     if(y1<=0){y0=0;y1=CELL;}else if(y0>=height){y0=height-CELL;y1=height;}
     x0=std::max(x0,0);y0=std::max(y0,0);x1=std::min(x1,width);y1=std::min(y1,height);
-    // 32-bit sums: weights are (over^2+4)/16 <= 4064, coverage <= 16 (sixteenths of a cell), 320 cells.
+    // 32-bit sums: over_ <= 255^2, so a cell's weight ((over+4)>>2)*covered is at most
+    // 16257*16 (covered: sixteenths of a cell); c*w and the sums over 320 cells fit.
     uint32_t colour[3]{},weights=0,energy=0,area=0;
     for(int row=y0/CELL;row*CELL<y1;row++){
         const int rows=std::min(y1,(row+1)*CELL)-std::max(y0,row*CELL);
@@ -223,15 +223,15 @@ LightSample SceneLight::gather(int x0,int y0,int x1,int y1) const{
 }
 void SceneLight::shade(int x0,int y0,int x1,int y1,int ground,CornerLight &light) const{
     // Every light, by its distance over the ground: it stands in the wall at the
-    // horizon, the object `depth` in front of it (the ground is seen at a slant:
+    // wall line, the object `depth` in front of it (the ground is seen at a slant:
     // a line of the screen is about three of the ground).
     static uint16_t falloff[256];
     if(!falloff[0])for(int i=0;i<256;i++)falloff[i]=uint16_t(65536/(256+i*40));    // 256/(1+d^2/80^2), d^2 in steps of 1024
-    const int middle=(x0+x1)/2,depth=std::max(0,ground-horizon_)*3+24;
+    const int middle=(x0+x1)/2,depth=std::max(0,ground-wallLine_)*3+24;
     uint32_t power[2]{},place[2]{},height[2]{},colour[2][3]{};
     for(unsigned i=0;i<lightCount_;i++){
         const Light &l=lights_[i];
-        const int dx=l.x-middle,up=l.low?0:horizon_-l.y;
+        const int dx=l.x-middle,up=l.low?0:wallLine_-l.y;
         const int dz=l.low?(ground-l.y)*3:depth;                     // a lamp on the ground: its own depth
         const unsigned distance=unsigned(dx*dx+dz*dz+(up*up>>2))>>10;
         const unsigned w=(l.power>>4)*falloff[std::min(distance,255u)]>>8;

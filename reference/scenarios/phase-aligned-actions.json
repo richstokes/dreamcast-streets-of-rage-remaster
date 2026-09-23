@@ -1,6 +1,6 @@
 {
   "name": "Adam directional movement, jump kick, back attack and police special",
-  "status": "Phase-anchored diagnostic replay; action coverage requires state observations, not input names alone.",
+  "description": "Adam: directional movement, jump kick, back attack and police special, from a state gate.",
   "segments": [
     {
       "frames": 360,

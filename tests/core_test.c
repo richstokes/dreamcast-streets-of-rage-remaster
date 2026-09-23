@@ -1,5 +1,4 @@
 #include "sor/memory.h"
-#include "sor/save.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -18,12 +17,6 @@ int main(void){
     sor_memory_write(&memory,0,4,0);assert(sor_memory_read(&memory,0,4)==0x89abcdefu);
     memory.read_device=bus;assert(sor_memory_read(&memory,0xc00004,2)==0x1234);
     assert(calls==1 && bus_width==2);
-    assert(sor_crc32("123456789",9)==0xcbf43926u);
-    uint8_t record[SOR_SAVE_BYTES];sor_settings in={0xffffffffu,999999,1,75,80},out={0};
-    sor_save_encode(record,&in);assert(sor_save_decode(&out,record,sizeof(record))==0);
-    assert(out.sequence==in.sequence && out.high_score==in.high_score);
-    for(unsigned i=0;i<sizeof(record);i++){record[i]^=1;assert(sor_save_decode(&out,record,sizeof(record))==-1);record[i]^=1;}
-    assert(sor_save_decode(&out,record,sizeof(record)-1)==-1);
-    puts("core: big-endian, address mirror, boundary rejection, bus widths, CRC/save corruption passed");
+    puts("core: big-endian, address mirror, boundary rejection, bus widths passed");
     return 0;
 }

@@ -43,6 +43,5 @@ public:
     void copyByte(m_long a,m_long b) {writeByte(b,readByte(a));}
     void copyWord(m_long a,m_long b) {writeWord(b,readWord(a));}
     void copyLong(m_long a,m_long b) {writeLong(b,readLong(a));}
-    void copyBytes(m_long a,m_long b,int n) {for(int i=0;i<n;i++)copyByte(a+i,b+i);}
     m_byte waitForByteValue(m_long a,m_byte v,const std::function<bool()> &f) {while(readByte(a)!=v) if(!f())break;return readByte(a);}
 };

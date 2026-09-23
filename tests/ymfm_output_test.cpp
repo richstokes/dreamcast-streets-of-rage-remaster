@@ -1,4 +1,5 @@
 #include "ymfm_opn.h"
+#include <algorithm>
 #include <cstdio>
 #include <cstdint>
 #include <vector>

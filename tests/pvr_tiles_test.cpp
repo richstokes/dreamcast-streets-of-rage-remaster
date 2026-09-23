@@ -15,5 +15,5 @@ int main(){
    if(got!=want){std::printf("tile %u pixel %u,%u: %u != %u\n",n,x,y,got,want);return 1;}
   }
  }
- std::puts("8192 tiles: 524288 palette indices preserve pixel positions and transparent index zero");
+ std::puts("8192 tiles: 524288 palette indices preserve pixel positions");
 }

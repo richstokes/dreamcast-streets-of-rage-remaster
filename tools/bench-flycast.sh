@@ -21,5 +21,4 @@ until grep -q 'BENCHMARK replay complete' "$root/build/logs/flycast.log" 2>/dev/
 done
 sleep 3
 cp "$root/build/logs/flycast.log" "$log"
-pkill -f "$root/build/flycast-run/sor.cdi" 2>/dev/null || true
 grep -E '^(FRAME_STATS|AICA|AUDIO_PARTS)' "$log" | tail -6

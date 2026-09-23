@@ -1,8 +1,8 @@
 #include "scene_weather.hpp"
+#include "scene_light.hpp"
 #include <algorithm>
 namespace sor {
 namespace {
-constexpr int HUD_LINES=36;          // the HUD's band at the top: nothing of the weather is drawn over it
 constexpr int T=WEATHER_TEXTURE;
 uint32_t hash(uint32_t x,uint32_t y,uint32_t seed){
     uint32_t h=x*0x8DA6B343u^y*0xD8163841u^seed*0xCB1AB31Fu;
@@ -83,15 +83,15 @@ void Weather::advance(unsigned ticks,const WeatherProfile &profile){
         if(countdown_)countdown_--;
         else{
             if(time_>1)strike(255);
-            countdown_=uint16_t((500u+random()%1400u)*255u/profile.lightning);
+            countdown_=uint16_t(std::min<uint32_t>(65535,(500u+random()%1400u)*255u/profile.lightning));
             second_=uint8_t(random()%3==0?5+random()%6:0);
         }
     }
 }
-int weather_fog(const WeatherProfile &p,int y,int horizon,bool farPlane){
+int weather_fog(const WeatherProfile &p,int y,int wallLine,bool farPlane){
     if(!p.fog)return 0;
     // Full 80 lines above the wall line, none 40 lines below it (the ground there is near).
-    const int t=std::clamp((horizon+40-y)*255/120,0,255),f=p.fog*t/255;
+    const int t=std::clamp((wallLine+40-y)*255/120,0,255),f=p.fog*t/255;
     return farPlane?f:f*5/8;
 }
 namespace {
@@ -111,8 +111,8 @@ WeatherQuad &sheet(WeatherQuad *out,size_t &n,WeatherTexture texture,WeatherQuad
     return q;
 }
 }
-size_t weather_quads(const WeatherProfile &p,const Weather &w,int camera,int width,int height,int horizon,
-                     const WeatherLight *lights,unsigned lightCount,WeatherQuad *out){
+size_t weather_quads(const WeatherProfile &p,const Weather &w,int camera,int width,int height,int wallLine,
+                     const Light *lights,unsigned lightCount,WeatherQuad *out){
     size_t n=0;
     const int W=width*2,H=height*2,top=HUD_LINES*2,time=int(w.time()),camera2=camera*2;
     const auto wrap=[](int v){return ((v%T)+T)%T;};
@@ -126,7 +126,7 @@ size_t weather_quads(const WeatherProfile &p,const Weather &w,int camera,int wid
     if(p.mist){
         // Pale: the fog's colour towards white.
         const uint8_t pale[3]={uint8_t(p.fogColour[0]+(255-p.fogColour[0])*11/20),uint8_t(p.fogColour[1]+(255-p.fogColour[1])*11/20),uint8_t(p.fogColour[2]+(255-p.fogColour[2])*11/20)};
-        const int rise=std::max(top,(horizon-20)*2),peak=(horizon+16)*2,floor=std::min(H,(horizon+70)*2);
+        const int rise=std::max(top,(wallLine-20)*2),peak=(wallLine+16)*2,floor=std::min(H,(wallLine+70)*2);
         // Two layers at the ground, at different scales and drifts, so that the pattern does not show.
         if(peak>rise&&floor>peak){
             const int a=p.mist*150/255,b=p.mist*110/255;
@@ -138,14 +138,14 @@ size_t weather_quads(const WeatherProfile &p,const Weather &w,int camera,int wid
         // A faint veil in front of everything from the wall line down, thicker low
         // down (not over the whole playfield: a full-screen translucent layer is
         // fill the PowerVR pays for every frame).
-        const int veil=std::max(top,(horizon-32)*2);
+        const int veil=std::max(top,(wallLine-32)*2);
         if(H>veil)sheet(out,n,WeatherTexture::NOISE,WeatherQuad::FRONT,false,0,veil,W,H,0,64,wrap(time/3),wrap(time/8),pale,0,p.mist*46/255);
     }
     // The wall's lights: smeared down the wet ground below them, and shafts
     // through the fog from the light to the ground line, fanning out.
     unsigned smears=0,shafts=0;
     for(unsigned i=0;i<lightCount&&n+3<=MAX_WEATHER_QUADS;i++){
-        const WeatherLight &l=lights[i];
+        const Light &l=lights[i];
         if(l.low||l.power<4000)continue;
         const int norm=std::min(255,int(l.power/128)),cx=l.x*2;
         if(p.wet&&smears<12){
@@ -153,27 +153,27 @@ size_t weather_quads(const WeatherProfile &p,const Weather &w,int camera,int wid
             // downwards and fading; the noise breaks it into wet patches, and
             // the world's scroll keeps the patches with the ground.
             smears++;
-            const int w=16+norm/6,h=(36+norm/6)*2,y1=std::min(H,horizon*2+h),a=p.wet*norm/255*170/255;
-            const int u=wrap(cx/3+camera2/3),v=wrap(horizon);
+            const int w=16+norm/6,h=(36+norm/6)*2,y1=std::min(H,wallLine*2+h),a=p.wet*norm/255*170/255;
+            const int u=wrap(cx/3+camera2/3),v=wrap(wallLine);
             for(int side=0;side<2;side++){
                 WeatherQuad &q=out[n++];
                 q.texture=WeatherTexture::NOISE;q.depth=WeatherQuad::GROUND;q.additive=true;
                 const int x0=side?cx:cx-w/2,x1=side?cx+w/2:cx,x2=side?cx:cx-w*3/4,x3=side?cx+w*3/4:cx;
                 q.x[0]=int16_t(x0);q.x[1]=int16_t(x1);q.x[2]=int16_t(x2);q.x[3]=int16_t(x3);
-                q.y[0]=q.y[1]=int16_t(horizon*2);q.y[2]=q.y[3]=int16_t(y1);
+                q.y[0]=q.y[1]=int16_t(wallLine*2);q.y[2]=q.y[3]=int16_t(y1);
                 q.u[0]=q.u[2]=int16_t(u+side*10);q.u[1]=q.u[3]=int16_t(u+10+side*10);
-                q.v[0]=q.v[1]=int16_t(v);q.v[2]=q.v[3]=int16_t(v+(y1-horizon*2)/6);
+                q.v[0]=q.v[1]=int16_t(v);q.v[2]=q.v[3]=int16_t(v+(y1-wallLine*2)/6);
                 std::copy(l.colour,l.colour+3,q.colour);
                 q.alpha[0]=uint8_t(side?a:0);q.alpha[1]=uint8_t(side?0:a);q.alpha[2]=q.alpha[3]=0;
             }
         }
-        if(p.shafts&&p.fog&&shafts<12&&l.power>=2500&&l.y<horizon-8){
+        if(p.shafts&&p.fog&&shafts<12&&l.power>=2500&&l.y<wallLine-8){
             shafts++;
             const int w0=(10+norm/12)*2,w1=w0*3;
             WeatherQuad &q=out[n++];
             q.texture=WeatherTexture::NONE;q.depth=WeatherQuad::GROUND;q.additive=true;
             q.x[0]=int16_t(cx-w0/2);q.x[1]=int16_t(cx+w0/2);q.x[2]=int16_t(cx-w1/2);q.x[3]=int16_t(cx+w1/2);
-            q.y[0]=q.y[1]=int16_t(l.y*2);q.y[2]=q.y[3]=int16_t((horizon+8)*2);
+            q.y[0]=q.y[1]=int16_t(l.y*2);q.y[2]=q.y[3]=int16_t((wallLine+8)*2);
             for(int k=0;k<4;k++){q.u[k]=0;q.v[k]=0;}
             for(int k=0;k<3;k++)q.colour[k]=uint8_t((l.colour[k]+p.fogColour[k])/2);
             const int a=p.shafts*norm/255*p.fog/255*110/255;

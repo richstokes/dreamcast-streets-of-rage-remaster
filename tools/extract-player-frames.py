@@ -83,8 +83,7 @@ def render(rom, record):
 
 
 def load_pam(path):
-    header, data = path.read_bytes().split(b'ENDHDR\n', 1)
-    return data
+    return path.read_bytes().split(b'ENDHDR\n', 1)[1]
 
 
 def main():
@@ -116,7 +115,7 @@ def main():
         mask &= 0xFFFE
         lines = {'%04X' % colour_key(cram, mask): cram for cram in lines.values()}
         same = differ = 0
-        for r, (w, h, anchor, palette, rows) in rendered.items():
+        for r, (w, h, anchor, _palette, rows) in rendered.items():
             for colours, cram in lines.items():
                 table = [bytes(((c >> s & 7) * 255 // 7) for s in (1, 5, 9)) for c in cram]
                 rgba = bytearray(w * h * 4)

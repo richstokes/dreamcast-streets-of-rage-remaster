@@ -9,11 +9,11 @@
 #include "cheats.hpp"
 void dc_renderer_init();
 void dc_renderer_shutdown();
-bool dc_render_vdp(VDPState &,VDPRenderer &,const sor::TitleCaption &);
+bool dc_render_vdp(VDPState &,const sor::TitleCaption &);
 void dc_renderer_game_state(unsigned round,unsigned characters,bool playing);
 void platform_game_state(unsigned round,unsigned characters,bool playing){dc_renderer_game_state(round,characters,playing);}
 static bool useGpu=true,previousToggle=false;
-bool platform_render_vdp(VDPState &s,VDPRenderer &r,const sor::TitleCaption &title){return useGpu && dc_render_vdp(s,r,title);}
+bool platform_render_vdp(VDPState &s,const sor::TitleCaption &title){return useGpu && dc_render_vdp(s,title);}
 static pvr_ptr_t texture;
 static uint16_t pixels[512*256] __attribute__((aligned(32)));
 static pvr_poly_hdr_t header;
@@ -88,7 +88,7 @@ void platform_observe_frame(uint32_t frame,const sor_memory &memory,const Frameb
     bool finished=replay_finished() && !reported;
     static pvr_stats_t startStats{};
     auto now=timer_us_gettime64();
-    bool playing=memory.ram[0xff00]==0 && memory.ram[0xff01]==0x16;
+    bool playing=memory.ram[0xff00]==0 && memory.ram[0xff01]==sor::cheats::playingMode;
     if(playing && !wasPlaying){
         pvr_get_stats(&startStats);sum=worst=samples=0;
         memset(histogram,0,sizeof(histogram));
@@ -104,18 +104,16 @@ void platform_observe_frame(uint32_t frame,const sor_memory &memory,const Frameb
     }
     previous=now;wasPlaying=playing;
     pc_profile_phase(playing && (!SOR_PC_PROFILE_LAST || (samples>=SOR_PC_PROFILE_FIRST && samples<=SOR_PC_PROFILE_LAST)));
-    // Interactive runs: drain diagnostics regularly so a session can be watched
-    // live. Replays keep them deferred until their measured window ends.
-    if(!replay_active() && samples && samples%600==0)sor_flush_log();
     // Interactive runs: every 600 emulated frames (10 s), in any mode, report
-    // refresh and drain the log. Comparing these lines' arrival with the wall
-    // clock separates a slow host emulator from a slow guest.
+    // refresh and drain the log so a session can be watched live. Comparing
+    // these lines' arrival with the wall clock separates a slow host emulator
+    // from a slow guest. Replays keep the log deferred until their measured window ends.
     if(!replay_active() && frame && frame%600==0){
-        static pvr_stats_t last{};pvr_stats_t now{};pvr_get_stats(&now);
+        static pvr_stats_t last{};pvr_stats_t current{};pvr_get_stats(&current);
         sor_log("HEARTBEAT frame=%lu vblanks=%lu flips=%lu enhanced=%d mode=%02x%02x\n",(unsigned long)frame,
-            (unsigned long)(now.vbl_count-last.vbl_count),(unsigned long)(now.frame_count-last.frame_count),
+            (unsigned long)(current.vbl_count-last.vbl_count),(unsigned long)(current.frame_count-last.frame_count),
             int(sor::cheats::menu.settings().enhancedGraphics),memory.ram[0xff00],memory.ram[0xff01]);
-        last=now;sor_flush_log();
+        last=current;sor_flush_log();
     }
     // Drain first: a full buffer would otherwise drop the completion marker
     // that tools/bench-flycast.sh waits for, and the reports after it.

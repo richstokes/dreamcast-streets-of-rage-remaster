@@ -1,6 +1,6 @@
 {
   "name": "NTSC-U two-player menu selection and first encounter",
-  "status": "Coverage probe; parity unverified",
+  "description": "Two players fighting: the smoke test.",
   "segments": [
     {
       "frames": 360,

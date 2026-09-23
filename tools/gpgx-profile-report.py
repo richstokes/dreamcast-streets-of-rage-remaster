@@ -1,19 +1,9 @@
 #!/usr/bin/env python3
 """Summarize a Genesis Plus GX per-PC cycle histogram (genesis_reference.py --profile) by routine."""
-import argparse, bisect, csv, struct
+import argparse, bisect, struct
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-
-
-def labels():
-    rows = []
-    for line in open(ROOT / 'research/StreetsOfRageProject/StreetsOfRageRecompilation/code-analysis/labels.csv'):
-        if line.startswith('#') or ',' not in line: continue
-        address, name = line.split(',', 2)[:2]
-        try: rows.append((int(address, 16), name.strip()))
-        except ValueError: pass
-    rows.sort(); return rows
+from sor_ram import routine_labels as labels
 
 
 def by_routine(path, table):

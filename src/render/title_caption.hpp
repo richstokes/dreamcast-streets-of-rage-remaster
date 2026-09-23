@@ -59,7 +59,7 @@ private:
     const uint8_t *font_=nullptr;
     uint16_t creditColor_=0;
     // Six-pixel-wide, nine-pixel-high caps; two-pixel tracking and a stepped
-    // italic lean echo the angular logo. Rows use the Mega Drive's 3-bit RGB.
+    // italic lean echo the angular logo.
     inline static constexpr uint8_t letters[10][9]={
         {0x3e,0x33,0x33,0x33,0x3e,0x36,0x33,0x33,0x33}, // R
         {0x3f,0x30,0x30,0x30,0x3e,0x30,0x30,0x30,0x3f}, // E
@@ -72,6 +72,7 @@ private:
         {0x3f,0x30,0x30,0x30,0x3e,0x30,0x30,0x30,0x3f}, // E
         {0x3e,0x33,0x33,0x33,0x33,0x33,0x33,0x33,0x3e}, // D
     };
+    // Rows use the Mega Drive's 3-bit RGB.
     inline static constexpr uint8_t colors[5][3]={
         {0,0,0}, {3,1,0}, {5,3,0}, {7,5,0}, {7,7,3}
     };
@@ -90,8 +91,7 @@ private:
     }();
 
     // Reuse the title's resident copyright/prompt lettering, including its
-    // narrow I and heavier left strokes. These are source coordinates only;
-    // the player's ROM supplies the pixels at runtime, with no copied assets.
+    // narrow I and heavier left strokes.
     struct Glyph {char character;uint16_t tile;uint8_t x,width;};
     inline static constexpr Glyph creditFont[]={
         {'R',0x31,6,5}, {'E',0x31,12,5}, {'M',0x45,0,5},

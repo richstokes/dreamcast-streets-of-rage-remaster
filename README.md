@@ -40,6 +40,63 @@ Each of these is its own switch in the options menu.
 **Cheats**: start at any round, choose lives, infinite lives, health and
 specials.
 
+## Screenshots
+
+<p align="center"><img src="docs/screenshots/title.png" width="640" alt="Title screen"></p>
+
+The same frame of Round 1, drawn both ways. The options menu switches between
+them at any time.
+
+<table>
+<tr>
+<td align="center"><img src="docs/screenshots/compare-original.png" width="420" alt="Round 1, original graphics"><br><sub><b>Original</b></sub></td>
+<td align="center"><img src="docs/screenshots/compare-enhanced.png" width="420" alt="Round 1, enhanced graphics"><br><sub><b>Enhanced</b>: 2x art, dynamic lighting, weather</sub></td>
+</tr>
+</table>
+
+<p align="center"><img src="docs/screenshots/closeup-art.png" width="840" alt="Close-up of the original and the 2x art"><br><sub>Up close: the original pixels and the generated 2x art (lighting and weather off)</sub></p>
+
+<table>
+<tr>
+<td align="center"><img src="docs/screenshots/fire.png" width="420" alt="Police special fire lighting Round 2"><br><sub><b>Dynamic lighting</b>: the police special's fire lights the street and the characters, with embers</sub></td>
+<td align="center"><img src="docs/screenshots/lightning.png" width="420" alt="Lightning in Round 1"><br><sub><b>Weather</b>: lightning flashes the scene and throws its own shadow over the wet street</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/lightning-lift.png" width="420" alt="Lightning on the lift in Round 7"><br><sub><b>Weather</b>: rain and a strike on the Round 7 lift</sub></td>
+<td align="center"><img src="docs/screenshots/flycast-two-players.png" width="420" alt="Two-player demo in Flycast"><br><sub><b>In Flycast</b>: the two-player demo with the bazooka</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/options-menu.png" width="420" alt="Options menu"><br><sub><b>Options menu</b> (L + R): cheats and the graphics switches</sub></td>
+<td></td>
+</tr>
+</table>
+
+### All eight rounds, enhanced
+
+<table>
+<tr>
+<td align="center"><img src="docs/screenshots/round-1.png" width="420" alt="Round 1"><br><sub><b>Round 1</b>: rain, wet street, shop windows and neon as lights</sub></td>
+<td align="center"><img src="docs/screenshots/round-2.png" width="420" alt="Round 2"><br><sub><b>Round 2</b>: wet ground under the bridge</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/round-3.png" width="420" alt="Round 3"><br><sub><b>Round 3</b>: mist on the beach</sub></td>
+<td align="center"><img src="docs/screenshots/round-4.png" width="420" alt="Round 4"><br><sub><b>Round 4</b>: rain, mist and lamp pools on the bridge</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/round-5.png" width="420" alt="Round 5"><br><sub><b>Round 5</b>: the ship, lit from its windows</sub></td>
+<td align="center"><img src="docs/screenshots/round-6.png" width="420" alt="Round 6"><br><sub><b>Round 6</b>: steam in the factory</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/round-7.png" width="420" alt="Round 7"><br><sub><b>Round 7</b>: rain on the lift</sub></td>
+<td align="center"><img src="docs/screenshots/round-8.png" width="420" alt="Round 8"><br><sub><b>Round 8</b>: the mansion</sub></td>
+</tr>
+</table>
+
+Gameplay frames are from the host preview of the enhanced renderer (the same
+integer scene the Dreamcast draws; see [docs/REMASTER.md](docs/REMASTER.md));
+the menu and the two-player demo are Flycast window captures. Smooth animation
+is not shown: it needs motion, and few in-between poses exist yet.
+
 ## Status
 
 - Round 1 matches the original ROM frame for frame in emulation, including the

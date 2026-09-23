@@ -1,6 +1,6 @@
 {
  "name": "Round 1 full progression (Adam)",
- "status": "Open-loop first-section run: progression, waves, enemy families, deaths/continues and the boss if reached. Phase-anchored like phase-aligned-actions; compare with compare-phase.py --segment 9.",
+ "description": "Round 1, Adam, open loop: progression, waves, enemy families, deaths and continues, and the boss if reached. Same gate as phase-aligned-actions; compare with compare-phase.py --segment 9.",
  "segments": [
   {
    "frames": 360,

@@ -15,14 +15,16 @@
    "0x29": 555,
    "0x4a": 2817
   },
+  "weapons": [],
+  "throws": {},
+  "weapon_pickups": {},
+  "enemy_hits": {},
+  "enemy_knockouts": {},
   "grab_starts": 0,
   "grab_frames": 0,
   "weapon_frames": 0,
-  "weapons": [],
   "police_specials_used": 1,
   "lives_lost": 0,
-  "throws": {},
-  "weapon_pickups": {},
   "weapons_let_go": 0,
   "food_eaten": 0,
   "friendly_hits": 0,
@@ -30,9 +32,7 @@
   "continues": 0,
   "game_overs": 0,
   "joins": 0,
-  "player_health_drops": 0,
-  "enemy_hits": {},
-  "enemy_knockouts": {}
+  "player_health_drops": 0
  },
  "two-player": {
   "frames": 761,
@@ -49,14 +49,20 @@
    "0x49": 171,
    "0x4a": 1082
   },
+  "weapons": [],
+  "throws": {},
+  "weapon_pickups": {},
+  "enemy_hits": {
+   "0x22": 7
+  },
+  "enemy_knockouts": {
+   "0x22": 2
+  },
   "grab_starts": 2,
   "grab_frames": 52,
   "weapon_frames": 0,
-  "weapons": [],
   "police_specials_used": 0,
   "lives_lost": 0,
-  "throws": {},
-  "weapon_pickups": {},
   "weapons_let_go": 0,
   "food_eaten": 0,
   "friendly_hits": 0,
@@ -64,13 +70,7 @@
   "continues": 0,
   "game_overs": 0,
   "joins": 0,
-  "player_health_drops": 3,
-  "enemy_hits": {
-   "0x22": 7
-  },
-  "enemy_knockouts": {
-   "0x22": 2
-  }
+  "player_health_drops": 3
  },
  "round1-combat": {
   "frames": 3115,
@@ -87,14 +87,21 @@
    "0x49": 72,
    "0x4a": 2298
   },
+  "weapons": [],
+  "throws": {},
+  "weapon_pickups": {},
+  "enemy_hits": {
+   "0x22": 4,
+   "0x24": 1
+  },
+  "enemy_knockouts": {
+   "0x22": 2
+  },
   "grab_starts": 1,
   "grab_frames": 26,
   "weapon_frames": 0,
-  "weapons": [],
   "police_specials_used": 0,
   "lives_lost": 0,
-  "throws": {},
-  "weapon_pickups": {},
   "weapons_let_go": 0,
   "food_eaten": 0,
   "friendly_hits": 0,
@@ -102,14 +109,7 @@
   "continues": 0,
   "game_overs": 0,
   "joins": 0,
-  "player_health_drops": 3,
-  "enemy_hits": {
-   "0x22": 4,
-   "0x24": 1
-  },
-  "enemy_knockouts": {
-   "0x22": 2
-  }
+  "player_health_drops": 3
  },
  "round1-full": {
   "frames": 9976,
@@ -138,22 +138,9 @@
    "0x4b": 2821,
    "0x54": 11459
   },
-  "grab_starts": 13,
-  "grab_frames": 1118,
-  "weapon_frames": 0,
   "weapons": [],
-  "police_specials_used": 1,
-  "lives_lost": 1,
   "throws": {},
   "weapon_pickups": {},
-  "weapons_let_go": 0,
-  "food_eaten": 0,
-  "friendly_hits": 0,
-  "continue_prompts": 0,
-  "continues": 0,
-  "game_overs": 0,
-  "joins": 0,
-  "player_health_drops": 28,
   "enemy_hits": {
    "0x22": 20,
    "0x24": 8,
@@ -163,7 +150,20 @@
    "0x22": 6,
    "0x21": 1,
    "0x24": 1
-  }
+  },
+  "grab_starts": 13,
+  "grab_frames": 1118,
+  "weapon_frames": 0,
+  "police_specials_used": 1,
+  "lives_lost": 1,
+  "weapons_let_go": 0,
+  "food_eaten": 0,
+  "friendly_hits": 0,
+  "continue_prompts": 0,
+  "continues": 0,
+  "game_overs": 0,
+  "joins": 0,
+  "player_health_drops": 28
  },
  "sync-17300": {
   "frames": 3000,
@@ -192,14 +192,23 @@
    "0x4a": 2006,
    "0x54": 6653
   },
+  "weapons": [],
+  "throws": {},
+  "weapon_pickups": {},
+  "enemy_hits": {
+   "0x22": 5,
+   "0x20": 3,
+   "0x21": 2
+  },
+  "enemy_knockouts": {
+   "0x22": 2,
+   "0x21": 1
+  },
   "grab_starts": 6,
   "grab_frames": 434,
   "weapon_frames": 0,
-  "weapons": [],
   "police_specials_used": 1,
   "lives_lost": 0,
-  "throws": {},
-  "weapon_pickups": {},
   "weapons_let_go": 0,
   "food_eaten": 1,
   "friendly_hits": 0,
@@ -207,15 +216,7 @@
   "continues": 0,
   "game_overs": 0,
   "joins": 0,
-  "player_health_drops": 4,
-  "enemy_hits": {
-   "0x22": 5,
-   "0x21": 2
-  },
-  "enemy_knockouts": {
-   "0x22": 2,
-   "0x21": 1
-  }
+  "player_health_drops": 4
  },
  "sync-19200": {
   "frames": 3000,
@@ -237,29 +238,17 @@
    "0x4a": 2186,
    "0x54": 6750
   },
-  "grab_starts": 7,
-  "grab_frames": 505,
-  "weapon_frames": 102,
   "weapons": [
    "0x8"
   ],
-  "police_specials_used": 0,
-  "lives_lost": 1,
   "throws": {
    "behind": 1
   },
   "weapon_pickups": {
    "0x8": 1
   },
-  "weapons_let_go": 1,
-  "food_eaten": 1,
-  "friendly_hits": 0,
-  "continue_prompts": 0,
-  "continues": 0,
-  "game_overs": 0,
-  "joins": 0,
-  "player_health_drops": 12,
   "enemy_hits": {
+   "0x20": 3,
    "0x21": 2,
    "0x26": 5,
    "0x22": 1
@@ -267,7 +256,20 @@
   "enemy_knockouts": {
    "0x21": 1,
    "0x26": 1
-  }
+  },
+  "grab_starts": 7,
+  "grab_frames": 505,
+  "weapon_frames": 102,
+  "police_specials_used": 0,
+  "lives_lost": 1,
+  "weapons_let_go": 1,
+  "food_eaten": 1,
+  "friendly_hits": 0,
+  "continue_prompts": 0,
+  "continues": 0,
+  "game_overs": 0,
+  "joins": 0,
+  "player_health_drops": 12
  },
  "sync-22100": {
   "frames": 3000,
@@ -284,14 +286,16 @@
    "0x4a": 102,
    "0x54": 6000
   },
+  "weapons": [],
+  "throws": {},
+  "weapon_pickups": {},
+  "enemy_hits": {},
+  "enemy_knockouts": {},
   "grab_starts": 0,
   "grab_frames": 0,
   "weapon_frames": 0,
-  "weapons": [],
   "police_specials_used": 0,
   "lives_lost": 1,
-  "throws": {},
-  "weapon_pickups": {},
   "weapons_let_go": 0,
   "food_eaten": 0,
   "friendly_hits": 0,
@@ -299,9 +303,7 @@
   "continues": 0,
   "game_overs": 0,
   "joins": 0,
-  "player_health_drops": 1,
-  "enemy_hits": {},
-  "enemy_knockouts": {}
+  "player_health_drops": 1
  },
  "sync-boss": {
   "frames": 4000,
@@ -319,14 +321,18 @@
    "0x56": 3966,
    "0x96": 2322
   },
+  "weapons": [],
+  "throws": {},
+  "weapon_pickups": {},
+  "enemy_hits": {
+   "0x56": 1
+  },
+  "enemy_knockouts": {},
   "grab_starts": 5,
   "grab_frames": 1827,
   "weapon_frames": 0,
-  "weapons": [],
   "police_specials_used": 0,
   "lives_lost": 2,
-  "throws": {},
-  "weapon_pickups": {},
   "weapons_let_go": 0,
   "food_eaten": 0,
   "friendly_hits": 0,
@@ -334,11 +340,7 @@
   "continues": 0,
   "game_overs": 0,
   "joins": 0,
-  "player_health_drops": 9,
-  "enemy_hits": {
-   "0x56": 1
-  },
-  "enemy_knockouts": {}
+  "player_health_drops": 9
  },
  "sync-clear": {
   "frames": 3000,
@@ -369,22 +371,9 @@
    "0x56": 411,
    "0x96": 425
   },
-  "grab_starts": 1,
-  "grab_frames": 2,
-  "weapon_frames": 0,
   "weapons": [],
-  "police_specials_used": 0,
-  "lives_lost": 0,
   "throws": {},
   "weapon_pickups": {},
-  "weapons_let_go": 0,
-  "food_eaten": 0,
-  "friendly_hits": 0,
-  "continue_prompts": 0,
-  "continues": 0,
-  "game_overs": 0,
-  "joins": 0,
-  "player_health_drops": 3,
   "enemy_hits": {
    "0x56": 4,
    "0x22": 4,
@@ -395,7 +384,20 @@
    "0x56": 1,
    "0x22": 1,
    "0x24": 1
-  }
+  },
+  "grab_starts": 1,
+  "grab_frames": 2,
+  "weapon_frames": 0,
+  "police_specials_used": 0,
+  "lives_lost": 0,
+  "weapons_let_go": 0,
+  "food_eaten": 0,
+  "friendly_hits": 0,
+  "continue_prompts": 0,
+  "continues": 0,
+  "game_overs": 0,
+  "joins": 0,
+  "player_health_drops": 3
  },
  "sync-continue": {
   "frames": 3000,
@@ -412,9 +414,6 @@
    "0x56": 3000,
    "0x96": 2124
   },
-  "grab_starts": 3,
-  "grab_frames": 1644,
-  "weapon_frames": 14,
   "weapons": [
    "0x2",
    "0x3",
@@ -424,10 +423,15 @@
    "0x7",
    "0x8"
   ],
-  "police_specials_used": 0,
-  "lives_lost": 2,
   "throws": {},
   "weapon_pickups": {},
+  "enemy_hits": {},
+  "enemy_knockouts": {},
+  "grab_starts": 3,
+  "grab_frames": 1644,
+  "weapon_frames": 14,
+  "police_specials_used": 0,
+  "lives_lost": 2,
   "weapons_let_go": 0,
   "food_eaten": 0,
   "friendly_hits": 0,
@@ -435,9 +439,7 @@
   "continues": 1,
   "game_overs": 0,
   "joins": 0,
-  "player_health_drops": 6,
-  "enemy_hits": {},
-  "enemy_knockouts": {}
+  "player_health_drops": 6
  },
  "sync-gameover": {
   "frames": 3000,
@@ -466,9 +468,6 @@
    "0x65": 1100,
    "0x96": 481
   },
-  "grab_starts": 0,
-  "grab_frames": 224,
-  "weapon_frames": 557,
   "weapons": [
    "0x1",
    "0x10",
@@ -726,10 +725,15 @@
    "0xfe",
    "0xff"
   ],
-  "police_specials_used": 0,
-  "lives_lost": 1,
   "throws": {},
   "weapon_pickups": {},
+  "enemy_hits": {},
+  "enemy_knockouts": {},
+  "grab_starts": 0,
+  "grab_frames": 224,
+  "weapon_frames": 557,
+  "police_specials_used": 0,
+  "lives_lost": 1,
   "weapons_let_go": 0,
   "food_eaten": 0,
   "friendly_hits": 0,
@@ -737,9 +741,7 @@
   "continues": 0,
   "game_overs": 1,
   "joins": 0,
-  "player_health_drops": 1,
-  "enemy_hits": {},
-  "enemy_knockouts": {}
+  "player_health_drops": 1
  },
  "sync-throws": {
   "frames": 4000,
@@ -763,28 +765,15 @@
    "0x4a": 2964,
    "0x54": 4000
   },
-  "grab_starts": 1,
-  "grab_frames": 42,
-  "weapon_frames": 1040,
   "weapons": [
    "0x9"
   ],
-  "police_specials_used": 0,
-  "lives_lost": 0,
   "throws": {
    "front": 1
   },
   "weapon_pickups": {
    "0x9": 1
   },
-  "weapons_let_go": 0,
-  "food_eaten": 0,
-  "friendly_hits": 0,
-  "continue_prompts": 0,
-  "continues": 0,
-  "game_overs": 0,
-  "joins": 0,
-  "player_health_drops": 10,
   "enemy_hits": {
    "0x24": 5,
    "0x22": 9
@@ -792,7 +781,20 @@
   "enemy_knockouts": {
    "0x24": 2,
    "0x22": 3
-  }
+  },
+  "grab_starts": 1,
+  "grab_frames": 42,
+  "weapon_frames": 1040,
+  "police_specials_used": 0,
+  "lives_lost": 0,
+  "weapons_let_go": 0,
+  "food_eaten": 0,
+  "friendly_hits": 0,
+  "continue_prompts": 0,
+  "continues": 0,
+  "game_overs": 0,
+  "joins": 0,
+  "player_health_drops": 10
  },
  "sync-items": {
   "frames": 4500,
@@ -818,14 +820,9 @@
    "0x56": 900,
    "0x96": 776
   },
-  "grab_starts": 5,
-  "grab_frames": 398,
-  "weapon_frames": 850,
   "weapons": [
    "0x8"
   ],
-  "police_specials_used": 0,
-  "lives_lost": 0,
   "throws": {
    "front": 2,
    "behind": 2
@@ -833,6 +830,22 @@
   "weapon_pickups": {
    "0x8": 1
   },
+  "enemy_hits": {
+   "0x22": 8,
+   "0x21": 1,
+   "0x26": 14,
+   "0x20": 4,
+   "0x56": 1
+  },
+  "enemy_knockouts": {
+   "0x22": 2,
+   "0x26": 2
+  },
+  "grab_starts": 5,
+  "grab_frames": 398,
+  "weapon_frames": 850,
+  "police_specials_used": 0,
+  "lives_lost": 0,
   "weapons_let_go": 1,
   "food_eaten": 1,
   "friendly_hits": 0,
@@ -840,17 +853,7 @@
   "continues": 0,
   "game_overs": 0,
   "joins": 0,
-  "player_health_drops": 8,
-  "enemy_hits": {
-   "0x22": 8,
-   "0x21": 1,
-   "0x26": 14,
-   "0x56": 1
-  },
-  "enemy_knockouts": {
-   "0x22": 2,
-   "0x26": 2
-  }
+  "player_health_drops": 8
  },
  "sync-2p": {
   "frames": 3926,
@@ -871,25 +874,12 @@
    "0x4a": 5811,
    "0x54": 3045
   },
-  "grab_starts": 25,
-  "grab_frames": 1538,
-  "weapon_frames": 0,
   "weapons": [],
-  "police_specials_used": 0,
-  "lives_lost": 0,
   "throws": {
    "behind": 6,
    "front": 1
   },
   "weapon_pickups": {},
-  "weapons_let_go": 0,
-  "food_eaten": 0,
-  "friendly_hits": 12,
-  "continue_prompts": 0,
-  "continues": 0,
-  "game_overs": 0,
-  "joins": 0,
-  "player_health_drops": 27,
   "enemy_hits": {
    "0x22": 15,
    "0x21": 7,
@@ -899,7 +889,20 @@
    "0x24": 1,
    "0x22": 3,
    "0x21": 1
-  }
+  },
+  "grab_starts": 25,
+  "grab_frames": 1538,
+  "weapon_frames": 0,
+  "police_specials_used": 0,
+  "lives_lost": 0,
+  "weapons_let_go": 0,
+  "food_eaten": 0,
+  "friendly_hits": 12,
+  "continue_prompts": 0,
+  "continues": 0,
+  "game_overs": 0,
+  "joins": 0,
+  "player_health_drops": 27
  },
  "sync-bat": {
   "frames": 4335,
@@ -926,15 +929,10 @@
    "0x4b": 2542,
    "0x54": 7557
   },
-  "grab_starts": 4,
-  "grab_frames": 344,
-  "weapon_frames": 3127,
   "weapons": [
    "0x8",
    "0xa"
   ],
-  "police_specials_used": 0,
-  "lives_lost": 0,
   "throws": {
    "front": 1,
    "behind": 2
@@ -943,6 +941,25 @@
    "0xa": 2,
    "0x8": 1
   },
+  "enemy_hits": {
+   "0x23": 1,
+   "0x22": 8,
+   "0x21": 4,
+   "0x25": 1,
+   "0x26": 2,
+   "0x20": 3
+  },
+  "enemy_knockouts": {
+   "0x23": 1,
+   "0x21": 1,
+   "0x22": 1,
+   "0x25": 1
+  },
+  "grab_starts": 4,
+  "grab_frames": 344,
+  "weapon_frames": 3127,
+  "police_specials_used": 0,
+  "lives_lost": 0,
   "weapons_let_go": 2,
   "food_eaten": 0,
   "friendly_hits": 0,
@@ -950,20 +967,7 @@
   "continues": 0,
   "game_overs": 0,
   "joins": 0,
-  "player_health_drops": 2,
-  "enemy_hits": {
-   "0x23": 1,
-   "0x22": 8,
-   "0x21": 4,
-   "0x25": 1,
-   "0x26": 2
-  },
-  "enemy_knockouts": {
-   "0x23": 1,
-   "0x21": 1,
-   "0x22": 1,
-   "0x25": 1
-  }
+  "player_health_drops": 2
  },
  "sync-2p-continue": {
   "frames": 3000,
@@ -982,17 +986,19 @@
    "0x4a": 2854,
    "0x54": 3000
   },
-  "grab_starts": 0,
-  "grab_frames": 0,
-  "weapon_frames": 4,
   "weapons": [
    "0x7",
    "0x8"
   ],
-  "police_specials_used": 0,
-  "lives_lost": 1,
   "throws": {},
   "weapon_pickups": {},
+  "enemy_hits": {},
+  "enemy_knockouts": {},
+  "grab_starts": 0,
+  "grab_frames": 0,
+  "weapon_frames": 4,
+  "police_specials_used": 0,
+  "lives_lost": 1,
   "weapons_let_go": 0,
   "food_eaten": 0,
   "friendly_hits": 0,
@@ -1000,9 +1006,7 @@
   "continues": 1,
   "game_overs": 0,
   "joins": 0,
-  "player_health_drops": 2,
-  "enemy_hits": {},
-  "enemy_knockouts": {}
+  "player_health_drops": 2
  },
  "sync-join": {
   "frames": 3000,
@@ -1024,25 +1028,12 @@
    "0x4b": 251,
    "0x54": 3339
   },
-  "grab_starts": 19,
-  "grab_frames": 1040,
-  "weapon_frames": 0,
   "weapons": [],
-  "police_specials_used": 0,
-  "lives_lost": 0,
   "throws": {
    "behind": 1,
    "front": 2
   },
   "weapon_pickups": {},
-  "weapons_let_go": 0,
-  "food_eaten": 0,
-  "friendly_hits": 2,
-  "continue_prompts": 0,
-  "continues": 0,
-  "game_overs": 0,
-  "joins": 1,
-  "player_health_drops": 16,
   "enemy_hits": {
    "0x22": 11,
    "0x24": 4,
@@ -1051,6 +1042,19 @@
   "enemy_knockouts": {
    "0x22": 4,
    "0x24": 1
-  }
+  },
+  "grab_starts": 19,
+  "grab_frames": 1040,
+  "weapon_frames": 0,
+  "police_specials_used": 0,
+  "lives_lost": 0,
+  "weapons_let_go": 0,
+  "food_eaten": 0,
+  "friendly_hits": 2,
+  "continue_prompts": 0,
+  "continues": 0,
+  "game_overs": 0,
+  "joins": 1,
+  "player_health_drops": 16
  }
 }
