@@ -1,11 +1,7 @@
-# Input audit — 2026-09-15
+# Input audit (2026-09-15, historical)
 
-Current audio update: [native DAC decoding and AICA evaluation](NATIVE_DAC.md).
-The playback loop now has a validated native path; interpreter setup/fallback remains.
-
-Update: the user has now supplied the matching ROM. See [reference notes](REFERENCE.md)
-for the hash, entry-list repair and actual build results. Missing-ROM observations
-below describe the initial clean-clone audit, not a current blocker.
+The audit of the two research repositories made before any code was written.
+What was built from them is in ARCHITECTURE.md and REFERENCE.md.
 
 Exact commits, including all four recursive submodules, are in
 [`upstream-lock.json`](../tools/upstream-lock.json). Both requested repositories
@@ -63,17 +59,9 @@ paths need ROM-driven extraction and comparison. Do not infer completeness from 
   reconstruction from assembly is part of the tools.
 - KallistiOS has its own license; binary distribution must carry its notices.
 
-## What the missing ROM prevents
-
-Generation/counting of translated routines; PC game execution; original-emulator
-comparison; faithful combat, all-stage/ending testing; authentic sprite/audio
-extraction; a playable Dreamcast build. Required input is a user-owned raw
-524,288-byte SoR1 JUE revision 00 image. `tools/rom.py` rejects other layouts and
-records a SHA-256 candidate, without claiming a header checksum proves identity.
-
 ## Audio dependency use
 
-The experimental native audio path uses ymfm (BSD-3-Clause, Aaron Giles) and the
+The native audio path uses ymfm (BSD-3-Clause, Aaron Giles) and the
 Suzuki Plan Z80 core (MIT, Yoji Suzuki) bundled in the pinned MegaDriveEnvironment
 revision. They are staged during preparation with original headers intact. Binary
 and source distribution notices are in licenses/ymfm.txt and

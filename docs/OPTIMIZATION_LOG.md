@@ -1,4 +1,4 @@
-# Active 60 Hz optimization work
+# Performance log
 
 The target is uninterrupted 60 Hz with original audio. In Flycast both
 benchmarks now reach it (2026-09-19, below); physical Dreamcast performance is
@@ -39,7 +39,7 @@ PSG silent from 1.06 ms to 0.09 ms. Forcing ymfm's `clamp`/`bitfield` inline
 changed nothing measurable and was dropped. Logs: `build/logs/{baseline-0919b,
 psg-*,noise-*,vram-*}-flycast.log`.
 
-## Current changes under validation
+## Changes retained from the 2026-09-15 pass
 
 - PSG jumps between divider events and advances muted oscillators arithmetically.
   The noise shift register and hidden tone phase keep running while muted.
@@ -106,7 +106,7 @@ The phase-only operator step and the algorithm output are forced inline, so one
 channel's loop fits the SH-4 instruction cache. Without that inlining the span
 was slower (42 missed refreshes); with it, over the whole replay: 10 missed
 refreshes (was 29), 51 underruns (was 99), busiest profiled frame synthesis
-10.6 → 7.1 ms. `tools/test-ymfm-output.sh` now renders the staged build through
+10.6 → 7.1 ms. `tools/test-host.sh ymfm-output` now renders the staged build through
 random span splits against pinned per-sample ymfm, including LFO AM/PM, DAC
 toggles, SSG-EG and 4096-sample prepares (205,765 samples); stale-LFO and
 silent-channel-offset mutants fail it. Full replay PCM and RAM remain byte-exact.
@@ -219,12 +219,7 @@ The AICA stream was rebuilt for latency (`src/dreamcast/audio_kos.cpp`):
 - 300,000 native RAM/ROM/MMIO accesses match the C bus oracle, including odd
   offsets, 24-bit mirroring, RAM wrap, ROM rejection and device call widths.
 
-Reproduce with `tools/test-psg-events.sh`, `tools/test-dac-integration.sh`,
-`tools/test-ymfm-output.sh`, `tools/test-scene.sh`, and
-`tools/test-native-memory.sh` after staging/building the native sources.
-
-Next: measure native memory traffic savings and use the synthesis phase timings
-to choose the next change. Audio is still opt-in while deadlines and underruns fail.
+Reproduce with `tools/test-host.sh` after staging the native sources.
 
 ## Native indexed plane textures
 
@@ -240,8 +235,8 @@ https://kos-docs.dreamcast.wiki/group__pvr__pal__mgmt.html .
   refreshes: 1,721 VBlanks / 1,653 flips, mean 17.420 ms, 164 stream underruns.
 - First gameplay renderer block's maximum upload time: 13.935 → 4.338 ms;
   free VRAM increased from 3,136,104 to 4,119,144 bytes.
-- `tools/test-pvr-tiles.sh`: 524,288 decoded palette indices match the original
-  pixels, including transparent index zero (ASan/UBSan).
+- `tools/test-host.sh pvr-tiles`: 524,288 decoded palette indices match the original
+  pixels (ASan/UBSan).
 - Background Flycast capture inspected at `build/palette-flycast.png`: stage,
   HUD and character appear correctly. A full pixel comparison of GPU captures
   remains outstanding; the CPU scene oracle is still the rendering regression.
@@ -267,7 +262,7 @@ graphics only), PSG 4.6%, DAC 2.8%, texture copies and clears about 8%.
   Scene build 1.9-2.1 → 0.4-0.6 ms per frame.
 - FM channels with LFO vibrato use the channel-major fast path, recomputing a
   dynamic phase step only when the LFO's PM value changes. Exact:
-  `tools/test-ymfm-output.sh` and both full-replay audio captures are
+  `tools/test-host.sh ymfm-output` and both full-replay audio captures are
   bit-identical. SoR's busy fights use SSG-EG rather than vibrato, so this is
   not where their time goes.
 

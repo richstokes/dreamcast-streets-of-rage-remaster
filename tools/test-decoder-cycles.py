@@ -2,7 +2,7 @@
 """Check the native decompressors' emulated 68000 time against the ROM routines.
 
 Runs a replay with the host build (SOR_DECODE_LOG=1 lists each decode's ROM time
-before DRAM refresh) and times every distinct decode with tools/m68k-time running
+before DRAM refresh) and times every distinct decode with build/tests/m68k-time running
 the cartridge's own routine without refresh. Incremental Nemesis streams are
 compared as a whole ($84BA and every $8510 call). All must match exactly.
 Usage: tools/test-decoder-cycles.py ROM REPLAY.bin

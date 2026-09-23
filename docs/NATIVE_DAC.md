@@ -1,6 +1,9 @@
 # Native DAC decoding and AICA evaluation
 
-The locked SoR1 drum/voice playback loop now runs as a native C++ DPCM state
+Evaluation of 2026-09-15. Audio has been on by default since 2026-09-19
+(AUDIO.md); the build flags below still select the DAC path.
+
+The SoR1 drum/voice playback loop runs as a native C++ DPCM state
 machine. Command/header setup still uses the small sound-only Z80 interpreter;
 unknown driver code falls back to it. Gameplay and its sound sequencer remain
 unchanged. No custom ARM firmware or assembly is required.
@@ -8,15 +11,13 @@ unchanged. No custom ARM firmware or assembly is required.
 ## Use
 
 ```sh
-SOR_AUDIO=1 ./build-and-run.sh                       # Native DAC, combined stream
-SOR_AUDIO=1 SOR_DAC_AICA=1 ./build-and-run.sh        # Four AICA stem channels
-SOR_AUDIO=1 SOR_DAC_NATIVE=0 ./build-and-run.sh      # Interpreter comparison
-./build-and-run.sh                                # Default silent checkpoint
+./build-and-run.sh                        # native DAC, combined stream (the default)
+SOR_DAC_AICA=1 ./build-and-run.sh         # four AICA stem channels
+SOR_DAC_NATIVE=0 ./build-and-run.sh       # the Z80 interpreter, for comparison
 ```
 
-Audio is still experimental and underruns. These are comparison configurations,
-not release-ready audio modes. The separate AICA path stays opt-in because the
-combined stream measured faster.
+The last two are comparison configurations. The separate AICA path stays
+opt-in because the combined stream measured faster.
 
 ## Implementation
 
@@ -76,13 +77,7 @@ coverage remain unverified. See `reference/results/native-dac-2026-09-15.json`.
 ## Reproduce correctness checks
 
 ```sh
-./tools/test-dac-driver.sh
-./tools/test-dac-integration.sh
-./tools/test-z80-hot.sh
-./tools/test-audio.sh
-./tools/test-ymfm-output.sh
-./tools/test-replay.sh
-./tools/test.sh
+tools/test-host.sh dac-driver dac-integration z80-hot audio ymfm-output replay core
 ```
 
 Run the build once to stage the pinned upstream audio dependencies before these

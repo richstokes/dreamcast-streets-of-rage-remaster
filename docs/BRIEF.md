@@ -1,3 +1,11 @@
+# The brief
+
+The project was started from this brief, kept here as it was written. It is a
+statement of what was asked for, not documentation of what exists: for that see
+[README.md](../README.md), [TODO.md](../TODO.md) and [PROGRESS.md](PROGRESS.md).
+
+---
+
 Build a native Dreamcast port and graphical remaster of the original Genesis/Mega Drive **Streets of Rage**, using these repositories as research and implementation inputs:
 
 * https://github.com/RuiNelson/StreetsOfRageProject

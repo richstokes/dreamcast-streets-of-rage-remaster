@@ -264,7 +264,7 @@ computes, in integers, the same values for the Dreamcast and the host preview
   untextured Gouraud quads, additive.
 - **Objects that are light** (`light_kind`): the police's napalm (`$0E`), the
   bazooka's flame (type `$05`, frames `$070C1F`- except the grey smoke
-  `$070C47`-`$070C5B`; the car is `$070B20`-) and hit sparks (`$49`). Their
+  `$070C47`-`$070C5B`; the car is `$070B20`-) and hit sparks (`$49`).
   The fire the round 6 bosses breathe is frames `$02F3B2`-`$02F42F` of their
   own type (`$57`/`$97`). Their colour (the bright entries of their CRAM line)
   is added to the vertices of objects near them, accumulated over every flame

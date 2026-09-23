@@ -2,12 +2,12 @@
 
 ## ROM identity
 
-User-supplied `original_rom/Bare Knuckle - Ikari no Tetsuken ~ Streets of Rage (World).md`:
+Your copy at `original_rom/Bare Knuckle - Ikari no Tetsuken ~ Streets of Rage (World).md`:
 
 - Size 524,288; raw big-endian, JUE / `MK 00001019-00`.
 - Header and computed checksum `9409`.
 - SHA-256 `dd44f120446654bb91c448762f3e0cd0d9b034f35d0e3266a4dc34402ada95c0`.
-- Executed as overseas NTSC in Genesis Plus GX and rebuilt PC reference.
+- Executed as overseas NTSC in Genesis Plus GX.
 - ROM and extracted data are ignored. Do not commit them.
 
 ## Upstream defect and reproducible repair
@@ -33,31 +33,19 @@ Result: 25,649 decoded instructions, 883 function partitions, 53 manual entries;
 (with the 60 state-table seeds of 2026-09-19, `tools/audit-dispatch-tables.py`).
 These are generation counts, **not runtime coverage or fidelity percentages**.
 
-## Runs and limits
+## Why Genesis Plus GX, not the upstream PC build
 
-- Rebuilt PC executable reached title; captured using its binary remote API.
-- Genesis Plus GX libretro built locally and ran original ROM. Headless harness
-  supports two pads, per-frame normalized RAM, framebuffer capture and audio frame counts.
-- Initial input timings landed in menus/round-intro rather than gameplay; adjusted
-  the scenario after checking mode values and captures. Names alone do not prove coverage.
-- Unmodified PC lockstep timed out around boot frame 110. Thread sampling found
-  the CPU asleep on interrupt generation while the renderer was paused at the
-  lockstep boundary. `patches/reference-lockstep.patch` wakes the CPU at that
-  boundary and samples generation before the checkpoint to close the lost-wakeup
-  window. Applied only to an ignored staged runtime, preserving research pins.
-- Two patched PC runs completed all 1,556 frames. They differed in 270 actor
-  snapshots and 1,509 RAM hashes among 1,555 common frames. The wakeup fix does
-  not make this threaded runtime deterministic. Preserve that distinction.
-- PC silent mode drops chip writes. Its captures cannot validate sound.
+The upstream PC build (the recompilation with MegaDriveEnvironment) was tried
+first as the reference. Its threaded runtime is not deterministic: two runs of
+the same 1,556-frame scenario differed in 270 actor snapshots even after a
+lost-wakeup stall at its lockstep boundary was patched, and its silent mode
+drops chip writes. Genesis Plus GX runs the original ROM deterministically and
+is the reference for everything below; the PC-build tooling was removed.
 
 ## Commands
 
 ```
 python3 tools/bootstrap.py
-./tools/build-reference.sh /absolute/path/to/user-ROM.md
-./tools/run-reference.sh /absolute/path/to/user-ROM.md
-python3 tools/pc_reference.py reference/scenarios/boot-movement.json build/pc-reference
-
 make -C research/Genesis-Plus-GX -f Makefile.libretro platform=osx ARCH=arm64 -j6
 build/tools-venv/bin/python3 tools/genesis_reference.py \
   research/Genesis-Plus-GX/genesis_plus_gx_libretro.dylib /absolute/path/to/user-ROM.md \
@@ -110,7 +98,7 @@ python3 tools/compare-calls.py build/watch-g.txt build/watch-n.txt --frames
 
 `pcs.txt` lists hex routine addresses (for example every label in `labels.csv`).
 `tools/test-decoder-cycles.py ROM REPLAY.bin` checks the decompressors' time
-against the ROM routines (`tools/m68k-time`). Native frame N and original
+against the ROM routines (`build/tests/m68k-time`, built by `tools/m68k-time.sh`). Native frame N and original
 frame N are the same point in SoR's two-VBlank update cycle here (the replay
 gates differ by one frame). The native histogram charges each translated
 instruction and each modelled charge to its ROM address; DMA stalls are
@@ -222,7 +210,7 @@ Both harnesses record the exact gate frame. No game state is overwritten and no
 comparison offset is searched after the run. SRP1 fixed-frame playback remains
 supported; the loader allows at most 4,096 segments and rejects invalid predicates,
 pressed buttons on gates, truncated records and trailing bytes. Timeout is a
-reported failure. `tools/test-replay.sh` checks these boundaries under sanitizers.
+reported failure. `tools/test-host.sh replay` checks these boundaries under sanitizers.
 
 ```sh
 ./tools/build-headless.sh

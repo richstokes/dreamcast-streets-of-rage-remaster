@@ -1,7 +1,4 @@
-# Audio optimization and hardware split
-
-Current audio update: [native DAC decoding and AICA evaluation](NATIVE_DAC.md).
-The playback loop now has a validated native path; interpreter setup/fallback remains.
+# Audio optimization and hardware split (2026-09-15)
 
 ## Decision
 
@@ -55,7 +52,7 @@ implementation objective, not a claim that FM synthesis has already moved.
 
 ## Validation
 
-`tools/test-z80-hot.sh` uses ASan/UBSan and compares complete CPU register state
+`tools/test-host.sh z80-hot` uses ASan/UBSan and compares complete CPU register state
 and consumed clocks against the pinned interpreter: all 65,536 CP operand pairs,
 all 256 delay counts across 150 deadlines, polling boundaries, refresh wrapping,
 RAM limits, MMIO fallback, interrupts and wait states.
@@ -66,7 +63,7 @@ RAM snapshots. PCM SHA-256:
 This is equivalence to the prototype, not certification of its unverified PSG,
 subframe scheduling or analog mixing fidelity against original hardware.
 
-`tools/test-ymfm-output.sh` also compares 65,536 synthetic stereo samples against
+`tools/test-host.sh ymfm-output` also compares synthetic stereo samples against
 unmodified pinned ymfm across randomized FM algorithms, envelopes, panning,
 key-ons, LFO and DAC writes. Both sides run with ASan/UBSan.
 
@@ -74,8 +71,8 @@ First 1,200 gameplay intervals: mean loop time falls from 39.220 to 29.218 ms
 (25.5%); p95 from 47.0 to 37.5 ms. This still misses 60 Hz and underruns.
 
 Final measured counters are recorded in `reference/results/audio-optimized-2026-09-15.json`.
-Audio stays opt-in until loaded gameplay meets the frame budget without stream
-starvation. Physical hardware performance remains unverified.
+Audio has been on by default since the later work in OPTIMIZATION_LOG.md
+(2026-09-19). Physical hardware performance remains unverified.
 
 GCC 15 LTO emits a bounds warning in upstream `opn_registers_base::write` about
 index 512. The YM2612 address setters accept a byte or `0x100 | byte`, so this

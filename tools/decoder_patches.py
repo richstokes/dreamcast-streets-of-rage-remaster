@@ -5,8 +5,8 @@ $84BA/$8510), Enigma ($82D6/$82D2) and Kosinski ($85A2) routines with host
 code that costs no emulated time. Each decoder here adds the MC68000 time of
 the ROM routine path by path, from its disassembly and the Musashi cycle table,
 following the same decisions the ROM makes (including its bit-window refills).
-tools/test-decoder-cycles.py checks every decode of a replay against
-tools/m68k-time running the ROM's own routine. DRAM refresh (2 cycles per
+tools/test-decoder-cycles.py checks every decode of a replay against the
+timing tool of tools/m68k-time.sh running the ROM's own routine. DRAM refresh (2 cycles per
 ~130 in these loops) is added when the time is charged.
 """
 
@@ -38,7 +38,7 @@ bool sorUnchargedDecode = false;
 namespace {
 // DRAM refresh adds 2 cycles at the first instruction at least 128 cycles
 // after the previous one: about one per 130-134 cycles in these loops
-// (measured with tools/m68k-time for each decoder).
+// (measured with the timing tool of tools/m68k-time.sh for each decoder).
 std::uint64_t sorRefresh(std::uint64_t cycles, unsigned period) {
     return cycles + cycles * 2 / period;
 }

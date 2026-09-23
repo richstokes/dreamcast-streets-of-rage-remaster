@@ -1,333 +1,88 @@
 # Progress
 
-## 2026-09-19 — enhanced rendering path (placeholder art)
+Newest first. Measurements are Flycast guest timings unless stated; nothing has
+run on a real Dreamcast yet.
 
-- Original and enhanced graphics are selectable at any time on the same
-  simulation (options menu, GRAPHICS). While the game builds its sprite table, a
-  probe records which records each object emitted, its frame mapping and its
-  anchor; enhanced drawing replaces an object with art in its own depth slot and
-  draws every other sprite as 8x8 cells (docs/REMASTER.md).
-- Asset plumbing: every object frame drawn in a replay can be extracted with its
-  anchor (SOR_EXTRACT_FRAMES), packed into a runtime package
-  (now tools/make-enhanced-art.py --style placeholder) and previewed side by side
-  (SOR_ENHANCED_CAPTURE). Placeholder art is the original doubled with an outline
-  and anchor cross; it is derived from the ROM and stays in build/.
-- Flycast with 149 placeholder frames: both benchmarks at every VBlank, no
-  underruns. The package costs 3 MB of PowerVR memory (952 KB left) and 25.7 s
-  to load from CD: real art needs VQ or palettes and per-stage loading.
-- Simulation unchanged: replays, state-synced windows and GPU scene checks pass;
-  new test tests/enhanced_scene_test.cpp.
+## 2026-09-23 — weather
 
-## 2026-09-19 — fidelity gate met in emulation
+Per-round weather in enhanced mode: rain in two parallax sheets with splashes,
+wet ground reflecting characters and lights, haze and mist, light shafts and
+lightning with its own shadow; its own options-menu switch. The busy two-player
+fight stays at every VBlank with it on (OPTIMIZATION_LOG.md, REMASTER.md).
 
-- Three more state-synced windows match the original in all game RAM: the bat
-  (dropped by the enemy carrying it, picked up twice and used), player 2 joining
-  a one-player game with Start, and player 2 running out of lives and continuing
-  while player 1 plays on. Fourteen windows, 48,835 frames.
-- The two-player continue reached another untranslated target: the player-mask
-  jump table at `$109A8` (`jmp table(pc,d0)`), whose "both players" entry the
-  disassembly never reached. The table audit now reads inline PC-relative
-  tables too; 13 more targets are seeded (60 in all).
-- New bot options: `--join FRAME`, `--aid-players 1`.
-- Housekeeping: the PC-reference lockstep item is retired (Genesis Plus GX is the
-  reference) and the cadence item closed; remaining timing work stays on TODO.md.
-- Fidelity gate: every criterion met in emulation. Open: one skipped drum hit
-  (Z80/68000 bus phase) and a physical-hardware run.
+## 2026-09-22 — dynamic lighting
 
-## 2026-09-19 — fidelity gate behaviour checks; no audio underruns in Flycast
+Backdrop windows, neon, lamps and fire become light sources: characters are
+shaded across their width with a rim on the lit edge, cast ground shadows that
+swing and lengthen as they walk past a light, and get a contact shadow that
+lifts in a jump; light spills onto the ground; embers, sparks, smoke, dust and
+debris particles. Off with `SOR_LIGHTING=0`, otherwise on with enhanced
+graphics (REMASTER.md).
 
-- The scripted player (`tools/bot-play.py`) now throws, picks up weapons and
-  food, enters high-score initials, answers the continue prompt either way, and
-  drives player 2, including deliberate friendly fire. Five new state-synced
-  windows match the original in all game RAM: throws and a bottle, the knife
-  thrown and food eaten, a continue taken, a continue declined through game
-  over back to the Sega logo, and two-player play with 12 friendly-fire hits.
-  Eleven windows, 38,500 frames (`reference/results/state-sync-2026-09-19.json`).
-- Found by the two-player window: friendly fire reached player reaction `$2502`,
-  which the recompiler had not emitted, and the port stopped. The state-table
-  audit (`tools/audit-dispatch-tables.py`) seeds all 47 missing decoded targets.
-- Also found there: one drum command skipped (original frame 5,925); the port's
-  Z80 finished a 29-frame sample 0.25% later and missed the 68000's check. Exact
-  Z80/68000 bus interleaving is on TODO.md.
-- The "Round 1 start" underrun was the police special. PSG generation is now per
-  channel, muted stretches are skipped in one step, and the renderer tracks VRAM
-  writes instead of comparing 64 KiB twice a frame. Flycast: 1,611/1,611 and
-  893/893 gameplay flips/VBlanks, no underrun in either benchmark (was 1,616 and
-  902 VBlanks, 3 underruns); audio bit-identical (OPTIMIZATION_LOG.md).
-- Fidelity gate: every criterion met in emulation except picking up the bat;
-  physical hardware untested.
+## 2026-09-21 — enhanced art for everything; smooth animation
 
-## 2026-09-19 — state-synchronised comparisons: the rest of Round 1
+- `tools/make-art-set.sh` generates 2x art for every player, enemy, boss, weapon,
+  item and effect frame in all eight rounds (anti-aliased edges, smoothed
+  shading, 8-bit paletted zlib pages) and the Dreamcast loads a round's pages
+  only. Hand-made frames replace generated ones with `--override`.
+- Art follows the game's fades and flashes; sprite masks (the HUD) are honoured.
+- Smooth animation: in-between poses between the game's own frames, with its
+  own options-menu setting. The generator accepts few pairs (REMASTER.md).
+- The B-button software-renderer toggle is off unless built with
+  `SOR_SOFTWARE_TOGGLE=1`.
 
-- New comparison technique (FIDELITY_GATE.md, REFERENCE.md): the original's
-  machine state is exported by the profiling core, the native port loads it at
-  the matching VBlank wait and both play the same inputs; RAM is compared frame
-  by frame (`tools/state-sync.py`). Labelled as a comparison, not play.
-- No recorded replay survives to the boss, so `tools/bot-play.py` plays the
-  original with a scripted policy, aided by RAM writes (player health, ordinary
-  enemies at one hit point) that stop before the compared window, and records
-  its inputs as scenarios (`reference/scenarios/round1-bot*.json`).
-- Six windows match in all game RAM: wave 3 (Garcia, Nora, a held knife), the
-  Antonio fight (4,000 frames), his knockout through the stage clear into Round
-  2, and the last death to the continue prompt. The only differences are frames
-  captured mid-update or mid-load, each equal to the other side one frame away.
-  `reference/results/state-sync-2026-09-19.json`.
-- Fixed: the Z80 driver loader now leaves the decompressed driver in work RAM at
-  `$FF7000`, as the ROM does (found by the round-clear window).
-- Fidelity gate: boss and round completion met; weapons (knife) and continue
-  partly met; throws, friendly fire, continuing and game over remain.
-- Round 1 from power-on still matches for 9,976 frames; action and two-player
-  replays unchanged.
+## 2026-09-19 — fidelity gate met in emulation; enhanced rendering path
 
-## 2026-09-19 — Z80 and 68000 share the bus as on hardware
+- Every criterion of FIDELITY_GATE.md is met in emulation: Round 1 matches the
+  original frame for frame from power-on for 9,976 gameplay frames, and
+  fourteen state-synchronised windows (48,835 frames: wave 3, the boss, the
+  stage clear, throws, weapons, food, continues, game over, two players
+  joining, friendly fire and continuing) match in all game RAM. Open: one
+  drum command skipped in the two-player window (Z80 bus phase).
+- State-synchronised comparisons (`tools/state-sync.py`): the original's
+  machine state is exported by the profiling Genesis Plus GX core, the port
+  loads it at the matching VBlank wait and both play the same inputs. A
+  scripted player (`tools/bot-play.py`) reaches the content no recorded
+  replay survives to, then plays unaided through the compared window.
+- Found on the way: an untranslated reaction (`$2502`) and player-mask table
+  (`$109A8`) now seeded by `tools/audit-dispatch-tables.py`; the Z80 driver
+  loader left the decompressed driver out of work RAM; the police special
+  caused the one audio underrun (PSG now per channel; VRAM writes tracked).
+  Both benchmarks at every VBlank with no underrun.
+- Cadence is frame-exact through boot and loads: translated instructions
+  charge MC68000 time from the Musashi table, the decompressors their ROM
+  routines' time path by path (checked to the cycle by
+  `tools/test-decoder-cycles.py`), VINT gating and latency as on hardware,
+  and the Z80 runs in step with the 68000, sharing the bus (CADENCE.md).
+- Original audio on by default: sequencer, FM, PSG and the ROM's sampled
+  drum/voice driver at 60 Hz; effect channels match the original driver's
+  state every frame, onsets within 10 ms (AUDIO.md).
+- Enhanced rendering path selectable at any time on the same simulation:
+  a probe records what each object emitted while the game builds its sprite
+  table; art replaces an object in its own depth slot. Options menu with
+  cheats (start round, lives, infinite lives/health/specials). Remastered
+  title screen.
 
-- The Z80 now follows the 68000 through each frame (catch-up) and is stopped
-  while the 68000 holds its bus, including during joypad reads. Its reads of the
-  68000 bus wait 3 cycles and for any DMA, and stall the 68000 70-77 clocks
-  (Genesis Plus GX). Drum-driver writes match the original's in count and value,
-  within a few hundred cycles over several frames.
-- Translated instructions now access memory at their start, as in Musashi.
-- New host logs: every YM2612 write with its time on both backends
-  (`genesis_reference.py --ym-log`, `SOR_YM_TIMES`).
-- Round 1 play matches for 9,976 frames; the next update ends within 79 cycles
-  of its VBlank in the original (CADENCE.md). All other comparisons unchanged.
+## 2026-09-18 — audio and renderer performance
 
-## 2026-09-19 — frame-exact cadence through boot and loads
+Channel-major FM rendering across constant-register spans, forced-blank VDP
+DMA timing (a fidelity fix), word-wise render-cache compares, a feeder thread
+with clock matching for the AICA stream (~98 ms delay), a PC sampling profiler
+(`tools/pc-profile.py`). Release configuration at every VBlank in both
+benchmarks (OPTIMIZATION_LOG.md).
 
-- Every game mode from power-on to Round 1 now lasts exactly as long as in the
-  original; the two-player encounter (761 frames) and the action replay (1,481)
-  match in every object byte, and Round 1 play for 10,045 frames (was 8,283).
-- Decompressor time is derived path by path from the ROM routines and matches
-  `tools/m68k-time` exactly for every decode of the Round 1 and two-player
-  replays (`tools/test-decoder-cycles.py`); the fitted costs were off by up to
-  0.6 frame (the Z80 driver's Kosinski stream, twice at boot).
-- Interrupt fidelity: VINT gated by VDP register 1 (IE0) and held pending, 788
-  clocks after the VBlank flag, one-instruction latency when enabled by a word
-  write, 44-cycle exception; waits take a pending VINT at once; the 68000 starts
-  at the VDP's power-on position.
-- The native replay delivered each scripted input one VBlank late relative to the
-  reference harness; fixed, and native captures are numbered from power-on as the
-  original's are. The earlier start-up object-byte differences are gone.
-- New analysis tools: routine-entry timelines on both backends
-  (`genesis_reference.py --watch`, `SOR_WATCH`, `tools/compare-calls.py`).
-- Flycast: gameplay 1,611 flips / 1,615 VBlanks; the stage-start underrun remains
-  (TODO.md).
+## 2026-09-15 — native checkpoint
 
-## 2026-09-19 — Round 1 behaviour and slowdown against the original
-
-- Round 1 play (`round1-full`, 26,415 gameplay frames) matches the original ROM
-  in every observed field for 8,283 frames: waves 0–1, Garcia-family, Signal and
-  Haku-Ro enemies, the police special, the phone booth, a death and respawn.
-  Round 1 combat (3,115 frames) and the action replay (1,481) match throughout.
-- The original's first two slowdown frames are reproduced on the same updates;
-  the third is missed by 163 CPU cycles (0.13% of a frame), where the comparison
-  diverges. Found with per-routine cycle histograms of both backends
-  (`tools/gpgx-profile-report.py`, `SOR_PC_HISTOGRAM_FRAMES`).
-- Cadence model additions (CADENCE.md): exact branch and multiply timing, EXT no
-  longer costed as MOVEM, Z80-area wait states, sound-bus DAC-busy retries from a
-  shadow DAC driver, and charges for the hand-written object pass, pickup scan,
-  joypad sampler and main loop.
-- The incremental Nemesis queue now decodes each tile when uploaded, as the
-  original does, removing a ~12 ms host burst when art is queued.
-- Flycast: gameplay window 1,611 flips / 1,614 VBlanks (was 1,611 / 1,612); one
-  77 ms stream underrun at Round 1 start (AUDIO.md); follow-up in TODO.md.
-- Next: first-section fidelity gate (two-player beyond 220 frames, grabs/throws,
-  later waves and the boss).
-
-## 2026-09-19 — original audio on by default, 60 Hz in Flycast
-
-- Release configuration (audio on, profiling off): action replay 1,659 flips /
-  1,659 gameplay VBlanks; two-player encounter 941 / 941. Hardware unverified.
-- Sound timing verified against the original ROM (AUDIO.md): effect channels
-  match the 68000 driver state every frame; onsets within 10 ms; a 68000 write
-  timing bug that stopped notes retriggering is fixed.
-- Stream: feeder thread, clock matching, ~98 ms delay (was ~155 ms); underruns
-  only during two blanked bulk loads.
-- Performance work since 2026-09-15 (OPTIMIZATION_LOG.md): channel-major FM with
-  envelope steps in the fast loop, forced-blank VDP DMA timing (a fidelity fix,
-  verified against the original), word-wise render-cache compares, VDP LTO.
-- New tools: `bench-flycast.sh`, `pc-profile.py` (`SOR_PC_PROFILE=1`),
-  `compare-audio.sh`, `compare-sound-state.py`, `ym-render.cpp`.
-- Cadence model (CADENCE.md): translated instructions charge MC68000 time from the
-  Musashi cycle table, VBlanks follow emulated time, DMA stalls the CPU, and the
-  hand-written decompressors charge costs fitted to timings of the ROM's own
-  routines. Every game mode now lasts within a frame of the original (loads were
-  up to 48 frames short); no gameplay lag; zero stream underruns in Flycast.
-  Not frame-exact: a one-frame load difference leaves SoR's upload-VBlank counter
-  one behind, which changes one enemy's fall 221 frames into the two-player
-  comparison (it matched before only by coincidence). Documented in CADENCE.md.
-- Next: behaviour comparisons (first-section movement/combat coverage).
-
-## 2026-09-15 — native checkpoint, not a completed game
-
-### Previous: original audio at 60 Hz
-
-- Optimization continues; the target is not met. Retained audio/renderer changes
-  measure 20.596 ms mean over the first 1,200 gameplay intervals, with underruns.
-- Direct native RAM/ROM access is implemented and passes 300,000 differential
-  accesses plus the full PCM/RAM replay; Dreamcast measurement is in progress.
-- `OPTIMIZATION_LOG.md` records measured decisions, removed experiments and tests.
-
-### Previous: native drum/voice decoding and hardware playback evaluation
-
-- Native C++ DPCM playback reduces audio-enabled mean loop time from 29.218 to
-  23.393 ms (19.9%) over the first 1,200 gameplay intervals in Flycast.
-- An optional four-channel AICA stem backend measures 24.022 ms, so combined
-  streaming remains the experimental default. Audio still misses 60 Hz/underruns.
-- All reference PCM and gameplay snapshots remain identical; 33 driver cases and
-  a 1,000-frame reset/BUSREQ/stem integration test pass with sanitizers.
-- Silent-build regression retains 1,200 flips / 1,200 VBlanks (16.725 ms mean).
-- See NATIVE_DAC.md for measured memory, hardware decisions and reproduction.
-- Next: reduce FM synthesis cost with waveform equivalence checks; continue
-  combat-reference coverage. Retail audio fidelity and full-game coverage remain open.
-
-### Previous: reduce audio CPU cost without changing PCM
-
-- Mean audio-enabled loop cost over the first 1,200 gameplay intervals falls from
-  39.220 to 29.218 ms (25.5%); p95 falls from 47.0 to 37.5 ms in Flycast.
-- Incremental clocks, cached PSG levels, native polling/delay instructions and
-  direct FM single-channel output retain all 2,546,780 host stereo frames and
-  2,866 RAM snapshots. Four SH-4 PCM hashes match too.
-- Sanitized instruction-boundary/state tests and 65,536 synthetic stereo FM
-  samples match the upstream implementations. No new audio buffers are needed.
-- Default-build regression again records 1,200 flips / 1,200 VBlanks.
-- Audio still starves and stays opt-in. Native DAC decoding / AICA sample playback
-  and further FM work are the next candidates; AUDIO_OPTIMIZATION.md records the
-  hardware split and the fidelity gates. No new ARM firmware or assembly is used.
-
-### Previous: experimental original-audio path
-
-- Replaced discarded sound writes with deterministic YM2612/PSG synthesis and the
-  supplied ROM's Z80 drum/voice driver; added a bounded KOS AICA stereo stream.
-- Host replay produces 2,546,780 stereo frames without clipping; repeat PCM and
-  game RAM are identical. Four SH-4 PCM checkpoint hashes match the host.
-- All 1,481 phase-aligned action observations still match original-ROM gameplay.
-  Disabled mode preserves the earlier 2,159-snapshot regression trace.
-- Default-build Flycast regression: 1,200 gameplay flips / 1,200 VBlanks,
-  16.725 ms mean CPU-loop interval. Sanitized audio, replay, core and 160-scene
-  renderer tests pass. Manual ELF and CDI are rebuilt with audio disabled.
-- **Audio is opt-in (`SOR_AUDIO=1`), not release-ready.** It currently costs too
-  much CPU (~38–40 ms gameplay loops) and starves streaming. Ordinary builds keep
-  the silent 60 Hz checkpoint. Profiling identifies DAC interpretation, FM and
-  PSG synthesis as the next optimization targets. See AUDIO.md for reproduction,
-  licenses, buffers, measurements and remaining fidelity limitations.
-
-### Previous: phase-aware original-ROM comparisons
-
-- Added SRP2 bounded state gates shared by Dreamcast and host playback. Gates read
-  WRAM and release pads; they never change simulation memory. SRP1 remains compatible.
-- Diagnosed the old jump/P2 endpoint discrepancy as opposite halves of the ROM's
-  two-VBlank update cycle at the fixed cold-boot input boundary. Explicit mailbox-2
-  anchors align tests without modifying physics or concealing boot-time differences.
-- Original ROM vs native: 1,481 directional/action observations and 761 two-player
-  encounter observations match positions, states, health, camera and lives.
-  Collision IDs and fixed-point position/velocity regions match too. The police
-  special consumes one stock and locks controls for 637 frames in both backends.
-- All 2,865 action replay frames match software-rendered pixels; repeat run has
-  2,866 identical RAM snapshots. Existing fixed-frame replay preserves its 2,159
-  snapshots. Sanitized replay parsing, timeout and pad-release tests pass.
-- Spawn timers/flags and some unclassified object bytes still differ. These tests
-  establish sampled behavior, not full RAM, cold-boot or complete combat parity.
-- Flycast action replay: first 1,200 gameplay intervals show 1,200 flips over
-  1,200 VBlanks, including the special effect; guest CPU-loop mean 16.725 ms.
-- Reproduction, limitations and results are in REFERENCE.md and reference/results.
-
-### Previous: native sprite pass and cached PowerVR submission
-
-- `./build-and-run.sh` creates and boots the manual-test `dist/sor-test.elf` with
-  the supplied ROM embedded. Full symbols are in `dist/sor-test.debug.elf`.
-- Replaced sprite-table decoding on every scanline with one traversal per frame,
-  preserving per-line masking, limits, ordering and collision/overflow flags.
-- Clear/upload only the union of old/new sprite row extents. Cached aligned
-  background packets use one KOS store-queue submission; sprite-only changes
-  no longer invalidate background commands. No new SH-4 assembly required.
-- **First 600 two-player gameplay intervals: 600 KOS page flips / 600 VBlanks** in
-  the final Flycast run. Earlier repeat runs also recorded 600/600. This supports
-  one displayed frame per refresh for this checkpoint, not a full-game or retail
-  hardware guarantee. Original audio is still absent.
-- CPU-loop mean **16.723 ms (~59.8 loops/s)**, p50 <=17 ms, p95 <=22 ms,
-  p99 <=29 ms, worst 30.746 ms (previous mean 17.784 ms). Work on either side of
-  the graphics wait makes loop intervals vary without necessarily losing a flip.
-  Both measurements are preserved in `reference/results/`.
-- Renderer block ending at call 1800: mean scene 2.155 ms, upload 1.719 ms,
-  command preparation 0.194 ms, submission 0.519 ms, graphics wait 9.979 ms;
-  mean sprite transfer 43,211 bytes. This block includes the transition into
-  gameplay; it is not the same window as the gameplay-only timing above.
-- 160 ASan/UBSan graphics cases pass pixels, VDP flags, crowded scanlines,
-  invalid links, tile bounds and partial-upload stale-pixel checks. All 2,158
-  replay frames match the software renderer in RGB1555; all 2,159 WRAM snapshots
-  remain identical. Actual two-player PowerVR output visually checked in Flycast.
-- Final disc link: text 2,345,780 B, data 5,836 B, BSS 1,579,368 B. Gameplay heap
-  observed at 2,350,760 B; free VRAM 3,136,104 B. Packet caching adds 960,320 B
-  of main RAM. These are not full main-RAM/stack high-water measurements.
-- Shadow/highlight, interlace, two-cell vertical scroll and oversized lists still
-  use the slow software fallback. Further stages/effects need profiling.
-
-### Runs
-
-- Both requested repositories and all four submodules pinned; Genesis Plus GX
-  added as a separate reference-only tool.
-- User ROM matches SoR1 JUE rev00, checksum 9409. No game data committed.
-- PC reference compiles after a reproducible correction to invalid auxiliary
-  entry points. Boots through menus into Round 1. A staged wakeup patch removes
-  the observed lockstep stall, but repeated PC runs still differ.
-- Native KOS/SH-4 C++ debug ELF and CDI build and boot in working local Flycast.
-  Original intro, menus, Round 1 background/HUD and player render. Narrowing the
-  generation seed repair fixed missing actors; gameplay parity is unverified.
-- Two-pad frame playback reaches gameplay mode 0016 without unresolved dispatches
-  or unmapped-bus faults in the observed session.
-
-### Verified
-
-- Headless backend runs the same simulation, MMIO, software renderer and replay
-  as Dreamcast. Two 1,556-frame runs produce 1,557 identical WRAM snapshots.
-- Resetting the fallback instruction counter at explicit frame waits removed
-  spurious VBlanks. All 30 walking increments and the endpoint (800 to 875)
-  now match the original smoke replay. Intermediate frame phase is not identical.
-- Two-player menu selection and a 2,158-frame first-encounter probe run in both
-  original and native backends. Both players and enemies become active; no native
-  bus faults or unresolved dispatches occur. P2 ending X differs (1050 vs 1060),
-  so this is coverage, not combat parity.
-- KOS services are separated into a platform backend. Diagnostics now run on
-  the simulation thread, avoiding concurrent state reads and monitor lifetime risk.
-
-- Host ASan/UBSan memory/endian/bus-bound tests and save corruption tests pass.
-- Generation now rejects a lost manual sprite entry; the regression test covers
-  both an unreachable entry and a valid forwarding alias. ROM bounds tests pass.
-- Manual testing uses the embedded test ELF or a CDI packaged without replay.
-- Executable translated arithmetic probes: 65,536 ADD.b combinations, wide carry,
-  sign/shift boundaries, DIVS overflow and subregister preservation pass on host
-  and SH-4 in Flycast.
-- An experimental CPU plane renderer matched 96 randomized scenes but did not
-  improve measured target time; removed it. Retained the color conversion lookup.
-- CD filesystem access and missing-VMU/default-settings path run. VMU write and
-  recovery code is not yet exercised on a console.
-
-### Measurements (emulator guest timings; not physical hardware)
-
-- Earlier platform-separated link: text 2,332,504 B, data 5,820 B, BSS 283,720 B.
-  This is static section size, not measured peak main RAM.
-- Early Round 1 heap in use about 1,269,472 B; free PVR memory 5,527,240 B.
-  Heap usage is not a complete main-RAM peak or stack high-water measurement.
-- Unoptimized Round 1 rasterization about 75 ms; pixel conversion about 18 ms;
-  total render/present about 97 ms. Far from 60 Hz.
-- Color lookup reduced conversion to about 7.2 ms. Experimental plane rendering
-  was about 79 ms and total rendering about 90 ms; it was rejected. These samples
-  are not a full frame-time distribution or a worst-case campaign measurement.
-
-### Known limitations
-
-- Original sound/AICA prototype exists but is too slow and has stream underruns;
-  it remains disabled by default. Audio fidelity is not yet established.
-- Cold-boot timing and some object bytes differ. Phase-anchored movement, action
-  and two-player observations now match; complete combat/campaign parity is open.
-- PC lockstep now completes but is nondeterministic; it is not a correctness oracle.
-- No enhanced sprites, animation sets, environment art, effects or comparison captures.
-- No full-stage/ending coverage, two-player combat parity, loading-stall or audio tests.
-- No physical hardware measurements.
-
-### Next concrete milestone
-
-Resolve the remaining startup/object-state differences, extend encounter tests
-to grabs/throws, damage/recovery and bosses, and bring original audio within the frame budget without stream underruns. Enhanced art starts only after the first section
-has verified behavior. The full eight rounds and endings remain required.
+- Both research repositories pinned (`tools/upstream-lock.json`); the ROM
+  validated; the recompiler's entry list repaired from the disassembly
+  (REFERENCE.md). Native KOS/SH-4 build boots in Flycast through the intro,
+  menus and Round 1 with both players. No 68000 interpreter in the game.
+- Genesis Plus GX chosen as the reference (the upstream PC build is
+  nondeterministic); scenario replay with state gates, per-frame RAM
+  observations and captures on both backends; phase-anchored movement, action
+  and two-player comparisons match.
+- PowerVR renderer: tile quads with indexed plane textures and a native sprite
+  pass; 600 flips over 600 VBlanks in the first gameplay window without audio.
+- Original audio prototype (YM2612/PSG synthesis, the ROM's Z80 driver, AICA
+  stream), then native DPCM playback and an optional four-channel AICA stem
+  path (NATIVE_DAC.md); too slow for 60 Hz at this point and off by default.

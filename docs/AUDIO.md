@@ -1,7 +1,4 @@
-# Original audio development checkpoint
-
-Current audio update: [native DAC decoding and AICA evaluation](NATIVE_DAC.md).
-The playback loop now has a validated native path; interpreter setup/fallback remains.
+# Original audio
 
 **Enabled by default on Dreamcast (2026-09-19).** The original sound sequencer,
 FM, PSG and the ROM's sampled drum/voice driver run at 60 Hz in Flycast with audio
@@ -89,11 +86,11 @@ to reproduce the earlier silent WRAM traces. `--audio-wav` explicitly enables it
 Genesis Plus GX (MAME YM2612 core) after replay gate 9:
 
 - **68000 driver state** (`tools/compare-sound-state.py`): all four effect channels
-  match on all 1,300 compared frames at the gameplay alignment. (Measured before
-  the cadence model; music now starts within a frame of the original.) Music started 47
-  frames earlier relative to gameplay in the native run (screen transitions differ;
-  see the cadence item in TODO.md); aligned at its own start, all nine music
-  channels match except channel flag bits that effects also write.
+  match on all 1,300 compared frames at the gameplay alignment. In this
+  measurement, made before the cadence model, music started 47 frames earlier
+  relative to gameplay in the native run (it now starts within a frame of the
+  original); aligned at its own start, all nine music channels match except
+  channel flag bits that effects also write.
 - **Audio** (`tools/compare-audio.sh`, music-aligned): note/effect onsets align
   within one 10 ms analysis hop in every window; log-band spectral correlation
   0.963 (median). Native output is a uniform ~3.4 dB quieter below 2 kHz and has
@@ -137,36 +134,8 @@ from synthesis to output is about 98 ms. Details: OPTIMIZATION_LOG.md.
 
 ## Performance history
 
-The figures in this section predate the 2026-09 optimization work
-(OPTIMIZATION_LOG.md) and describe why audio was once opt-in.
-
-The optimization pass in AUDIO_OPTIMIZATION.md lowers the first 1,200 gameplay
-intervals from 39.220 to 29.218 ms mean (25.5%). p95 falls from 47.0 to 37.5 ms.
-It preserves the full host PCM/RAM replay and four SH-4 PCM checkpoints. Audio
-still underruns and remains opt-in. The following figures describe the earlier
-prototype baseline; current counters are in
-`reference/results/audio-optimized-2026-09-15.json`.
-
-The current interpreter/synthesizer is too expensive for retail-budget 60 Hz.
-The measured Flycast audio-enabled checkpoint took about 38–40 ms per gameplay
-loop and missed refreshes. Sampled synthesis work was roughly 29–37 ms; profiling
-splits show about 16 ms in DAC-driver execution, 9–17 ms in FM, and 4 ms in PSG.
-The profiling clock calls add overhead. Runtime `stream_us` at the diagnostic
-frame includes serial logging and must not be treated as typical transfer cost.
-Detailed counters and capture hashes are in
-`reference/results/audio-2026-09-15.json`.
-
-A small initial stream buffer wrapped between slow polls; increasing its size
-made the supply deficit visible as callback underruns. A larger main-RAM ring
-removes initial prefill truncation but cannot fix sustained starvation. Counts
-are diagnostics, not a claim of glitch-free playback. Default builds therefore
-retain the measured silent rendering checkpoint.
-
-Next: replace the DAC interpreter's costly delay/poll work with a verified native
-decoder or equivalent fast paths; reduce FM/PSG synthesis costs; then reduce
-buffer latency and verify long-run clock drift, underruns and loaded frame times.
-Preserve this deterministic core as an audio reference for each optimization.
-68K chip writes are currently applied at frame boundaries; subframe register
-scheduling, PSG edge details, busy/timer behavior, mix/filter balance and audible
-fidelity against original captures still require validation. Full soundtrack/SFX,
-all-stage and physical-hardware coverage remain open.
+The first prototype (2026-09-15) cost 38–40 ms a gameplay loop in Flycast and
+starved the stream (`reference/results/audio-2026-09-15.json`); native DPCM
+playback and the FM/PSG work of AUDIO_OPTIMIZATION.md brought it to 29 ms
+(`audio-optimized-2026-09-15.json`), and the channel-major FM renderer and the
+rest of OPTIMIZATION_LOG.md to every VBlank with no underrun (2026-09-19).

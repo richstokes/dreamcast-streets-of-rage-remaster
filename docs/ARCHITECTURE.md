@@ -1,6 +1,7 @@
 # Decision 001 — static gameplay, native Dreamcast platform
 
-2026-09-15. Implemented platform separation; full gameplay parity remains pending.
+Written 2026-09-15. Gates 1–3 below were met on 2026-09-19 (FIDELITY_GATE.md);
+4 and 5 are open (TODO.md).
 
 Keep the statically translated 68000 gameplay and explicit register/CCR model
 initially. Do not put a generic 68000 interpreter in the shipping game. Replace
@@ -28,7 +29,7 @@ Header/checksum matching alone is insufficient.
   measure retained YM/PSG cost. KOS AICA output/streaming replaces SDL. A low-cost
   offline-rendered original-music stream is a candidate, not an implemented substitute
   for validating dynamic sound effects or synchronization.
-- Storage: none. Settings (the cheat menu) are session-only; nothing is written to a VMU.
+- Storage: none. Settings (the options menu) last for the session; nothing is written to a VMU.
 - Assets: `/cd` stage packages, bounded staging buffers, stage-specific texture
   residency. Host paths exist only in tools. No dependency on `/sd`.
 
@@ -45,10 +46,8 @@ replacement for gameplay fixed-point or signed/unsigned arithmetic.
 4. Extend parity through all eight rounds, bosses, endings and two-player branches.
 5. Complete enhanced art, full playthrough, performance budgets and hardware checklist.
 
-Current implementation is a platform checkpoint. Steps 1–5 are not complete.
-Generated gameplay now uses the native memory implementation. The first section
-runs with both players, but timing parity, sound and complete campaign coverage
-remain incomplete.
+Generated gameplay uses the native memory implementation; timing (CADENCE.md)
+and sound (AUDIO.md) match the original in Round 1.
 
 ## Initial budgets (reservations, NOT measured game peaks)
 

@@ -77,7 +77,7 @@ the Musashi table:
 
 `tools/test-decoder-cycles.py` runs a replay natively (`SOR_DECODE_LOG`) and
 times every distinct decode, and each incremental stream as a whole, with
-`tools/m68k-time` running the ROM routine. Every decode of the Round 1 and
+`build/tests/m68k-time` (`tools/m68k-time.sh`) running the ROM routine. Every decode of the Round 1 and
 two-player replays matches to the cycle (44 and 39 decodes;
 `reference/results/decoder-cycles-exact-2026-09-19.txt`). DRAM refresh, which
 the timing tool can exclude (`M68K_NO_REFRESH=1`), adds 2 cycles per ~130-134

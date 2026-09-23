@@ -1,7 +1,7 @@
 # Retail Dreamcast test sheet
 
-Status: **physical hardware unverified**. Human can fill this in asynchronously.
-Do not block emulator development on these results. This checkpoint is not a finished game.
+Not yet run on a real Dreamcast. Results are welcome: open an issue with the
+fields below.
 
 Record console model/region, video cable/mode, controller/VMU models, disc or GDEMU
 version, artifact SHA-256, git commit and toolchain revision for each run.
@@ -18,12 +18,9 @@ version, artifact SHA-256, git commit and toolchain revision for each run.
 
 - [ ] Port A and B connect, disconnect and reconnect safely.
 - [ ] Two-player join, independent buttons, friendly fire, grabs/throws work.
-- [ ] Settings load with no VMU, unformatted/full VMU and corrupt data.
-- [ ] Settings save/load succeeds and keeps a prior valid slot if interrupted.
-- [ ] VMU removal during a write reports failure without affecting gameplay.
-- [ ] The game does not write saves during active combat.
+- [ ] The game runs with no VMU and with any VMU present (nothing is saved).
 
-## Fidelity (not yet verified on emulator either)
+## Fidelity (verified in emulation for Round 1 only; FIDELITY_GATE.md)
 
 - [ ] Compare recorded movement/jump/combo/grab/throw/special scenarios with Genesis.
 - [ ] Compare damage/invulnerability/knockdown/recovery timings.
@@ -51,7 +48,8 @@ version, artifact SHA-256, git commit and toolchain revision for each run.
 
 ## PowerVR renderer checks
 
-- [ ] Compare default PowerVR with Dreamcast B software toggle in the same scene.
+- [ ] Compare the PowerVR renderer with the software renderer (a build with
+      `SOR_SOFTWARE_TOGGLE=1`; Dreamcast B toggles it) in the same scene.
 - [ ] Check foreground poles, player overlap, sprite limits, palette flashes and window HUD.
 - [ ] Check two-player scrolling and every stage's line-scroll/environment effects.
 - [ ] Record fallback cases (shadow/highlight, interlace, two-cell vertical scrolling).
@@ -77,11 +75,9 @@ serial `AICA` lines (level, underruns, dropped/repeated frames) and any
 - [ ] Compare original FM melody, PSG effects and sampled drums/voices against Genesis.
 - [ ] Check stereo channels, mute/pause, music changes and repeated stage loads.
 - [ ] Capture frame times with audio enabled and disabled using the same replay.
-- [ ] After CPU optimization, run for 30 minutes and check stream clock drift.
+- [ ] Run for 30 minutes and check stream clock drift.
 
-## Native DAC / optional AICA stems
-
-See NATIVE_DAC.md for build flags and known performance limits.
+## Optional AICA stems (`SOR_DAC_AICA=1`, NATIVE_DAC.md)
 
 - [ ] Compare combined and four-channel output using the same replay; listen for
       stereo phase, changed clipping, missing samples and drum/voice timing.

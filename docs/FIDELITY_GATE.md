@@ -21,7 +21,7 @@ skipped drum hit, below).
 | --- | --- | --- |
 | Boot, menus, story and loads last as long as the original, frame for frame | Every game mode equal in both backends (`tools/compare-timeline.py`, two-player replay); decompressor time exact per decode | Met |
 | Movement in all directions, jumps, attacks and combos match the original | Action replay: all 1,481 frames and all object bytes (`phase-aligned-actions.json`) | Met |
-| Round 1 enemies behave as in the original (AI, damage, knockdown) | From power-on, 9,976 frames (waves 0–2; types `$21`–`$25`; 32 hits, 8 knockouts). Synced: 95 hits and 22 knockouts on `$21`, `$22`, `$24`, `$26` and the boss | Met |
+| Round 1 enemies behave as in the original (AI, damage, knockdown) | From power-on, 9,976 frames (waves 0–2; types `$21`–`$25`; 32 hits, 8 knockouts). Synced: 141 hits and 31 knockouts on `$20`–`$26` and the boss | Met |
 | Grabs and throws | 16 grabs from power-on and 53 synced; 13 throws synced (4 from the front, state `$62`; 9 from behind after a vault, `$70`), none in any recorded replay | Met |
 | Police special | Used twice from power-on and once synced; control lock and stock equal | Met |
 | Player damage, death and respawn | 34 health drops and a death with respawn from power-on; synced: 81 health drops and 7 deaths | Met |

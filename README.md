@@ -4,7 +4,8 @@ A native Dreamcast (SH-4, KallistiOS) port of Streets of Rage 1, built from the
 original game's code rather than an emulator, with an optional enhanced
 graphics mode on top.
 
-You need your own copy of the ROM. Nothing derived from it is in this repository.
+You need your own copy of the ROM. No ROM data, and nothing extracted from it,
+is in this repository.
 
 ## Features
 
@@ -106,8 +107,7 @@ is not shown: it needs motion, and few in-between poses exist yet.
 - The enhanced art is generated from the original frames; hand-drawn art is
   not started. Smooth animation has few in-betweens yet.
 - Full speed with no audio dropouts in Flycast. **Not yet tested on a real
-  Dreamcast** — I have ordered one and will try it when it arrives; that said,
-  feedback is welcome if someone wants to try it beforehand.
+  Dreamcast**; reports are welcome ([docs/HARDWARE_TESTS.md](docs/HARDWARE_TESTS.md)).
 
 ## What you need
 
@@ -213,11 +213,14 @@ graphics); `SOR_LIGHTING=0` at build time starts without it. `SOR_SMOOTH=1` and
 ## Tests
 
 ```bash
-./tools/test.sh
+tools/test-host.sh
 python3 tools/test-rom.py
 python3 tools/test-generation.py
-./tools/test-scene.sh
 ```
+
+`tools/test-host.sh` builds and runs the host tests under the sanitizers (after
+`tools/build-headless.sh` has staged the sources); one or more names selects
+a subset. Roadmap and known limitations: [TODO.md](TODO.md).
 
 Comparisons against the original ROM and benchmarks:
 [docs/REFERENCE.md](docs/REFERENCE.md), [docs/CADENCE.md](docs/CADENCE.md),
@@ -227,7 +230,15 @@ Progress: [docs/PROGRESS.md](docs/PROGRESS.md). Hardware checklist:
 
 ## Licence
 
-Original code in this repository is [MIT](LICENSE). The research repositories
-and runtime keep their own [notices](licenses). The game, its ROM and anything
-generated from it (translated code, extracted frames, art packages, disc images)
-are not covered by this licence and must not be redistributed.
+Original code in this repository is [MIT](LICENSE). The game, its ROM and
+anything generated from it (translated code, extracted frames, art packages,
+disc images) are not covered by this licence and must not be redistributed.
+
+The build fetches the inputs pinned in `tools/upstream-lock.json` into
+`research/` rather than redistributing them: the Streets of Rage
+recompilation and MegaDriveEnvironment (MIT; ymfm BSD-3-Clause and the Suzuki
+Plan Z80 core MIT within it), RageDecompiler and the sor-disassemblies
+repository (no licence stated), and Genesis Plus GX (non-commercial), which is
+used only by the host analysis tools and is never linked into the game. The
+notices in [licenses/](licenses) cover what a built disc contains (KallistiOS,
+the recompilation, MegaDriveEnvironment, ymfm and the Z80 core).
