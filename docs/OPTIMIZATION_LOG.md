@@ -283,3 +283,43 @@ sprite-layer clears and uploads.
 Diagnostics: long replays overflowed the 64 KiB deferred log, dropping the
 completion marker, so `tools/bench-flycast.sh` waited out its timeout on runs
 that had finished. The buffer is now 256 KiB and is drained before the marker.
+
+## Weather, and the packet constructor (2026-09-23)
+
+The weather (docs/REMASTER.md, "Weather") first cost 6 late frames against 2
+over the action replay and 0.4 ms more of command building. The PC sampler
+put none of it in `scene_weather.cpp`: the samples were in `renderer_kos.cpp`,
+libc `memcpy` and `memset`. Two causes, both in the renderer, not the effect:
+
+- `quad()` started every packet with `packet={}` (a 160-byte memset) and
+  `packet.header=h` (a libc memcpy of 32 bytes). Thousands of tile packets are
+  rebuilt whenever the planes scroll, so that was most of the command-building
+  time. It now writes every word of the packet itself.
+- The haze coloured each tile packet's vertices with per-quad byte arithmetic
+  and calls. It is now two per-line tables of the ready vertex words (kept
+  colour and added colour), built once per packet rebuild; quads on unhazed
+  lines (the ground) cost a load and a branch.
+
+Action replay, 1,611 gameplay frames, Flycast, enhanced graphics and lighting
+in both, before and after:
+
+| | late frames | p95 frame | commands | scene step |
+|---|---|---|---|---|
+| weather off, before | 2 | 20.5 ms | 0.61 ms | 1.35 ms |
+| weather on, before | 6 | 22 ms | 1.01 ms | 1.41 ms |
+| weather off, after | 0 | 20.5 ms | 0.38 ms | 1.35 ms |
+| weather on, after | 1 | 20.5 ms | 0.56 ms | 1.41 ms |
+
+So the weather is now about 0.25 ms of CPU a frame, and everything else got
+0.2 ms back. The mist's front veil now starts at the wall line rather than
+the HUD: less translucent fill for the PowerVR, which Flycast does not model
+(nor does it model SH4 cache misses: measure on hardware). What remains per
+frame with weather on is the PowerVR's own work: two full-playfield rain
+sheets and up to four mist sheets in the translucent list, sorted per tile.
+If hardware shows it, drop the far rain sheet first, then the second mist pair.
+
+Logs: `build/logs/weather-{off4,on3}-flycast.log` (after),
+`weather-{off,on2}-flycast.log` (before), `weather-prof-flycast.log` (sampled).
+Not worth it: sh4zam (fast SH4 float math, kos-ports). The renderer's cost is
+integer scene building and packet stores, not float math; its vector routines
+have nothing to transform here.

@@ -135,8 +135,11 @@ size_t weather_quads(const WeatherProfile &p,const Weather &w,int camera,int wid
             sheet(out,n,WeatherTexture::NOISE,WeatherQuad::GROUND,false,0,rise,W,peak,0,48,wrap(-time/3+camera2*5/8),wrap(-time/9),pale,0,b);
             sheet(out,n,WeatherTexture::NOISE,WeatherQuad::GROUND,false,0,peak,W,floor,0,48,wrap(-time/3+camera2*5/8),wrap(-time/9)+(peak-rise)/3,pale,b,0);
         }
-        // A faint veil in front of everything, thicker low down.
-        sheet(out,n,WeatherTexture::NOISE,WeatherQuad::FRONT,false,0,top,W,H,0,64,wrap(time/3),wrap(time/8),pale,p.mist*26/255,p.mist*46/255);
+        // A faint veil in front of everything from the wall line down, thicker low
+        // down (not over the whole playfield: a full-screen translucent layer is
+        // fill the PowerVR pays for every frame).
+        const int veil=std::max(top,(horizon-32)*2);
+        if(H>veil)sheet(out,n,WeatherTexture::NOISE,WeatherQuad::FRONT,false,0,veil,W,H,0,64,wrap(time/3),wrap(time/8),pale,0,p.mist*46/255);
     }
     // The wall's lights: smeared down the wet ground below them, and shafts
     // through the fog from the light to the ground line, fanning out.

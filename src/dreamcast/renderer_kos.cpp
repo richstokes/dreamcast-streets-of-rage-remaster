@@ -97,10 +97,13 @@ void rim_header(pvr_poly_hdr_t &h,pvr_ptr_t texture,int w,int hgt,int bank){
 }
 uint32_t argb_of(const uint8_t *rgb,unsigned alpha=255){return uint32_t(alpha)<<24|uint32_t(rgb[0])<<16|uint32_t(rgb[1])<<8|rgb[2];}
 void quad(Packet &packet,const pvr_poly_hdr_t &h,float x,float y,float w,float hgt,float z,float u0,float v0,float u1,float v1){
-    packet={};packet.header=h;
+    // Every word of the packet is written here: no memset and no memcpy per
+    // quad (thousands of them whenever the planes scroll).
+    static_assert(sizeof(pvr_poly_hdr_t)==32);
+    const uint32_t *from=reinterpret_cast<const uint32_t*>(&h);uint32_t *to=reinterpret_cast<uint32_t*>(&packet.header);
+    for(int i=0;i<8;i++)to[i]=from[i];
     const float xx[]={x,x+w,x,x+w},yy[]={y,y,y+hgt,y+hgt};
-    for(int i=0;i<4;i++){auto &v=packet.vertices[i];v.z=z;v.argb=0xffffffff;v.flags=i==3?PVR_CMD_VERTEX_EOL:PVR_CMD_VERTEX;v.x=xx[i];v.y=yy[i];v.u=(i&1)?u1:u0;v.v=(i&2)?v1:v0;}
-
+    for(int i=0;i<4;i++){auto &v=packet.vertices[i];v.flags=i==3?PVR_CMD_VERTEX_EOL:PVR_CMD_VERTEX;v.x=xx[i];v.y=yy[i];v.z=z;v.u=(i&1)?u1:u0;v.v=(i&2)?v1:v0;v.argb=0xffffffff;v.oargb=0;}
 }
 }
 namespace {
@@ -332,26 +335,31 @@ bool dc_render_vdp(VDPState &state,VDPRenderer &renderer,const sor::TitleCaption
         packetCount=0;
         std::fill_n(planeTiles,2048,false);
         float sx=640.f/scene->width,sy=480.f/scene->height;
-        // The haze per line, once: thousands of quads share a few hundred lines.
-        static uint8_t fogLine[2][257];
-        if(fogKey)for(int y=0;y<=scene->height&&y<=256;y++){fogLine[0][y]=uint8_t(scene->fogAt(y,false));fogLine[1][y]=uint8_t(scene->fogAt(y,true));}
+        // The haze per line, once, as the two vertex words it needs: thousands of
+        // quads share a few hundred lines, and most lines (the ground) have none.
+        static uint32_t fogKeep[2][257],fogAdd[2][257];
+        if(fogKey){
+            const uint8_t *fog=scene->weatherProfile().fogColour;
+            for(int y=0;y<=scene->height&&y<=256;y++)for(int far=0;far<2;far++){
+                const int f=scene->fogAt(y,far);
+                const uint8_t keep[3]={uint8_t(255-f),uint8_t(255-f),uint8_t(255-f)},add[3]={uint8_t(fog[0]*f/255),uint8_t(fog[1]*f/255),uint8_t(fog[2]*f/255)};
+                fogKeep[far][y]=f?argb_of(keep):0;fogAdd[far][y]=argb_of(add,0);
+            }
+        }
         for(size_t i=0;i<scene->count;i++){
             const auto &q=scene->quads[i];
             planeTiles[q.tile]=true; // Includes empty tiles that may become visible.
             if(!opaque[q.tile])continue;
-            quad(packets[packetCount++],tileHeaders[q.palette*2048+q.tile],q.x*sx,q.y*sy,q.w*sx,q.h*sy,q.depth,q.u0/8.f,q.v0/8.f,q.u1/8.f,q.v1/8.f);
+            Packet &p=packets[packetCount++];
+            quad(p,tileHeaders[q.palette*2048+q.tile],q.x*sx,q.y*sy,q.w*sx,q.h*sy,q.depth,q.u0/8.f,q.v0/8.f,q.u1/8.f,q.v1/8.f);
             if(fogKey&&i<scene->planeEnd[1]){
-                const uint8_t *line=fogLine[i<scene->planeEnd[0]];
-                const int f0=line[q.y],f1=line[q.y+q.h];
-                if(!f0&&!f1)continue;
-                Packet &p=packets[packetCount-1];
+                const int far=i<scene->planeEnd[0];
+                const uint32_t k0=fogKeep[far][q.y],k1=fogKeep[far][q.y+q.h];
+                if(!k0&&!k1)continue;
                 p.header.cmd|=PVR_TA_CMD_SPECULAR;
-                const uint8_t *fog=scene->weatherProfile().fogColour;
-                for(int k=0;k<4;k++){
-                    const int f=(k&2)?f1:f0;
-                    const uint8_t keep[3]={uint8_t(255-f),uint8_t(255-f),uint8_t(255-f)},add[3]={uint8_t(fog[0]*f/255),uint8_t(fog[1]*f/255),uint8_t(fog[2]*f/255)};
-                    p.vertices[k].argb=argb_of(keep);p.vertices[k].oargb=argb_of(add,0);
-                }
+                const uint32_t a0=fogAdd[far][q.y],a1=fogAdd[far][q.y+q.h];
+                p.vertices[0].argb=k0?k0:0xffffffff;p.vertices[1].argb=p.vertices[0].argb;p.vertices[0].oargb=a0;p.vertices[1].oargb=a0;
+                p.vertices[2].argb=k1?k1:0xffffffff;p.vertices[3].argb=p.vertices[2].argb;p.vertices[2].oargb=a1;p.vertices[3].oargb=a1;
             }
         }
         if(!enhanced)for(int p=0;p<2;p++)quad(packets[packetCount++],spriteHeaders[p],0,0,640,480,p?6:3,0,0,scene->width/512.f,scene->height/256.f);

@@ -428,12 +428,14 @@ draw the same quads.
   but the flash. The quads are rebuilt every frame like the particles, without
   touching the scene cache.
 
-Cost (Flycast, 2026-09-22, the action replay of 1,611 gameplay frames, weather
-against none, enhanced graphics and lighting in both): 6 late frames against
-2, audio underruns 3 against 2, p95 frame 22 against 20.5 ms; the scene step
-1.41 against 1.35 ms and building the commands 1.0 against 0.6 ms (the weather
-quads and reflections every frame, the haze on every tile packet while the
-planes scroll; the haze per line is a table, not a call per quad). Memory: two
+Cost (Flycast, 2026-09-23, the action replay of 1,611 gameplay frames, weather
+against none, enhanced graphics and lighting in both): 1 late frame against
+0, p95 frame 20.5 ms in both; the scene step 1.41 against 1.35 ms and building
+the commands 0.56 against 0.38 ms (the weather quads and reflections every
+frame; the haze on the tile packets while the planes scroll, from per-line
+tables). docs/OPTIMIZATION_LOG.md has the before and after. What Flycast does
+not model is the PowerVR's fill for the translucent sheets: if hardware shows
+it, drop the far rain sheet first, then the second mist pair. Memory: two
 8 KB textures in PowerVR memory; about 25 KB more of packets in main RAM. If
 it must be cheaper: fewer smears and shafts, one rain sheet, the mist's front
 veil dropped. Check it on the host: `SOR_WEATHER=1` (or `2`: lightning strikes two
