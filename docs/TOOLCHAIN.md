@@ -77,13 +77,18 @@ See REFERENCE.md for reproducible per-frame comparisons.
 
 ## Quick direct-ELF testing
 
-`./build-and-run.sh` validates the supplied ROM, regenerates the locked translated
+`./tools/build-test-elf.sh` validates the supplied ROM, regenerates the locked translated
 code, incrementally cross-builds, and links an embedded-ROM test ELF. It preserves
 full symbols as `dist/sor-test.debug.elf` and strips only debug sections from the
 launched `dist/sor-test.elf`. Flycast's loader rejects files larger than 16 MiB even
 when the excess is nonloaded debug information, so this split is required.
 The embedded ROM is referenced directly from read-only memory; it is not copied
 to another heap buffer. Disc builds continue reading `/cd/SOR.BIN`.
+
+`./build-and-run.sh` calls that helper and launches Flycast.
+`./tools/run-dreamcast.py --power-cycle --discover` calls the same helper and
+uploads to the real console with `dc-tool-ip`; HARDWARE_TESTS.md covers power,
+discovery, host-file replays and real framebuffer capture.
 
 No changes to input are embedded by this script. Use the CD packaging command
 with `SOR_REPLAY` for diagnostic input playback. The source-staging script compares

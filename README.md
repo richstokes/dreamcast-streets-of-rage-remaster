@@ -106,8 +106,10 @@ is not shown: it needs motion, and few in-between poses exist yet.
   ending but have not been compared with the original.
 - The enhanced art is generated from the original frames; hand-drawn art is
   not started. Smooth animation has few in-betweens yet.
-- Full speed with no audio dropouts in Flycast. **Not yet tested on a real
-  Dreamcast**; reports are welcome ([docs/HARDWARE_TESTS.md](docs/HARDWARE_TESTS.md)).
+- Full speed with no audio dropouts in the recorded Flycast tests. Initial real
+  Dreamcast tests reproduced and fixed missing title geometry; full hardware
+  performance and playthrough validation remain open
+  ([docs/HARDWARE_TESTS.md](docs/HARDWARE_TESTS.md)).
 
 ## What you need
 
@@ -167,6 +169,17 @@ Builds an ELF with the ROM embedded and launches it in Flycast (macOS):
 
 Flycast starts muted; `FLYCAST_MUTE=0 ./build-and-run.sh` plays sound. Serial
 output goes to `build/logs/flycast.log`.
+
+For the real Dreamcast, build and upload through `dc-tool-ip` with an optional
+Shelly power cycle and local network discovery:
+
+```bash
+tools/run-dreamcast.py --power-cycle --discover
+```
+
+This waits for GDEMU/openMenu and dcload-ip, then keeps the console/fileserver
+attached. Hardware screenshots, replay testing, device addresses and overrides:
+[docs/HARDWARE_TESTS.md](docs/HARDWARE_TESTS.md).
 
 ## Enhanced graphics
 

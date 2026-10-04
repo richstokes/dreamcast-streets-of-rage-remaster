@@ -467,6 +467,23 @@ one hit) and what does not fit falls back to the original pieces.
 
 ## Known limits
 
+Retail PowerVR testing (2026-10-04) found missing rectangular title geometry
+with `opb_overflow_count=0`. The same hardware replay frame is complete with
+KOS's usual reserve of 3 overflow OPBs. The three 16-word lists at 640x480
+consume an additional 345,600 bytes (337.5 KiB) of VRAM across both frame sets;
+the existing art loader's allocation checks/fallback still apply. This reserve
+is separate from the 1 MiB vertex buffer. See HARDWARE_TESTS.md for captures.
+
+Texture/palette updates and art-page eviction also wait for
+`pvr_wait_render_done()` after `pvr_wait_ready()`: readiness frees the Tile
+Accelerator for submissions while the preceding frame can still sample its
+textures. The hot path waits once, immediately before its first actual upload
+or palette write; cached frames retain CPU/GPU overlap. An unconditional wait
+caused extra missed refreshes on hardware even before the first screenshot.
+Wait time remains in the `GPU_STATS wait` bucket. The software comparison
+texture uses the same completion barrier.
+Do not remove these waits based on Flycast timings alone.
+
 - Generated art cannot add detail the 16-colour originals never had; thin
   details (hair strands, faces) soften. Hand-made overrides are the way to
   real redrawn art.

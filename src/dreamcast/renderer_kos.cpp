@@ -137,7 +137,10 @@ void load_selection(unsigned round,unsigned characters,bool enhanced,bool smooth
     if(round==artRound&&characters==artCharacters&&enhanced==artEnhanced&&smooth==artSmooth)return;
     artRound=round;artCharacters=characters;artEnhanced=enhanced;artSmooth=smooth;
     const auto start=timer_us_gettime64();
-    pvr_wait_ready();                         // the frame in flight still samples these textures
+    pvr_wait_ready();
+    // Ready permits TA submission while the previous scene is still rendering.
+    // Finish sampling its textures before freeing or replacing any art pages.
+    pvr_wait_render_done();
     if(scene)scene->invalidate();
     if(!enhanced||art.empty()){
         for(auto &p:artTextures)if(p){pvr_mem_free(p);p=nullptr;}
@@ -282,7 +285,17 @@ bool dc_render_vdp(VDPState &state,const sor::TitleCaption &title){
     const auto compiled=timer_us_gettime64();
     pvr_wait_ready();
     const auto ready=timer_us_gettime64();
+    // Only updates need to drain rendering: cached scenes can still overlap
+    // GPU work. A free TA buffer alone does not protect shared texture data.
+    bool samplingFinished=false;
+    uint64_t renderWait=0;
+    const auto finishSampling=[&]{
+        if(samplingFinished)return;
+        const auto start=timer_us_gettime64();pvr_wait_render_done();
+        renderWait+=timer_us_gettime64()-start;samplingFinished=true;
+    };
     if(title.brightness && title.textureKey()!=titleTextureKey){
+        finishSampling();
         for(size_t i=0;i<sor::TitleCaption::regions.size();i++){
             const auto &region=sor::TitleCaption::regions[i];
             alignas(32) uint16_t pixels[sor::TitleCaption::MAX_TEXTURE_PIXELS]{};
@@ -296,6 +309,7 @@ bool dc_render_vdp(VDPState &state,const sor::TitleCaption &title){
     bool opacityChanged=false;
     if(!same || !frames){
         for(int p=0;p<4;p++)if(!frames || !sor::equal_bytes(previousColors+p*16,scene->colors+p*16,32)){
+            finishSampling();
             for(int c=0;c<16;c++)pvr_set_pal_entry(p*16+c,c?scene->colors[p*16+c]:0);
             std::memcpy(previousColors+p*16,scene->colors+p*16,32);
         }
@@ -311,6 +325,7 @@ bool dc_render_vdp(VDPState &state,const sor::TitleCaption &title){
     alignas(32) uint16_t decoded[16];
     const auto uploadTile=[&](int t){
         if(!opaque[t] || valid[t])return;
+        finishSampling();
         sor::pack_pvr_tile4(state.vram_+t*32,decoded);
         pvr_txr_load(decoded,static_cast<uint8_t*>(tiles)+t*32,32);
         valid[t]=1;
@@ -323,6 +338,7 @@ bool dc_render_vdp(VDPState &state,const sor::TitleCaption &title){
         const int top=frames?std::min(uploadedTop[p],scene->spriteTop[p]):0;
         const int bottom=frames?std::max(uploadedBottom[p],scene->spriteBottom[p]):256;
         if(bottom>top){
+            finishSampling();
             const unsigned bytes=(bottom-top)*1024;
             pvr_txr_load(scene->sprites[p]+top*512,static_cast<uint8_t*>(spriteTexture[p])+top*1024,bytes);
             spriteBytes+=bytes;
@@ -541,7 +557,7 @@ bool dc_render_vdp(VDPState &state,const sor::TitleCaption &title){
     // Aggregate every frame: sparse samples mostly hit unchanged VDP frames
     // and conceal the cost of animation, scrolling, and texture replacement.
     static uint64_t sums[5]{},peaks[5]{},spriteSum=0;
-    const uint64_t elapsed[]={compiled-begin,ready-compiled,uploaded-ready,commands-uploaded,finished-commands};
+    const uint64_t elapsed[]={compiled-begin,ready-compiled+renderWait,uploaded-ready-renderWait,commands-uploaded,finished-commands};
     for(int i=0;i<5;i++){sums[i]+=elapsed[i];peaks[i]=std::max(peaks[i],elapsed[i]);}
     spriteSum+=spriteBytes;
     if(++frames%600==0){

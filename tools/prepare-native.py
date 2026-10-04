@@ -52,6 +52,8 @@ OPTIONS = [
     # Debug only: Dreamcast B toggles the software comparison renderer (about
     # 85 ms a frame, original graphics). Off by default: B is within reach in play.
     ('SOR_SOFTWARE_TOGGLE', 'SOR_SOFTWARE_TOGGLE', '0'),
+    # Sparse screenshots of the real PowerVR framebuffer, sent to dc-tool's /pc.
+    ('SOR_HW_CAPTURE', 'SOR_HW_CAPTURE', '0'),
 ]
 
 
@@ -237,6 +239,14 @@ def write_config():
         raise SystemExit('SOR_PC_PROFILE_FRAMES must be FIRST:LAST')
     first, last = frames.split(':')
     lines += [f'#define SOR_PC_PROFILE_FIRST {first}', f'#define SOR_PC_PROFILE_LAST {last}']
+    for variable, default, maximum in (
+            ('SOR_HW_CAPTURE_FIRST', '600', 10000000),
+            ('SOR_HW_CAPTURE_INTERVAL', '600', 10000000),
+            ('SOR_HW_CAPTURE_COUNT', '4', 16)):
+        value = os.environ.get(variable, default)
+        if not re.fullmatch(r'[0-9]+', value) or not 1 <= int(value) <= maximum:
+            raise SystemExit(f'{variable} must be an integer from 1 to {maximum}')
+        lines.append(f'#define {variable} {int(value)}u')
     write_if_changed(OUT / 'sor_audio_config.hpp', '\n'.join(lines) + '\n')
 
 

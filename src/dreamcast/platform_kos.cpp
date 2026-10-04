@@ -1,6 +1,8 @@
 #include "diagnostics.hpp"
 #include <kos.h>
 #include <malloc.h>
+#include <cstdio>
+#include <cerrno>
 #include <stdexcept>
 #include "platform.hpp"
 #include "replay.hpp"
@@ -18,6 +20,56 @@ static pvr_ptr_t texture;
 static uint16_t pixels[512*256] __attribute__((aligned(32)));
 static pvr_poly_hdr_t header;
 static uint16_t colorLut[512];
+#if SOR_HW_CAPTURE
+// Capture only at the requested boundaries: ordinary frames retain their normal
+// pipeline, so this does not accidentally fix a rendering race before capture.
+static void capture_hardware_frame(uint32_t frame,const sor_memory &memory){
+    static unsigned attempts=0;
+    if(frame<SOR_HW_CAPTURE_FIRST ||
+       (frame-SOR_HW_CAPTURE_FIRST)%SOR_HW_CAPTURE_INTERVAL ||
+       attempts>=SOR_HW_CAPTURE_COUNT)return;
+    ++attempts;
+    char path[64];snprintf(path,sizeof(path),"/pc/frame-%06lu.ppm",(unsigned long)frame);
+    sor_log("HW_CAPTURE begin frame=%lu previous_presented=%lu mode=%02x%02x path=%s; capture pauses invalidate timing/audio measurements\n",
+        (unsigned long)frame,(unsigned long)(frame-1),memory.ram[0xff00],memory.ram[0xff01],path);
+    sor_flush_log();
+    // wait_ready only waits for TA registration; rendering may still be in
+    // flight. Finish that render, then let its completed framebuffer flip.
+    if(pvr_wait_ready()<0 || pvr_wait_render_done()<0){
+        sor_log("HW_CAPTURE failed: PVR wait timed out\n");sor_flush_log();return;
+    }
+    vid_waitvbl();thd_pass();
+    pvr_stats_t stats{};pvr_get_stats(&stats);
+    // pvr_sync_view() calls vid_set_start(), which points vram_s at the visible
+    // framebuffer. No new scene is submitted while these chunks are written.
+    const auto *front=static_cast<const volatile uint16_t *>(vram_s);
+    if(vid_mode->pm!=PM_RGB565 || vid_mode->width!=640 || vid_mode->height!=480){
+        sor_log("HW_CAPTURE failed: unsupported video mode %dx%d pm=%d\n",vid_mode->width,vid_mode->height,vid_mode->pm);
+        sor_flush_log();return;
+    }
+    auto out=fopen(path,"wb");
+    if(!out){sor_log("HW_CAPTURE failed: open errno=%d path=%s\n",errno,path);sor_flush_log();return;}
+    // vid_screen_shot() allocates 921 KB. Keep this diagnostic usable when art
+    // nearly fills main RAM, and avoid a host filesystem roundtrip per pixel.
+    static uint8_t chunk[640*3*8];
+    bool ok=fprintf(out,"P6\n640 480\n255\n")>0;
+    for(unsigned y=0;ok && y<480;y+=8){
+        for(unsigned i=0;i<640*8;i++){
+            unsigned pixel=front[y*640+i];
+            unsigned r=(pixel>>11)&31,g=(pixel>>5)&63,b=pixel&31;
+            chunk[i*3]=uint8_t((r<<3)|(r>>2));
+            chunk[i*3+1]=uint8_t((g<<2)|(g>>4));
+            chunk[i*3+2]=uint8_t((b<<3)|(b>>2));
+        }
+        ok=fwrite(chunk,1,sizeof(chunk),out)==sizeof(chunk);
+    }
+    if(fclose(out)!=0)ok=false;
+    sor_log("HW_CAPTURE %s frame=%lu path=%s vtx_used=%lu vtx_max=%lu flips=%lu front=%08lx\n",
+        ok?"saved":"failed",(unsigned long)frame,path,(unsigned long)stats.vtx_buffer_used,
+        (unsigned long)stats.vtx_buffer_used_max,(unsigned long)stats.frame_count,(unsigned long)front);
+    sor_flush_log();
+}
+#endif
 void platform_poll_controllers(PlayersControlState &current){
     PlayerControlsState *out[]={&current.player1,&current.player2};
     for(int i=0;i<2;i++) {
@@ -42,6 +94,10 @@ void platform_video_init(){
     pvr_poly_compile(&header,&c);
     dc_renderer_init();
     pc_profile_start();
+#if SOR_HW_CAPTURE
+    sor_log("HW_CAPTURE enabled first=%lu interval=%lu count=%lu; diagnostic run, not a performance benchmark\n",
+        (unsigned long)SOR_HW_CAPTURE_FIRST,(unsigned long)SOR_HW_CAPTURE_INTERVAL,(unsigned long)SOR_HW_CAPTURE_COUNT);
+#endif
 }
 void platform_video_shutdown(){dc_renderer_shutdown();pvr_mem_free(texture);}
 void platform_video_present(const Framebuffer &fb,int w,int h){
@@ -53,7 +109,8 @@ void platform_video_present(const Framebuffer &fb,int w,int h){
     if(sor::cheats::hintVisible())sor::cheats::drawHint(nullptr,[](void *,int x,int y,unsigned r,unsigned g,unsigned b){
         pixels[y*512+x]=colorLut[(r<<6)|(g<<3)|b];
     });
-    pvr_wait_ready(); pvr_txr_load(pixels,texture,sizeof(pixels));
+    // The previous frame may still be sampling this single software texture.
+    pvr_wait_ready();pvr_wait_render_done();pvr_txr_load(pixels,texture,sizeof(pixels));
     pvr_scene_begin();pvr_list_begin(PVR_LIST_OP_POLY);pvr_prim(&header,sizeof(header));
     pvr_vertex_t v{};v.z=1;v.argb=0xffffffff;
     const float xs[]={0,640,0,640},ys[]={0,0,480,480};
@@ -118,6 +175,9 @@ void platform_observe_frame(uint32_t frame,const sor_memory &memory,const Frameb
     // Drain first: a full buffer would otherwise drop the completion marker
     // that tools/bench-flycast.sh waits for, and the reports after it.
     if(finished){reported=true;sor_flush_log();sor_log("BENCHMARK replay complete; subsequent serial drain is outside the measured window\n");platform_audio_report();pc_profile_report();sor_flush_log();}
+#if SOR_HW_CAPTURE
+    capture_hardware_frame(frame,memory);
+#endif
 }
 
 extern "C" {
