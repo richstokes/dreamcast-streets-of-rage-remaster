@@ -226,15 +226,19 @@ void fm_operator<RegisterType>::sor_advance_quiet(uint32_t n, uint32_t first_env
         text=replace_once(text,'if (m_env_attenuation > EG_QUIET)',
             'if (m_env_attenuation > EG_QUIET || m_sor_attenuation >= 832)')
         # Signed exponential table combines sign and variable shift in one load.
-        # 32 KiB replaces the rejected multi-megabyte phase/attenuation table.
+        # Adjacent positive/negative entries avoid placing the two signs 16 KiB
+        # apart, where they alias in SH-4's direct-mapped 16 KiB operand cache.
+        # Waveform indices carry attenuation*2 + sign; cached base offsets are
+        # doubled too, so both fast-span and ordinary operator lookups retain
+        # precisely the same integer values and one load per operator output.
         start=text.index('inline uint32_t attenuation_to_volume(')
         stop=text.index('\n}',start)+2
         mant=[(int(v,16)|0x400)<<2 for v in re.findall(r'X\(0x([0-9a-f]+)\)',text[start:stop])]
         assert len(mant)==256
         values=[(mant[i&255]>>(i>>8) if i<3328 else 0) for i in range(8192)]
-        values+= [-v for v in values]
+        values=[signed for value in values for signed in (value,-value)]
         table='alignas(32) static const int16_t sor_signed_power[16384] = {\n'+',\n'.join(','.join(str(v) for v in values[i:i+32]) for i in range(0,len(values),32))+'\n};\n'
-        text=text[:stop]+'\n'+table+'\ninline const int16_t *sor_power_at(uint32_t attenuation) { return sor_signed_power+attenuation; }\n'+text[stop:]
+        text=text[:stop]+'\n'+table+'\ninline const int16_t *sor_power_at(uint32_t attenuation) { return sor_signed_power+attenuation*2; }\n'+text[stop:]
         old='int32_t result = attenuation_to_volume((sin_attenuation & 0x7fff) + env_attenuation);'
         text=replace_once(text,old,'int32_t result = (m_sor_am && am_offset ? sor_power_at(env_attenuation) : m_sor_power)[sin_attenuation];')
         text=replace_once(text,'return bitfield(sin_attenuation, 15) ? -result : result;','return result;')
@@ -260,7 +264,7 @@ void fm_operator<RegisterType>::sor_advance_quiet(uint32_t n, uint32_t first_env
             'result+=op->regs().op_ssg_eg_enable(op->opoffs())?256:0; result+=op->debug_eg_attenuation()<=0x380?65536:0; result+=op->sor_silent()?0:16777216; } return result; }')
         return text[:offset]+tail+text[end:]
     if name == 'ymfm_opn.cpp':
-        text=replace_once(text,'abs_sin_attenuation(index) | (bitfield(index, 9) << 15)', 'abs_sin_attenuation(index) | (bitfield(index, 9) << 13)')
+        text=replace_once(text,'abs_sin_attenuation(index) | (bitfield(index, 9) << 15)', '(abs_sin_attenuation(index) << 1) | bitfield(index, 9)')
         marker='void ym2612::generate(output_data *output, uint32_t numsamples)'
         component="""// SoR port: expose the DAC stem for synchronized AICA hardware mixing.
 void ym2612::dac_component(output_data &output)

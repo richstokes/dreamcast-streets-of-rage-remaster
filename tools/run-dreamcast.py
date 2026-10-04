@@ -34,6 +34,7 @@ DEFAULT_SHELLY_ID = 'shellyplugusg4-e8f60a7dd06c'
 # V2 accepts an ephemeral sender port. Advertise v2 so its reply preserves it.
 VERSION_REQUEST = struct.pack('!4sII', b'VERS', 0x020003, 0)
 DCLOAD_PORT = 53535
+BENCHMARK_COMPLETE = b'BENCHMARK replay complete; reports frozen before serial drain'
 # BSD/macOS can report an earlier host's asynchronous ICMP error on either
 # sendto or recvfrom of a shared UDP socket during subnet discovery.
 UNREACHABLE_ERRORS = {errno.EHOSTUNREACH, errno.ENETUNREACH, errno.ECONNREFUSED,
@@ -237,6 +238,41 @@ def sha256(path):
     return digest.hexdigest()
 
 
+def elf_load_signature(path):
+    """Identify executable memory contents, ignoring removable debug sections."""
+    data = path.read_bytes()
+    if (len(data) < 52 or data[:6] != b'\x7fELF\x01\x01' or
+            struct.unpack_from('<H', data, 18)[0] != 42):
+        raise RuntimeError(f'Expected a little-endian SH-4 ELF: {path}')
+    entry, offset = struct.unpack_from('<II', data, 24)
+    stride, count = struct.unpack_from('<HH', data, 42)
+    if stride != 32 or not 1 <= count <= 64 or offset + stride * count > len(data):
+        raise RuntimeError(f'Invalid ELF program headers: {path}')
+    loads = []
+    for index in range(count):
+        kind, start, virtual, physical, size, memory, flags, align = struct.unpack_from(
+            '<IIIIIIII', data, offset + index * stride)
+        if kind != 1:
+            continue
+        if size > memory or start + size > len(data):
+            raise RuntimeError(f'Invalid ELF load segment: {path}')
+        loads.append((virtual, physical, size, memory, flags, align,
+                      hashlib.sha256(data[start:start + size]).hexdigest()))
+    if not loads:
+        raise RuntimeError(f'ELF has no load segments: {path}')
+    return entry, loads
+
+
+def snapshot_debug_elf(source, elf, run_dir):
+    source = source.expanduser().resolve()
+    if elf_load_signature(source) != elf_load_signature(elf):
+        raise RuntimeError(f'Debug ELF does not match uploaded executable: {source}')
+    target = run_dir / 'sor-test.debug.elf'
+    shutil.copy2(source, target)
+    return {'source': str(source), 'path': str(target), 'sha256': sha256(target),
+            'verified': 'matching entry point and PT_LOAD addresses, sizes, flags and file bytes'}
+
+
 def stage_replay(source, run_dir):
     """Compile repository replay JSON, or copy a checked SRP1/SRP2 binary."""
     source = source.expanduser().resolve()
@@ -266,18 +302,25 @@ def stage_replay(source, run_dir):
             'segments': count, 'format': data[:4].decode()}
 
 
-def run_console(command, logfile, duration=0):
+def run_console(command, logfile, duration=0, benchmark=False):
     """PTY makes libc line-buffer console output even when this tool is piped."""
     master, slave = pty.openpty()
     process = subprocess.Popen(command, cwd=ROOT, stdin=subprocess.DEVNULL,
                                stdout=slave, stderr=slave, start_new_session=True)
     os.close(slave)
     deadline = time.monotonic() + duration if duration else None
+    completed = False
+    drain_deadline = None
+    tail = b''
     reason = 'exit'
     try:
         with logfile.open('wb') as output:
             while True:
-                if deadline is not None and time.monotonic() >= deadline:
+                now = time.monotonic()
+                if drain_deadline is not None and now >= drain_deadline:
+                    reason = 'benchmark'
+                    break
+                if deadline is not None and now >= deadline and not completed:
                     reason = 'duration'
                     break
                 ready, _, _ = select.select([master], [], [], 0.25)
@@ -294,6 +337,14 @@ def run_console(command, logfile, duration=0):
                     output.flush()
                     sys.stdout.buffer.write(data)
                     sys.stdout.buffer.flush()
+                    if benchmark and not completed:
+                        combined = tail + data
+                        if BENCHMARK_COMPLETE in combined:
+                            completed = True
+                            # Drain any trailing dropped-message count, then
+                            # detach before later idle frames enter summaries.
+                            drain_deadline = time.monotonic() + 0.5
+                        tail = combined[-len(BENCHMARK_COMPLETE):]
                 elif process.poll() is not None:
                     break
     except KeyboardInterrupt:
@@ -307,7 +358,31 @@ def run_console(command, logfile, duration=0):
                 os.killpg(process.pid, signal.SIGKILL)
                 process.wait()
         os.close(master)
-    return {'returncode': process.returncode, 'stop_reason': reason}
+    return {'returncode': process.returncode, 'stop_reason': reason,
+            'benchmark_complete': completed}
+
+
+def benchmark_reports(run_dir, debug_elf):
+    """Keep interpretation beside the exact log and executable it describes."""
+    logfile = run_dir / 'console.log'
+    reports = {}
+    commands = [('summary.json', [sys.executable, str(ROOT / 'tools/summarize-profile.py'), str(logfile)])]
+    if 'PCPROF phase=' in logfile.read_text(errors='replace'):
+        if debug_elf:
+            base = [sys.executable, str(ROOT / 'tools/pc-profile.py'), str(logfile),
+                    '--elf', debug_elf['path']]
+            commands += [('pc-profile.txt', base), ('pc-profile-files.txt', base + ['--by-file'])]
+        else:
+            reports['pc-profile'] = {'error': 'No matching debug ELF was supplied.'}
+    for name, command in commands:
+        output = subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if output.returncode:
+            reports[name] = {'error': output.stderr.strip(), 'returncode': output.returncode}
+        else:
+            target = run_dir / name
+            target.write_text(output.stdout)
+            reports[name] = {'path': str(target)}
+    return reports
 
 
 def parser():
@@ -317,7 +392,9 @@ def parser():
     result.add_argument('--rom', type=Path, help='ROM path (otherwise SOR_ROM or repository default)')
     result.add_argument('--no-build', action='store_true', help='use dist/sor-test.elf as it exists')
     result.add_argument('--elf', type=Path, help='use this existing self-contained ELF; implies --no-build')
+    result.add_argument('--debug-elf', type=Path, help='matching debug ELF; its loaded bytes must equal the uploaded ELF')
     result.add_argument('--replay', type=Path, help='replay JSON or SRP1/SRP2 binary to serve as /pc/REPLAY.BIN')
+    result.add_argument('--benchmark', action='store_true', help='require replay completion, save summaries, then detach; defaults to a 300s upload/run deadline')
     result.add_argument('--power-cycle', action='store_true', help='cold boot using the identified Shelly plug')
     result.add_argument('--shelly', type=ipv4, default='192.168.1.173')
     result.add_argument('--shelly-id', default=DEFAULT_SHELLY_ID, help='exact device ID allowed to switch')
@@ -331,7 +408,11 @@ def parser():
 
 
 def main(argv=None):
-    args = parser().parse_args(argv)
+    argument_parser = parser()
+    args = argument_parser.parse_args(argv)
+    if args.benchmark and not args.replay:
+        argument_parser.error('--benchmark requires --replay')
+    duration = args.duration or (300 if args.benchmark else 0)
     build = not (args.no_build or args.elf)
     source = (args.elf or ROOT / 'dist/sor-test.elf').expanduser().resolve()
     tool = args.dc_tool.expanduser().resolve()
@@ -346,12 +427,14 @@ def main(argv=None):
     if args.dry_run:
         print(json.dumps({'build': build_command if build else None, 'source_elf': str(source),
                           'replay': str(args.replay) if args.replay else None,
+                          'benchmark': args.benchmark,
+                          'debug_elf': str(args.debug_elf) if args.debug_elf else ('built alongside executable' if build else None),
                           'power_cycle': args.power_cycle, 'shelly': args.shelly,
                           'required_shelly_id': args.shelly_id,
                           'boot_wait': args.boot_wait if args.power_cycle else 0,
                           'readiness_timeout': args.ready_timeout,
                           'discovery': str(network) if network else None,
-                          'command': command, 'duration': args.duration,
+                          'command': command, 'duration': duration,
                           'logs': str(ROOT / 'build/hardware/<UTC timestamp>/'),
                           'environment': {k: v for k, v in os.environ.items() if k.startswith('SOR_')}}, indent=2))
         return 0
@@ -389,6 +472,16 @@ def main(argv=None):
         elf = run_dir / 'sor-test.elf'
         shutil.copy2(source, elf)
         manifest.update(elf=str(elf), elf_sha256=sha256(elf), elf_bytes=elf.stat().st_size)
+        debug_source = args.debug_elf or (ROOT / 'dist/sor-test.debug.elf' if build else None)
+        if debug_source:
+            manifest['debug_elf'] = snapshot_debug_elf(debug_source, elf, run_dir)
+        if build:
+            # This map was emitted by this build's final embedded-ELF link.
+            map_source = ROOT / 'build/native/sor.map'
+            if map_source.is_file():
+                map_target = run_dir / 'sor-test.map'
+                shutil.copy2(map_source, map_target)
+                manifest['link_map'] = {'path': str(map_target), 'sha256': sha256(map_target)}
         if args.replay:
             manifest['replay'] = stage_replay(args.replay, run_dir)
         config = ROOT / 'build/native/upstream/sor_audio_config.hpp'
@@ -420,10 +513,16 @@ def main(argv=None):
         save()
         log(shlex.join(command))
         log('Console/fileserver stays attached. Ctrl+C stops the host session; next run may need --power-cycle.')
-        manifest['console'] = run_console(command, run_dir / 'console.log', args.duration)
+        manifest['console'] = run_console(command, run_dir / 'console.log', duration, args.benchmark)
         stopped = manifest['console']['stop_reason']
         code = manifest['console']['returncode']
         manifest['status'] = 'stopped' if stopped != 'exit' else ('finished' if code == 0 else 'failed')
+        if args.benchmark:
+            if not manifest['console']['benchmark_complete']:
+                manifest.update(status='failed', error='Replay completion marker was not received before the session ended.')
+                return 1
+            manifest['status'] = 'benchmark_complete'
+            manifest['reports'] = benchmark_reports(run_dir, manifest.get('debug_elf'))
         return (128 - code if code < 0 else code) if stopped == 'exit' else 0
     except KeyboardInterrupt:
         manifest['status'] = 'interrupted'

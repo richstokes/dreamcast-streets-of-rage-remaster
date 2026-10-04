@@ -143,6 +143,8 @@ void platform_observe_frame(uint32_t frame,const sor_memory &memory,const Frameb
     static uint32_t histogram[256]{},samples=0;
     static bool wasPlaying=false,reported=false;
     bool finished=replay_finished() && !reported;
+    // The final frame summary needs the reserved reporting space as well.
+    if(finished){pc_profile_stop();sor_begin_report();}
     static pvr_stats_t startStats{};
     auto now=timer_us_gettime64();
     bool playing=memory.ram[0xff00]==0 && memory.ram[0xff01]==sor::cheats::playingMode;
@@ -161,20 +163,25 @@ void platform_observe_frame(uint32_t frame,const sor_memory &memory,const Frameb
     }
     previous=now;wasPlaying=playing;
     pc_profile_phase(playing && (!SOR_PC_PROFILE_LAST || (samples>=SOR_PC_PROFILE_FIRST && samples<=SOR_PC_PROFILE_LAST)));
-    // Interactive runs: every 600 emulated frames (10 s), in any mode, report
-    // refresh and drain the log so a session can be watched live. Comparing
-    // these lines' arrival with the wall clock separates a slow host emulator
-    // from a slow guest. Replays keep the log deferred until their measured window ends.
+    // Interactive runs still record refresh every 600 frames. Live serial
+    // drains are opt-in: dc-tool output otherwise stalls gameplay and audio.
+    // Replays always defer output until the measured window ends.
     if(!replay_active() && frame && frame%600==0){
         static pvr_stats_t last{};pvr_stats_t current{};pvr_get_stats(&current);
         sor_log("HEARTBEAT frame=%lu vblanks=%lu flips=%lu enhanced=%d mode=%02x%02x\n",(unsigned long)frame,
             (unsigned long)(current.vbl_count-last.vbl_count),(unsigned long)(current.frame_count-last.frame_count),
             int(sor::cheats::menu.settings().enhancedGraphics),memory.ram[0xff00],memory.ram[0xff01]);
-        last=current;sor_flush_log();
+        last=current;if(SOR_LIVE_LOG)sor_flush_log();
     }
-    // Drain first: a full buffer would otherwise drop the completion marker
-    // that tools/bench-flycast.sh waits for, and the reports after it.
-    if(finished){reported=true;sor_flush_log();sor_log("BENCHMARK replay complete; subsequent serial drain is outside the measured window\n");platform_audio_report();pc_profile_report();sor_flush_log();}
+    if(finished){
+        reported=true;
+        // Freeze sampling and snapshot audio before any serial I/O or profiler
+        // sorting. Reserved log space keeps these reports even if ordinary
+        // diagnostics filled their budget. The last marker means reports ended.
+        platform_audio_report();pc_profile_report();
+        sor_log("BENCHMARK replay complete; reports frozen before serial drain\n");
+        sor_flush_log();
+    }
 #if SOR_HW_CAPTURE
     capture_hardware_frame(frame,memory);
 #endif

@@ -92,6 +92,44 @@ performance results. Rebuild with `SOR_HW_CAPTURE=0` and repeat the same replay
 for performance measurements. The host fileserver must stay attached until the
 last screenshot has finished writing.
 
+For timing, use a replay with `SOR_HW_CAPTURE=0` and `SOR_LIVE_LOG=0` (the
+defaults). Interactive heartbeats remain buffered unless `SOR_LIVE_LOG=1` is
+set at build time; synchronous dc-tool output can stall the game and its audio.
+Replay completion freezes PC samples and records the audio counters before
+draining diagnostics. The final `BENCHMARK replay complete` line follows those
+reports. A reserved 32 KiB of the bounded log keeps the final reports available
+even when earlier messages were dropped.
+Diagnostics drain in bounded 4 KiB direct writes: KOS stdout is line buffered,
+and flushing hundreds of lines through stdio caused minute-long LAN stalls.
+
+```sh
+SOR_HW_CAPTURE=0 SOR_LIVE_LOG=0 SOR_PC_PROFILE=1 SOR_AUDIO_PROFILE=0 \
+  python3 tools/run-dreamcast.py --benchmark --duration 240 \
+  --power-cycle --discover --replay reference/scenarios/phase-aligned-actions.json
+```
+
+`--benchmark` requires a replay and ends after the frozen-report completion
+marker, allowing a brief final output drain. Its default upload/run deadline is
+300 seconds; `--duration` overrides it. A deadline or process exit before the
+marker is a failed, incomplete benchmark. Completed runs save `summary.json`
+and, when PC samples and matching symbols are available, `pc-profile.txt` and
+`pc-profile-files.txt` beside the console log. Frame statistics are cumulative
+since entry into gameplay; compare the final record before completion.
+
+Fresh builds preserve `sor-test.debug.elf` and the final link map in the run
+directory. The debug ELF's entry point and loaded memory contents must match
+the uploaded ELF. For `--no-build` or `--elf`, pass `--debug-elf` with the
+corresponding symbols; an unrelated current build is never assumed to match.
+
+`SOR_PC_PROFILE=1` enables diagnostic 10 kHz SH-4 sampling. Resolve its output
+with `tools/pc-profile.py console.log --elf <matching sor-test.debug.elf>`;
+the disc-build `sor.elf` is not the uploaded embedded-ROM executable. The
+`gameplay` bucket covers the first 170 samples of gameplay frames; `overrun`
+holds later samples from every mode, including menus. Interrupt-disabled code
+can delay samples, so these are hotspot estimates, not exact cycle accounting.
+Repeat promising changes with both profilers disabled for final timing/audio
+qualification, keeping the replay and graphics options identical.
+
 ## Boot and media
 
 - [ ] Fresh source + pinned tools + locally supplied ROM rebuild successfully.

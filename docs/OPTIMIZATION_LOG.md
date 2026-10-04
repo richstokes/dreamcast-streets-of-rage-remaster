@@ -315,6 +315,68 @@ If hardware shows it, drop the far rain sheet first, then the second mist pair.
 
 Logs: `build/logs/weather-{off4,on3}-flycast.log` (after),
 `weather-{off,on2}-flycast.log` (before), `weather-prof-flycast.log` (sampled).
-Not worth it: sh4zam (fast SH4 float math, kos-ports). The renderer's cost is
-integer scene building and packet stores, not float math; its vector routines
-have nothing to transform here.
+The SH4ZAM float/vector routines do not address these integer scene-building
+and packet-store costs. Revisited on 2026-10-04: the library also provides
+[memory routines](https://sh4zam.com/shz__mem_8h_source.html), so the earlier
+blanket rejection was too broad. KOS already uses store queues for PVR packet
+and texture transfers. A separate main-RAM candidate is `previous=s` in
+`VdpScene::buildCached`: the SH-4 binary calls libc `memcpy` for 68,535 bytes
+per changed scene. Profile that copy and compare the generic SH4ZAM memory
+API or a smaller dirty-state snapshot before adding a dependency; no SH4ZAM
+code is currently used by the port.
+
+
+## First physical-console timing pass (2026-10-04)
+
+Retail Dreamcast, 640x480 VGA, enhanced graphics, lighting on, weather/smoothing
+and both profilers off. Same state-gated action replay, cold boot for each run;
+no captures or live serial drains. Both completed 1,611 gameplay intervals.
+
+| Final cumulative measurement | Before | After |
+| --- | ---: | ---: |
+| Mean gameplay interval | 22.285 ms | 21.617 ms |
+| p50 / p95 / p99 upper bounds | 20.5 / 36 / 57 ms | 19.5 / 37 / 57 ms |
+| Worst interval | 97.132 ms | 95.136 ms |
+| Gameplay VBlanks / flips | 2,152 / 1,612 | 2,087 / 1,611 |
+| Whole-replay audio underruns | 85 | 71 |
+| Whole-replay silent stereo frames | 513,024 | 450,560 |
+
+One paired run, not a variance study: mean time improved 3.0% and underruns
+16.5%, but p95 worsened by 1 ms and the console still misses 60 Hz substantially.
+The one-flip boundary difference reflects the asynchronous PVR counters.
+Four hardware AUDIO_PCM hashes and total generated sample counts match.
+
+Changes retained together (individual gains have not been isolated):
+
+- Stream refill uses a quotient/remainder recurrence instead of one software
+  division per output sample, preserving the exact nearest-neighbour mapping.
+- Adjacent positive/negative FM table entries avoid the old 16 KiB separation
+  that aliases SH-4's direct-mapped operand cache. All lookup values remain exact.
+- CPU packet construction precedes the PVR wait, allowing overlap with the
+  previous render. Actual palette/texture writes still wait for sampling to end.
+
+Separately, interactive diagnostics previously blocked for hundreds of
+milliseconds every 600 frames (one observed interval exceeded a second).
+`SOR_LIVE_LOG` now defaults off. Reports freeze sampling/audio counters before
+transmission, reserve final-summary space, and bypass line-buffered stdout
+with bounded direct writes. Both release runs above include these diagnostic
+fixes, so the table excludes their interactive benefit. The benchmark runner
+now stops on the final report marker and preserves matching debug symbols.
+
+Evidence (local ROM-derived artifacts are deliberately not committed):
+
+- Baseline: `build/hardware/20261004T163241.418003Z/`, ELF SHA-256 `ea1c2a6730be51ba5e3b64b4986314159ef524cc7c7243c1fd0a9f403078d95d`.
+- Candidate: `build/hardware/20261004T163514.105834Z/`, ELF SHA-256 `4c2f4b6e50c7a88f969c5a20bb8429e42765ecae75abf455186326b1ce5bb0df`.
+- Each contains console log, manifest, summary, ELF and matching debug ELF.
+  `build-source.patch` records the actual build's tracked changes;
+  `source.patch` records the workspace when the saved ELF was uploaded.
+- Host checks: 5,086,464 stream-copy stereo frames against the division oracle;
+  205,765 FM stereo samples against pinned ymfm; 1,000 DAC integration frames;
+  general audio, scene and diagnostics tests under ASan/UBSan. All pass.
+  The hardware workflow's 22 offline tests pass; both SH-4 builds succeeded.
+
+The next high-value candidate is batching FM across DAC sample-data writes;
+see AUDIO_OPTIMIZATION.md for the unimplemented design and fidelity gates.
+SH4ZAM main-RAM copies remain a separate unmeasured candidate. No full gameplay
+PCM trace, new screenshot comparison, two-player stress run or listening test
+was completed in this pass; do not claim stutter-free audio or fixed 60 Hz.

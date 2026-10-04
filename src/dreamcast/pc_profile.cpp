@@ -33,9 +33,10 @@ void pc_profile_start(){
     sor_log("PCPROF sampling every 100 us\n");
 }
 void pc_profile_phase(bool gameplay){phase=gameplay;ticks=0;}
+void pc_profile_stop(){if(SOR_ENABLE_PC_PROFILE)timer_stop(TMU1);}
 void pc_profile_report(){
     if(!SOR_ENABLE_PC_PROFILE)return;
-    timer_stop(TMU1);
+    pc_profile_stop();
     for(unsigned p=0;p<3;p++){
         static unsigned order[binCount];
         unsigned n=0;for(unsigned i=0;i<binCount;i++)if(counts[p][i])order[n++]=i;

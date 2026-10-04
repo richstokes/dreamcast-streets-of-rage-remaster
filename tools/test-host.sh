@@ -43,6 +43,9 @@ test_replay() {
     build replay-test -I"$root/src/dreamcast" -I"$root/src/dreamcast/compat" \
         "$root/tests/replay_test.cpp" "$root/src/dreamcast/replay.cpp" && "$out/replay-test"
 }
+test_diagnostics() {
+    build diagnostics-test -Wall -Wextra -Werror "$root/tests/diagnostics_test.cpp" && "$out/diagnostics-test"
+}
 test_pvr_tiles() {
     build pvr-tiles -I"$root/src/render" "$root/tests/pvr_tiles_test.cpp" && "$out/pvr-tiles"
 }
@@ -53,6 +56,9 @@ test_scene() {
 }
 test_audio() {
     build audio-test -I"$root/src/audio" -I"$upstream" "$root/tests/audio_test.cpp" $audio $ymfm && "$out/audio-test"
+}
+test_audio_stream() {
+    build audio-stream-test -Wall -Wextra -Werror -I"$root/src/audio" "$root/tests/stream_resample_test.cpp" && "$out/audio-stream-test"
 }
 test_psg_events() {
     build psg-events-test -I"$root/src/audio" -I"$upstream" "$root/tests/psg_events_test.cpp" $audio $ymfm && "$out/psg-events-test"
@@ -88,7 +94,7 @@ test_ymfm_output() {
     echo "ymfm: $(( $(wc -c < "$out/ymfm-staged.pcm32") / 8 )) stereo samples match the pinned output"
 }
 
-all="core native-memory cheats replay pvr-tiles scene audio psg-events fm-quiet z80-hot dac-driver dac-integration ymfm-output"
+all="core native-memory cheats replay diagnostics pvr-tiles scene audio audio-stream psg-events fm-quiet z80-hot dac-driver dac-integration ymfm-output"
 for name in ${@:-$all}; do
     case " $all " in *" $name "*) ;; *) echo "unknown test $name (one of: $all)" >&2; exit 2;; esac
     echo "== $name"

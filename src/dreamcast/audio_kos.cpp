@@ -4,6 +4,7 @@
 #include "dac_aica.hpp"
 #include "platform.hpp"
 #include "audio_core.hpp"
+#include "stream_resample.hpp"
 #include <dc/sound/stream.h>
 #include <dc/sound/sound.h>
 #include <algorithm>
@@ -65,11 +66,9 @@ void *callback(snd_stream_hnd_t,int requested,int *received){
         const int adjust=std::clamp(error/adjustScale,-maxAdjust,std::min(maxAdjust,int(available-n)));
         const unsigned take=n+adjust;
         if(adjust>0)dropped+=adjust;else repeated+=-adjust;
-        // Nearest-neighbour step of take/n ring frames per output frame.
-        for(unsigned i=0,position=0;i<n;i++,position+=take){
-            const unsigned at=(read+position/n)%capacity;
-            output[i*2]=ring[at*2];output[i*2+1]=ring[at*2+1];
-        }
+        // Preserve the nearest-neighbour mapping with one division/refill,
+        // instead of one software division per stereo frame on SH-4.
+        sor::resample_stereo_ring<capacity>(ring,read,n,take,output);
         read+=take;
     }
     barrier();

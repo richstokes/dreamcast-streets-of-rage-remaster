@@ -283,36 +283,11 @@ bool dc_render_vdp(VDPState &state,const sor::TitleCaption &title){
     const bool enhanced=scene->enhanced;
     const bool same=scene->reused;
     const auto compiled=timer_us_gettime64();
-    pvr_wait_ready();
-    const auto ready=timer_us_gettime64();
-    // Only updates need to drain rendering: cached scenes can still overlap
-    // GPU work. A free TA buffer alone does not protect shared texture data.
-    bool samplingFinished=false;
-    uint64_t renderWait=0;
-    const auto finishSampling=[&]{
-        if(samplingFinished)return;
-        const auto start=timer_us_gettime64();pvr_wait_render_done();
-        renderWait+=timer_us_gettime64()-start;samplingFinished=true;
-    };
-    if(title.brightness && title.textureKey()!=titleTextureKey){
-        finishSampling();
-        for(size_t i=0;i<sor::TitleCaption::regions.size();i++){
-            const auto &region=sor::TitleCaption::regions[i];
-            alignas(32) uint16_t pixels[sor::TitleCaption::MAX_TEXTURE_PIXELS]{};
-            title.drawLayer(i,[&](int x,int y,unsigned r,unsigned g,unsigned b){
-                pixels[(y-region.y)*region.textureWidth+x-region.x]=sor::VdpScene::rgb1555(r,g,b);
-            });
-            pvr_txr_load(pixels,titleTextures[i],region.textureWidth*region.textureHeight*2);
-        }
-        titleTextureKey=title.textureKey();
-    }
+    // The previous scene already owns its submitted packets in PVR memory.
+    // Prepare the next CPU packets while it renders, before waiting to touch
+    // the shared textures. Opacity must be known before rebuilding plane quads.
     bool opacityChanged=false;
     if(!same || !frames){
-        for(int p=0;p<4;p++)if(!frames || !sor::equal_bytes(previousColors+p*16,scene->colors+p*16,32)){
-            finishSampling();
-            for(int c=0;c<16;c++)pvr_set_pal_entry(p*16+c,c?scene->colors[p*16+c]:0);
-            std::memcpy(previousColors+p*16,scene->colors+p*16,32);
-        }
         // Only tiles written since they were last checked can differ.
         for(int t=0;t<2048;t++)if((!frames || state.tileDirty_[t]) && (state.tileDirty_[t]=0,
                                   !sor::equal_bytes(previousTiles+t*32,state.vram_+t*32,32))){
@@ -322,30 +297,7 @@ bool dc_render_vdp(VDPState &state,const sor::TitleCaption &title){
             opacityChanged|=planeTiles[t] && wasOpaque!=opaque[t];
         }
     }
-    alignas(32) uint16_t decoded[16];
-    const auto uploadTile=[&](int t){
-        if(!opaque[t] || valid[t])return;
-        finishSampling();
-        sor::pack_pvr_tile4(state.vram_+t*32,decoded);
-        pvr_txr_load(decoded,static_cast<uint8_t*>(tiles)+t*32,32);
-        valid[t]=1;
-    };
-    if(!same || !frames)for(size_t i=0;i<scene->count;i++)uploadTile(scene->quads[i].tile);
-    if(enhanced && (!same || !frames))for(size_t i=0;i<scene->spriteTileCount;i++)uploadTile(scene->spriteTiles[i].tile);
-    unsigned spriteBytes=0;
-    if(!enhanced && (!same || !frames))for(int p=0;p<2;p++){
-        // Include the previous extent to erase pixels vacated by moving sprites.
-        const int top=frames?std::min(uploadedTop[p],scene->spriteTop[p]):0;
-        const int bottom=frames?std::max(uploadedBottom[p],scene->spriteBottom[p]):256;
-        if(bottom>top){
-            finishSampling();
-            const unsigned bytes=(bottom-top)*1024;
-            pvr_txr_load(scene->sprites[p]+top*512,static_cast<uint8_t*>(spriteTexture[p])+top*1024,bytes);
-            spriteBytes+=bytes;
-        }
-        uploadedTop[p]=scene->spriteTop[p];uploadedBottom[p]=scene->spriteBottom[p];
-    }
-    const auto uploaded=timer_us_gettime64();
+    const auto scanned=timer_us_gettime64();
     // Weather: haze. The backdrop's tiles take the fog's colour by their height
     // (vertex colour and offset colour), the far plane more: no extra quads.
     const uint32_t fogKey=scene->weatherOn()&&scene->weatherProfile().fog?0x80000000u|uint32_t(scene->round)<<16|uint32_t(scene->sceneLight().wallLine()&0xFFFF):0;
@@ -524,6 +476,60 @@ bool dc_render_vdp(VDPState &state,const sor::TitleCaption &title){
         }
     }
     const auto commands=timer_us_gettime64();
+    pvr_wait_ready();
+    const auto ready=timer_us_gettime64();
+    // Only updates need to drain rendering: cached scenes can still overlap
+    // GPU work. A free TA buffer alone does not protect shared texture data.
+    bool samplingFinished=false;
+    uint64_t renderWait=0;
+    const auto finishSampling=[&]{
+        if(samplingFinished)return;
+        const auto start=timer_us_gettime64();pvr_wait_render_done();
+        renderWait+=timer_us_gettime64()-start;samplingFinished=true;
+    };
+    if(title.brightness && title.textureKey()!=titleTextureKey){
+        finishSampling();
+        for(size_t i=0;i<sor::TitleCaption::regions.size();i++){
+            const auto &region=sor::TitleCaption::regions[i];
+            alignas(32) uint16_t pixels[sor::TitleCaption::MAX_TEXTURE_PIXELS]{};
+            title.drawLayer(i,[&](int x,int y,unsigned r,unsigned g,unsigned b){
+                pixels[(y-region.y)*region.textureWidth+x-region.x]=sor::VdpScene::rgb1555(r,g,b);
+            });
+            pvr_txr_load(pixels,titleTextures[i],region.textureWidth*region.textureHeight*2);
+        }
+        titleTextureKey=title.textureKey();
+    }
+    if(!same || !frames){
+        for(int p=0;p<4;p++)if(!frames || !sor::equal_bytes(previousColors+p*16,scene->colors+p*16,32)){
+            finishSampling();
+            for(int c=0;c<16;c++)pvr_set_pal_entry(p*16+c,c?scene->colors[p*16+c]:0);
+            std::memcpy(previousColors+p*16,scene->colors+p*16,32);
+        }
+    }
+    alignas(32) uint16_t decoded[16];
+    const auto uploadTile=[&](int t){
+        if(!opaque[t] || valid[t])return;
+        finishSampling();
+        sor::pack_pvr_tile4(state.vram_+t*32,decoded);
+        pvr_txr_load(decoded,static_cast<uint8_t*>(tiles)+t*32,32);
+        valid[t]=1;
+    };
+    if(!same || !frames)for(size_t i=0;i<scene->count;i++)uploadTile(scene->quads[i].tile);
+    if(enhanced && (!same || !frames))for(size_t i=0;i<scene->spriteTileCount;i++)uploadTile(scene->spriteTiles[i].tile);
+    unsigned spriteBytes=0;
+    if(!enhanced && (!same || !frames))for(int p=0;p<2;p++){
+        // Include the previous extent to erase pixels vacated by moving sprites.
+        const int top=frames?std::min(uploadedTop[p],scene->spriteTop[p]):0;
+        const int bottom=frames?std::max(uploadedBottom[p],scene->spriteBottom[p]):256;
+        if(bottom>top){
+            finishSampling();
+            const unsigned bytes=(bottom-top)*1024;
+            pvr_txr_load(scene->sprites[p]+top*512,static_cast<uint8_t*>(spriteTexture[p])+top*1024,bytes);
+            spriteBytes+=bytes;
+        }
+        uploadedTop[p]=scene->spriteTop[p];uploadedBottom[p]=scene->spriteBottom[p];
+    }
+    const auto uploaded=timer_us_gettime64();
     auto bg=scene->background;pvr_set_bg_color(((bg>>10)&31)/31.f,((bg>>5)&31)/31.f,(bg&31)/31.f);
     pvr_scene_begin();pvr_list_begin(PVR_LIST_PT_POLY);
     pvr_prim(packets,packetCount*sizeof(Packet));
@@ -557,7 +563,10 @@ bool dc_render_vdp(VDPState &state,const sor::TitleCaption &title){
     // Aggregate every frame: sparse samples mostly hit unchanged VDP frames
     // and conceal the cost of animation, scrolling, and texture replacement.
     static uint64_t sums[5]{},peaks[5]{},spriteSum=0;
-    const uint64_t elapsed[]={compiled-begin,ready-compiled+renderWait,uploaded-ready-renderWait,commands-uploaded,finished-commands};
+    // Dirty-tile detection is still charged to upload, although it now runs
+    // before packet construction so both CPU phases can overlap GPU rendering.
+    const uint64_t elapsed[]={compiled-begin,ready-commands+renderWait,
+        scanned-compiled+uploaded-ready-renderWait,commands-scanned,finished-uploaded};
     for(int i=0;i<5;i++){sums[i]+=elapsed[i];peaks[i]=std::max(peaks[i],elapsed[i]);}
     spriteSum+=spriteBytes;
     if(++frames%600==0){

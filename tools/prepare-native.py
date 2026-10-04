@@ -43,6 +43,8 @@ OPTIONS = [
     ('SOR_DAC_AICA', 'SOR_ENABLE_AICA_DAC', '0'),
     ('SOR_AUDIO_PROFILE', 'SOR_ENABLE_AUDIO_PROFILE', '0'),
     ('SOR_PC_PROFILE', 'SOR_ENABLE_PC_PROFILE', '0'),
+    # Synchronous dc-tool output can stall gameplay; opt in for interactive logs.
+    ('SOR_LIVE_LOG', 'SOR_LIVE_LOG', '0'),
     # Start in enhanced graphics, smooth animation, dynamic lighting, weather
     # (the options menu still switches each).
     ('SOR_ENHANCED', 'SOR_DEFAULT_ENHANCED', '0'),

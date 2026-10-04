@@ -7,6 +7,8 @@ import io
 from pathlib import Path
 import socket
 import struct
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
@@ -21,7 +23,74 @@ def version_packet(text=b'dcload-ip 2.0.3 using Broadband Adapter\0'):
     return struct.pack('!4sII', b'VERS', 0o400, len(text)) + text
 
 
+def elf_bytes(payload=b'loaded instructions', debug=b''):
+    data = bytearray(128)
+    data[:6] = b'\x7fELF\x01\x01'
+    struct.pack_into('<HHI', data, 16, 2, 42, 1)
+    struct.pack_into('<II', data, 24, 0x8c010000, 52)
+    struct.pack_into('<HHH', data, 40, 52, 32, 1)
+    struct.pack_into('<IIIIIIII', data, 52, 1, 128, 0x8c010000, 0x8c010000,
+                     len(payload), len(payload) + 4096, 5, 32)
+    return bytes(data) + payload + debug
+
+
 class DreamcastRunnerTests(unittest.TestCase):
+    def test_debug_snapshot_matches_loaded_bytes_not_debug_sections(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            elf, debug = directory / 'game.elf', directory / 'game.debug.elf'
+            elf.write_bytes(elf_bytes())
+            debug.write_bytes(elf_bytes(debug=b'nonloaded symbols'))
+            result = runner.snapshot_debug_elf(debug, elf, directory)
+            self.assertEqual(Path(result['path']).read_bytes(), debug.read_bytes())
+            debug.write_bytes(elf_bytes(payload=b'different instructions'))
+            with self.assertRaisesRegex(RuntimeError, 'does not match'):
+                runner.snapshot_debug_elf(debug, elf, directory)
+
+    def test_load_signature_rejects_truncated_program_headers_and_data(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / 'bad.elf'
+            for data in (b'not an ELF', elf_bytes()[:70], elf_bytes()[:-1]):
+                source.write_bytes(data)
+                with self.assertRaises(RuntimeError):
+                    runner.elf_load_signature(source)
+
+    def test_benchmark_stops_after_complete_split_marker(self):
+        code = ("import sys,time;sys.stdout.write('BENCHMARK replay com');"
+                "sys.stdout.flush();time.sleep(.02);"
+                "print('plete; reports frozen before serial drain',flush=True);time.sleep(5)")
+        with tempfile.TemporaryDirectory() as temporary, \
+             patch.object(runner.sys, 'stdout', Mock(buffer=io.BytesIO())):
+            result = runner.run_console([sys.executable, '-c', code],
+                                        Path(temporary) / 'console.log', 2, True)
+        self.assertTrue(result['benchmark_complete'])
+        self.assertEqual(result['stop_reason'], 'benchmark')
+
+    def test_benchmark_deadline_does_not_count_as_completion(self):
+        with tempfile.TemporaryDirectory() as temporary, \
+             patch.object(runner.sys, 'stdout', Mock(buffer=io.BytesIO())):
+            result = runner.run_console([sys.executable, '-c', 'import time;time.sleep(5)'],
+                                        Path(temporary) / 'console.log', .1, True)
+        self.assertFalse(result['benchmark_complete'])
+        self.assertEqual(result['stop_reason'], 'duration')
+
+    def test_benchmark_requires_replay_before_any_run(self):
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
+            runner.main(['--benchmark', '--dry-run'])
+        self.assertEqual(error.exception.code, 2)
+
+    def test_hardware_profile_never_guesses_workspace_symbols_or_log_as_elf(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            logfile = Path(temporary) / 'console.log'
+            logfile.write_text('PCPROF phase=gameplay samples=1 dropped=0\nPCPROF 1 8c010000 1\n')
+            command = [sys.executable, str(ROOT / 'tools/pc-profile.py'), str(logfile)]
+            missing = subprocess.run(command, capture_output=True, text=True)
+            self.assertNotEqual(missing.returncode, 0)
+            self.assertIn('matching', missing.stderr)
+            wrong = subprocess.run(command + ['--elf', str(logfile)], capture_output=True, text=True)
+            self.assertNotEqual(wrong.returncode, 0)
+            self.assertIn('log cannot also be the ELF', wrong.stderr)
+
     def test_power_refuses_another_plug_without_mutation(self):
         rpc = Mock(return_value={'id': 'shellyplugusg4-another'})
         with self.assertRaisesRegex(RuntimeError, 'Refusing to switch'):

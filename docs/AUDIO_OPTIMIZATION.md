@@ -72,10 +72,59 @@ First 1,200 gameplay intervals: mean loop time falls from 39.220 to 29.218 ms
 
 Final measured counters are recorded in `reference/results/audio-optimized-2026-09-15.json`.
 Audio has been on by default since the later work in OPTIMIZATION_LOG.md
-(2026-09-19). Physical hardware performance remains unverified.
+(2026-09-19). Physical hardware measurements began on 2026-10-04; see
+OPTIMIZATION_LOG.md for the release-build comparison and remaining underruns.
 
 GCC 15 LTO emits a bounds warning in upstream `opn_registers_base::write` about
 index 512. The YM2612 address setters accept a byte or `0x100 | byte`, so this
 path is bounded to 0–511; the upstream bounds assertion remains enabled. No
 out-of-bounds access was observed in sanitized synthetic-register tests. The
 warning is retained, not suppressed; reassess it if address/state loading changes.
+
+## Candidate: batch FM across DAC data writes (2026-10-04)
+
+**Not implemented.** First measure the smaller stream-copy and FM-table changes
+on hardware. If synthesis still misses deadlines, this is a candidate for a
+separate, switchable experiment.
+
+The physical-console action-replay profile at
+`build/hardware/20261004T162416.222361Z/console.log` records frame 2399 at
+17.016 ms synthesis: FM 13.257 ms, PSG/mixing 2.329 ms, Z80 1.301 ms. Its workload
+has 14 audible operators, with neither SSG-EG nor dynamic phase operators. These
+are instrumented samples, not release-performance qualification; the serial
+capture stopped before the gameplay PC histogram was transmitted.
+
+Between frames 1799 and 2399, the log records 134,087 DAC writes, about 223 per
+frame. `NativeAudio::renderBlock()` currently ends an FM span at every data
+write, including each DAC sample. This suggests spans averaging roughly four
+output samples during continuous drums; measure a host span-length histogram
+before implementing. Repeated channel/operator setup for these short spans may
+cost more than advancing the FM waveform itself.
+
+The smallest proposed change is an optional raw DAC-data timeline passed to
+`ym2612::sor_generate_span()`:
+
+- Scan the already-merged events in their existing order. Address-latch writes
+  and DAC data writes to registers 0x2A/0x2C can populate the timeline without
+  splitting FM synthesis. Classify data writes using the actual chip latch,
+  including its bank; apply each event exactly once.
+- Keep boundaries for every other data write, particularly DAC enable (0x2B),
+  panning and FM registers. Keep the existing timer/CSM and unknown-driver
+  fallback. Preserve same-sample event order and sample positions.
+- Store the full nine-bit DAC value, including the 0x2C low bit. Mix each
+  timeline value into the raw FM sum **before** the existing integer scaling
+  and division. Adding independently rounded PCM components afterward is not
+  equivalent.
+- The periodic prepare fallback calls `generate(1)`, which reads the chip's
+  stored DAC value. Substitute that sample's timeline value for this call and
+  restore the final latched value afterward. The optional split-DAC backend
+  also needs each sample's correct component, rather than one value per span.
+
+Use a per-instance host switch and corresponding Dreamcast build option for
+an unchanged baseline and candidate. Extend the pinned-ymfm comparison with
+rapid 0x2A/0x2C changes, all pans, enable transitions, same-sample writes and
+spans crossing the 4096-sample prepare boundary. Compare both switches in the
+DAC integration test, including PCM, sound RAM and stem sums. Require complete
+action and two-player replay PCM/RAM equality, then hardware A/B runs with the
+same profiling and presentation settings. Keep the change only if release
+frame deadlines and underruns improve.

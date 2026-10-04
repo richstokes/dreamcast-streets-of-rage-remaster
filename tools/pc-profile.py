@@ -13,13 +13,26 @@ ROOT = Path(__file__).resolve().parents[1]
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('log', type=Path)
-    ap.add_argument('--elf', type=Path, help='defaults to <log name>.elf kept by bench-flycast.sh')
+    ap.add_argument('--elf', type=Path, help='defaults to adjacent sor-test.debug.elf or the ELF kept by bench-flycast.sh')
     ap.add_argument('--top', type=int, default=25)
     ap.add_argument('--by-file', action='store_true', help='aggregate by source file instead of function')
     args = ap.parse_args()
     if args.elf is None:
+        hardware = args.log.with_name('sor-test.debug.elf')
         kept = args.log.with_name(args.log.name.replace('-flycast.log', '.elf'))
-        args.elf = kept if kept.exists() else ROOT / 'build/native/sor.elf'
+        if hardware.is_file():
+            args.elf = hardware
+        elif kept != args.log and kept.is_file():
+            args.elf = kept
+        elif args.log.name == 'console.log' or args.log.with_name('manifest.json').exists():
+            ap.error('Hardware log needs its matching sor-test.debug.elf or explicit --elf; current workspace symbols may differ.')
+        else:
+            args.elf = ROOT / 'build/native/sor.elf'
+    if args.elf.resolve() == args.log.resolve():
+        ap.error('The log cannot also be the ELF symbol file.')
+    with args.elf.open('rb') as elf:
+        if elf.read(4) != b'\x7fELF':
+            ap.error(f'Not an ELF symbol file: {args.elf}')
     text = args.log.read_text(errors='replace')
     totals = {m[0]: int(m[1]) for m in re.findall(r'PCPROF phase=(\w+) samples=(\d+)', text)}
     bins = [(int(p), int(a, 16), int(n)) for p, a, n in re.findall(r'^PCPROF (\d) ([0-9a-f]{8}) (\d+)$', text, re.M)]
